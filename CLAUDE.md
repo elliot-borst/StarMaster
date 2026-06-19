@@ -1,4 +1,8 @@
-# SC Keep-Alive — project guide
+# StarMaster — Star Citizen Master Tools (project guide)
+
+**Repo:** `elliot-borst/StarMaster` (private) · local: `C:\GitHub\StarMaster`. StarMaster is the umbrella for the user's personal Star Citizen tools. The first/current tool is the **keep-alive** (files `SC-KeepAlive.*`); add future tools as siblings or subfolders. The user's separate Star Citizen control-binding work lives in a different repo/project (StarBinding).
+
+## Keep-Alive tool
 
 A tiny Windows utility for Star Citizen, written to run with **zero dependencies** (just the .NET Framework Windows already ships). Two features:
 

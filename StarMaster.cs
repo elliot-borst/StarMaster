@@ -59,6 +59,7 @@ namespace StarMaster {
                 case "F1": return 0x70; case "F2": return 0x71; case "F3": return 0x72; case "F4": return 0x73;
                 case "F5": return 0x74; case "F6": return 0x75; case "F7": return 0x76; case "F8": return 0x77;
                 case "F9": return 0x78; case "F10": return 0x79; case "F11": return 0x7A; case "F12": return 0x7B;
+                case "[": return 0xDB; case "]": return 0xDD;
                 default: return 0;
             }
         }
@@ -521,7 +522,7 @@ namespace StarMaster {
             txtKey = new TextBox(); txtKey.SetBounds(368, 9, 40, 22); StyleInput(txtKey); p.Controls.Add(txtKey);
 
             NewLabel(p, "Every (sec):", 10, 44, 72);
-            numInt = new NumericUpDown(); numInt.SetBounds(86, 42, 60, 22); numInt.Minimum = 5; numInt.Maximum = 3600; numInt.Value = 600;
+            numInt = new NumericUpDown(); numInt.SetBounds(86, 42, 60, 22); numInt.Minimum = 1; numInt.Maximum = 3600; numInt.Value = 600;
             numInt.BackColor = Theme.Surface; numInt.ForeColor = Theme.Text; numInt.BorderStyle = BorderStyle.FixedSingle; p.Controls.Add(numInt);
             btnAdd = new Button(); btnAdd.Text = "Add / Update"; btnAdd.SetBounds(160, 40, 110, 26); Theme.StyleButton(btnAdd, false); p.Controls.Add(btnAdd);
             btnRemove = new Button(); btnRemove.Text = "Remove"; btnRemove.SetBounds(278, 40, 90, 26); Theme.StyleButton(btnRemove, false); p.Controls.Add(btnRemove);
@@ -768,7 +769,7 @@ namespace StarMaster {
         void BtnAdd_Click(object s, EventArgs e) {
             string key = txtKey.Text.Trim();
             if (key.Length == 0) { Log("! enter a Key first"); return; }
-            if (Vk.Map(key) == 0) { Log("! '" + key + "' not recognized (A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc)"); return; }
+            if (Vk.Map(key) == 0) { Log("! '" + key + "' not recognized (A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ ])"); return; }
             Cmd c = new Cmd();
             c.Label = txtLabel.Text.Trim().Length > 0 ? txtLabel.Text.Trim() : "Command";
             c.Shift = chkShift.Checked; c.Ctrl = chkCtrl.Checked; c.Alt = chkAlt.Checked;
@@ -844,7 +845,7 @@ namespace StarMaster {
                             if (f.Length >= 7) {
                                 Cmd c = new Cmd();
                                 c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4];
-                                int iv; int.TryParse(f[5], out iv); c.Interval = iv < 5 ? 5 : (iv > 3600 ? 3600 : iv);
+                                int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv);
                                 c.Enabled = f[6] == "1";
                                 commands.Add(c);
                             }
@@ -864,6 +865,8 @@ namespace StarMaster {
             if (commands.Count == 0) {
                 Cmd c = new Cmd(); c.Label = "Wipe Visor"; c.Alt = true; c.Key = "X"; c.Interval = 600; c.Enabled = true;
                 commands.Add(c);
+                Cmd a = new Cmd(); a.Label = "Auto Accept"; a.Key = "["; a.Interval = 1; a.Enabled = false;
+                commands.Add(a);
             }
         }
 

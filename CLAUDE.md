@@ -42,7 +42,7 @@
 - Installer: `ISCC.exe` (Inno Setup 6 via winget at `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`) → `& "<that path>" installer.iss` → `StarMaster-Setup.exe` (build `StarMaster.exe` first; it's embedded).
 
 ## Conventions / facts
-- **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 5–3600 s. App writes its own defaults on first run, so an end user only needs the exe.
+- **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run — **Wipe Visor** (Alt+X, 600 s, enabled) and **Auto Accept** (`[`, 1 s, disabled) — so an end user only needs the exe. `Vk.Map` keys: A-Z, 0-9, F1-F12, Space/Enter/Tab/Esc, `[` `]`.
 - **Focus guard fails CLOSED** — blank title → sends nothing. Case-insensitive contains; default "Star Citizen" (SC's actual window title is `"Star Citizen "`, which matches).
 - **Game input needs SCAN CODES** — see `Native.Press`. vk-only does not register in SC.
 - **Version** = `MainForm.Version` const (`"3"`); shown in title/header, **must match the Release tag** (`vN`) and `installer.iss` `MyAppVersion`.

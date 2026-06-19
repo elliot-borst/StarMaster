@@ -1,0 +1,11 @@
+# Personal runtime data — never publish these
+config.txt
+config.json
+Backups/
+
+# Installer build output (rebuild from installer.iss)
+SC-KeepAlive-Setup.exe
+
+# Scratch / temp
+_test.ps1
+*.bak

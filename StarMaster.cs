@@ -236,7 +236,7 @@ namespace StarMaster {
             StackPanel tr = new StackPanel { Orientation = Orientation.Horizontal };
             tr.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 23, FontWeight = FontWeights.Bold });
             tr.Children.Add(new Border { Margin = new Thickness(9, 2, 0, 0), Padding = new Thickness(9, 3, 9, 3), CornerRadius = new CornerRadius(999), Background = Ui.B("#1a2340"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "v" + Version, Foreground = Ui.Accent2, FontSize = 11, FontWeight = FontWeights.SemiBold } });
-            ttl.Children.Add(tr); ttl.Children.Add(new TextBlock { Text = "Star Citizen toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
+            ttl.Children.Add(tr); ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
             DockPanel.SetDock(ttl, Dock.Left); d.Children.Add(ttl);
             Border upd = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(true); }); upd.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(upd, Dock.Right); d.Children.Add(upd);
             return d;

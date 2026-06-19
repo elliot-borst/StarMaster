@@ -387,7 +387,7 @@ namespace StarMaster {
         // chrome / app self-update
         Button btnUpdate, btnGet, btnDismiss;
         Label lblBanner;
-        Panel header, banner, content, paKeep, paStar;
+        Panel header, banner, content, middle, paKeep, paStar;
         BackupControl backup;
         Updater.Info pendingUpdate;
         int[] CurrentVer;
@@ -403,7 +403,7 @@ namespace StarMaster {
         string cfgPath;
         string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
 
-        public const string Version = "4";   // bump per release; matches the GitHub Release tag (vN)
+        public const string Version = "5";   // bump per release; matches the GitHub Release tag (vN)
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
 
         const int HeaderH = 58;
@@ -427,8 +427,8 @@ namespace StarMaster {
             Text = "StarMaster v" + Version;
             AutoScaleMode = AutoScaleMode.None;   // hand-coded layout is scaled manually in ScaleToDpi()
             ClientSize = new Size(BaseClientW, BaseClientH);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Ui;
             try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
@@ -436,10 +436,11 @@ namespace StarMaster {
             BuildHeader();
             BuildBanner();
             BuildContent();
-            Controls.Add(content);
+            Controls.Add(middle);
             Controls.Add(banner);
             Controls.Add(header);
             ScaleToDpi();
+            MinimumSize = Size;   // resizable + maximizable, but can't shrink below the designed layout
 
             timer = new Timer(); timer.Interval = 1000; timer.Tick += Timer_Tick;
             WireKeepAlive();
@@ -472,6 +473,7 @@ namespace StarMaster {
             Label sub = new Label(); sub.Text = "Star Citizen toolkit - v" + Version; sub.Font = Theme.Small; sub.ForeColor = Theme.TextDim; sub.BackColor = Color.Transparent; sub.SetBounds(54, 35, 300, 16);
             header.Controls.Add(sub);
             btnUpdate = new Button(); btnUpdate.Text = "Check for updates"; btnUpdate.Font = Theme.Ui; btnUpdate.SetBounds(950, 16, 138, 26);
+            btnUpdate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Theme.StyleButton(btnUpdate, false);
             btnUpdate.Click += delegate { Log("checking for updates..."); CheckForUpdates(true); };
             header.Controls.Add(btnUpdate);
@@ -485,10 +487,12 @@ namespace StarMaster {
             lblBanner = new Label(); lblBanner.SetBounds(16, 11, 840, 18); lblBanner.Font = Theme.UiBold; lblBanner.ForeColor = Theme.Amber; lblBanner.BackColor = Color.Transparent;
             banner.Controls.Add(lblBanner);
             btnGet = new Button(); btnGet.Text = "Download & Install"; btnGet.Font = Theme.Ui; btnGet.SetBounds(904, 7, 150, 26);
+            btnGet.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Theme.StyleButton(btnGet, true);
             btnGet.Click += delegate { DownloadUpdate(); };
             banner.Controls.Add(btnGet);
             btnDismiss = new Button(); btnDismiss.Text = "X"; btnDismiss.Font = Theme.Ui; btnDismiss.SetBounds(1064, 7, 24, 26);
+            btnDismiss.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Theme.StyleButton(btnDismiss, false);
             btnDismiss.Click += delegate { HideBanner(); };
             banner.Controls.Add(btnDismiss);
@@ -505,7 +509,11 @@ namespace StarMaster {
         }
 
         void BuildContent() {
-            content = new Panel(); content.Dock = DockStyle.Fill; content.BackColor = Theme.Bg;   // fixed size, no scrolling
+            middle = new Panel(); middle.Dock = DockStyle.Fill; middle.BackColor = Theme.Bg;
+            middle.SizeChanged += delegate { CenterContent(); };
+            content = new Panel(); content.BackColor = Theme.Bg;
+            content.Size = new Size(BaseClientW, BaseClientH - HeaderH);
+            middle.Controls.Add(content);
 
             int leftX = 12, leftW = 500;
             int rightX = 528, rightW = 548;
@@ -595,6 +603,14 @@ namespace StarMaster {
             ClientSize = new Size((int)Math.Round(BaseClientW * f), (int)Math.Round(BaseClientH * f));
         }
 
+        // Keep the fixed-size content panel centered in the middle area as the window resizes/maximizes.
+        void CenterContent() {
+            if (content == null || middle == null) return;
+            int x = Math.Max(0, (middle.ClientSize.Width - content.Width) / 2);
+            int y = Math.Max(0, (middle.ClientSize.Height - content.Height) / 2);
+            content.Location = new Point(x, y);
+        }
+
         void Lst_DrawItem(object s, DrawItemEventArgs e) {
             if (e.Index < 0) return;
             bool sel = (e.State & DrawItemState.Selected) != 0;
@@ -648,12 +664,12 @@ namespace StarMaster {
             btnGet.Enabled = true;
             bool canInstall = info.SetupUrl != null && RunningFromInstallDir();
             btnGet.Text = canInstall ? "Download & Install" : "Open download page";
-            if (!banner.Visible) { banner.Visible = true; ClientSize = new Size(LogicalToDeviceUnits(BaseClientW), LogicalToDeviceUnits(BaseClientH + BannerH)); }
+            if (!banner.Visible) { banner.Visible = true; if (WindowState == FormWindowState.Normal) Height += LogicalToDeviceUnits(BannerH); }
             Log("update available: " + info.Tag + " (you have v" + Version + ")");
         }
 
         void HideBanner() {
-            if (banner.Visible) { banner.Visible = false; ClientSize = new Size(LogicalToDeviceUnits(BaseClientW), LogicalToDeviceUnits(BaseClientH)); }
+            if (banner.Visible) { banner.Visible = false; if (WindowState == FormWindowState.Normal) Height -= LogicalToDeviceUnits(BannerH); }
         }
 
         void DownloadUpdate() {

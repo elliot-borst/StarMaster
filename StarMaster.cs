@@ -182,6 +182,21 @@ namespace StarMaster {
         }
     }
 
+    // Dark color table for the tray context menu (surface background, amber-bordered selection).
+    class DarkMenuColors : ProfessionalColorTable {
+        public override Color ToolStripDropDownBackground { get { return Theme.Surface; } }
+        public override Color ImageMarginGradientBegin { get { return Theme.Surface; } }
+        public override Color ImageMarginGradientMiddle { get { return Theme.Surface; } }
+        public override Color ImageMarginGradientEnd { get { return Theme.Surface; } }
+        public override Color MenuBorder { get { return Theme.Line; } }
+        public override Color MenuItemBorder { get { return Theme.Amber; } }
+        public override Color MenuItemSelected { get { return Theme.Surface2; } }
+        public override Color MenuItemSelectedGradientBegin { get { return Theme.Surface2; } }
+        public override Color MenuItemSelectedGradientEnd { get { return Theme.Surface2; } }
+        public override Color SeparatorDark { get { return Theme.Line; } }
+        public override Color SeparatorLight { get { return Theme.Line; } }
+    }
+
     // WebClient with a real timeout so a stalled download fails fast instead of hanging forever.
     class TimedWebClient : WebClient {
         protected override WebRequest GetWebRequest(Uri address) {
@@ -841,8 +856,16 @@ namespace StarMaster {
             trayIcon.Text = "StarMaster";
             trayIcon.Visible = true;
             ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Open StarMaster", null, delegate { RestoreFromTray(); });
-            menu.Items.Add("Exit", null, delegate { exiting = true; Close(); });
+            menu.RenderMode = ToolStripRenderMode.Professional;
+            menu.Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()) { RoundedEdges = false };
+            menu.BackColor = Theme.Surface;
+            menu.ForeColor = Theme.Text;
+            menu.Font = new Font("Segoe UI", 11f);
+            menu.ShowImageMargin = false;
+            ToolStripMenuItem miOpen = (ToolStripMenuItem)menu.Items.Add("Open StarMaster", null, delegate { RestoreFromTray(); });
+            ToolStripMenuItem miExit = (ToolStripMenuItem)menu.Items.Add("Exit StarMaster", null, delegate { exiting = true; Close(); });
+            miOpen.ForeColor = Theme.Text; miExit.ForeColor = Theme.Text;
+            miOpen.Padding = new Padding(8, 5, 8, 5); miExit.Padding = new Padding(8, 5, 8, 5);
             trayIcon.ContextMenuStrip = menu;
             trayIcon.DoubleClick += delegate { RestoreFromTray(); };
         }

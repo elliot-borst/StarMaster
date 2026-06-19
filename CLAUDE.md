@@ -57,6 +57,8 @@
 - 2026-06-19: **v3** — third tool **StarStrings**; consolidated into a single fixed **2-column window** (Backup is now an embedded `BackupControl`, no popup, no scroll); **scan-code keyboard input** (fixed keep-alive not registering in-game — SC reads raw input); default Wipe Visor interval → 600 s; installer publisher "Elliot Borst" + Add/Remove name "StarMaster". *Note: StarStrings install path is new — live-test before relying on it.*
 
 ## Backlog / ideas
-System-tray minimize; multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI (currently system-DPI-aware). *Done: v2 auto-updater + modern UI + high-DPI; v3 StarStrings + single-window layout + scan-code input.*
+Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI (currently system-DPI-aware). *Done: v2 auto-updater + modern UI + high-DPI; v3 StarStrings + single-window layout + scan-code input. Pending release (on `main`, post-v3): Auto Accept default + close-to-tray.*
+
+**Close-to-tray:** the **X** button hides the window to a `NotifyIcon` (the app keeps running, keep-alive stays active); restore via tray double-click / "Open StarMaster", quit via tray "Exit" (sets `exiting` then `Close()`). See `MainForm_FormClosing`/`BuildTray`.
 
 > This file is the app's handoff doc — a fresh Claude Code session opened in this folder has everything it needs to continue.

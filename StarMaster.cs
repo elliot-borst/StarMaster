@@ -376,6 +376,8 @@ namespace StarMaster {
         BackupControl backup;
         Updater.Info pendingUpdate;
         int[] CurrentVer;
+        NotifyIcon trayIcon;
+        bool exiting = false, trayHintShown = false;
         // StarStrings tool
         TextBox txtScRoot, txtSSLog;
         ComboBox cmbSSChannel;
@@ -434,7 +436,8 @@ namespace StarMaster {
             PopulateSSChannels();
             lblSSInstalled.Text = ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed via StarMaster)";
 
-            FormClosing += delegate { timer.Stop(); SaveConfig(); };
+            BuildTray();
+            FormClosing += MainForm_FormClosing;
             Shown += delegate { CheckForUpdates(false); SSCheck(false); };
             if (autostart) ToggleStart();
         }
@@ -828,6 +831,45 @@ namespace StarMaster {
                 foreach (Cmd c in commands) c.LastFire = DateTime.Now;
                 timer.Start(); btnStart.Text = "Stop"; lblStatus.Text = "Running"; lblStatus.ForeColor = Theme.Good; Log("started");
             }
+        }
+
+        // ---------- tray / close-to-tray ----------
+
+        void BuildTray() {
+            trayIcon = new NotifyIcon();
+            trayIcon.Icon = Icon ?? System.Drawing.SystemIcons.Application;
+            trayIcon.Text = "StarMaster";
+            trayIcon.Visible = true;
+            ContextMenuStrip menu = new ContextMenuStrip();
+            menu.Items.Add("Open StarMaster", null, delegate { RestoreFromTray(); });
+            menu.Items.Add("Exit", null, delegate { exiting = true; Close(); });
+            trayIcon.ContextMenuStrip = menu;
+            trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+        }
+
+        void RestoreFromTray() {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+            BringToFront();
+        }
+
+        // The X button hides to the tray (keep-alive keeps running). Real exit only on tray "Exit"
+        // (sets `exiting`) or a non-user close like Windows shutdown.
+        void MainForm_FormClosing(object s, FormClosingEventArgs e) {
+            if (!exiting && e.CloseReason == CloseReason.UserClosing) {
+                e.Cancel = true;
+                SaveConfig();
+                Hide();
+                if (!trayHintShown) {
+                    trayHintShown = true;
+                    try { trayIcon.ShowBalloonTip(2500, "StarMaster", "Still running in the tray - keep-alive stays active. Right-click the icon to Exit.", ToolTipIcon.Info); } catch { }
+                }
+                return;
+            }
+            timer.Stop();
+            SaveConfig();
+            if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
         }
 
         // ---------- config ----------

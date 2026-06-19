@@ -22,7 +22,7 @@ StarMaster checks for newer versions on launch and offers to update.
 ## Build from source
 Only needs the C# compiler that ships with Windows — no Node / NuGet / internet:
 ```
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs
 ```
 The installer is built by compiling `installer.iss` with [Inno Setup](https://jrsoftware.org/isdl.php). See `CLAUDE.md` for full details.
 

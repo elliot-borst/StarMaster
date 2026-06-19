@@ -1,66 +1,54 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free C# WinForms program (needs only the .NET Framework Windows ships). **Three tools** (keep-alive, backup, StarStrings) in one window, plus a GitHub self-updater and a dark "HUD" UI. **Current version: 5.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 6.**
 
-**Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater can read Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo/project — **StarBinding** — not here.
+**Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
-**Git identity:** commit as **Elliot Borst** `<61570912+elliot-borst@users.noreply.github.com>`. **Do NOT add `Co-Authored-By: Claude` trailers** — the user wants to be the sole contributor.
+**Git identity:** commit as **Elliot Borst** `<61570912+elliot-borst@users.noreply.github.com>`. **No `Co-Authored-By: Claude` trailers** (user is the sole contributor).
 
-**Distribution:** binaries ship as **GitHub Releases** tagged `vN` (integer scheme; not committed). Each release attaches `StarMaster.exe` (portable) + `StarMaster-Setup.exe` (installer). To cut a release: bump `MainForm.Version` + `installer.iss` `MyAppVersion`, rebuild both, commit/push, then `gh release create vN StarMaster.exe StarMaster-Setup.exe --title "StarMaster vN" --notes "..."`.
+**Distribution:** binaries ship as **GitHub Releases** tagged `vN` (integer scheme; not committed). Each release attaches `StarMaster.exe` (portable) + `StarMaster-Setup.exe` (installer). Cut a release: bump `MainWindow.Version` + `installer.iss` `MyAppVersion`, rebuild both, commit/push, `gh release create vN StarMaster.exe StarMaster-Setup.exe --title "StarMaster vN" --notes "..."`. (The installer is per-user, no UAC; the in-app updater downloads + runs it for installed copies.)
 
 ## Tools / features
-1. **Keep-Alive (anti-idle).** A 1 s timer sends a configurable keystroke (default *Wipe Visor* = **Left Alt + X**, every **600 s**) **only while Star Citizen is the active window** (focus guard, fail-closed), so the user isn't idle-logged-out. Replaces a VoiceAttack scheduled command.
-2. **Backup / Restore.** Copies what a patch/channel-switch wipes — `user\` (settings + bindings), `data\Localization\`, `user.cfg` — between SC channels (LIVE/HOTFIX) or saved snapshots. Overwrites but never deletes; only those 3 sub-paths; skips locked files with a warning; confirms first. Snapshots → `Documents\StarMaster\Backups\<channel>-<timestamp>\`.
-3. **StarStrings.** Keeps [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) community localization mod current. Shows installed build vs. latest, one-click download+install. It's a **rolling `latest` release** (`StarStrings.zip`) re-published every SC patch — versioned by build name (date+commit), not a clean `vN`. Install = download zip → copy its `Data\` folder into `<scRoot>\<channel>\data` + ensure `user.cfg` has `g_language = english` (append, never overwrite). Installed build tracked in `config.txt` (`starstrings_build`).
-- **Auto-update (the app itself).** On launch + the header "Check for updates", reads GitHub's public `releases/latest` (anonymous, TLS 1.2, background thread); amber banner if a newer `vN` exists. An **installed** copy downloads `StarMaster-Setup.exe` and runs it; a **portable** copy opens the Releases page. `Updater` class.
+1. **Keep-Alive** — a 1 s DispatcherTimer sends a configurable keystroke **only while Star Citizen is the active window** (focus guard, fail-closed). Defaults: *Wipe Visor* (Left Alt + X, 600 s, ON) and *Auto Accept* (`[`, 1 s, OFF). Add/edit/remove via `AddKeyDialog`. Keystrokes are sent as **hardware scan codes** (essential — SC uses raw input; vk-only does nothing). The actual send is queued **off the UI thread** (Press sleeps 40 ms).
+2. **Backup / Restore** — copies `user\`, `data\Localization\`, `user.cfg` between channels (LIVE/HOTFIX) or saved snapshots; overwrites, never deletes; guards against same-source==target. `BackupOps`.
+3. **StarStrings** — installs/updates [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) (rolling `latest` release; build = date+commit). Downloads the zip, copies `Data\`→`<channel>\data`, merges `user.cfg`. Installed build tracked in `config.txt`.
+- **Self-update** — on launch + header "Check for updates": reads GitHub `releases/latest`; if newer, a prompt offers to download+run the installer (installed copies) or open the Releases page (portable).
+- **Close-to-tray** — X hides to a `NotifyIcon` (keep-alive keeps running); restore/quit via the tray menu. Window is resizable/maximizable (native WPF).
 
 ## Architecture
-- `StarMaster.cs` — the app, namespace `StarMaster`. Classes:
-  - `Native` — P/Invoke. **`Press` sends HARDWARE SCAN CODES** (`keybd_event` + `KEYEVENTF_SCANCODE` + `MapVirtualKey`). This is essential: Star Citizen uses raw/DirectInput and **ignores vk-only synthetic keys** (the pre-v3 path did nothing in-game).
-  - `Vk` — key-name → virtual-key map.
-  - `Cmd` — one scheduled keystroke (default interval 600 s).
-  - `Theme` — dark HUD palette/fonts + styling, recursive `Apply`, `DpiFactor`/`ScaleControls`.
-  - `TimedWebClient` — `WebClient` with a timeout.
-  - `Updater` — app self-update (GitHub `releases/latest`, multi-part `ParseVer`/`Compare`).
-  - `StarStrings` — `CheckLatest` (MrKraken rolling release) + `Install` (download zip, copy `Data\`, merge `user.cfg`).
-  - `MainForm` — **single fixed window**, header on top + a **2-column section layout** (no scrolling, no popups): Keep-Alive top-left, Backup/Restore top-right (an embedded `BackupControl`), StarStrings full-width underneath. `ScaleToDpi()` does manual high-DPI scaling. Owns config + keep-alive timer + both updaters' UI.
-  - `Main()` — `EnableVisualStyles`, temp-installer cleanup, run.
-- `BackupForm.cs` — defines **`BackupControl : UserControl`** (was a popup `Form` pre-v3; now embedded as a section). `CopyTree` skips locked files and counts them.
-- `app.manifest` — embedded via `/win32manifest`; declares **DPI awareness** (crisp on scaled displays; required for `ScaleToDpi` to read the true DPI).
-- `StarMaster.ps1` + `StarMaster-Startup.vbs` — older PowerShell version + hidden launcher. **The C# `.exe` is primary**; only touch the `.ps1` if asked.
-- `Make-Icon.ps1` — regenerates `StarMaster.ico` (GDI+, offline; amber HUD pulse).
-- `installer.iss` — Inno Setup → `StarMaster-Setup.exe`. Installs to `%localappdata%\StarMaster`; `AppPublisher`="Elliot Borst", `UninstallDisplayName`="StarMaster" (so Add/Remove shows "StarMaster", not "StarMaster version N"); `CloseApplications=yes`.
+- `StarMaster.cs` — namespace `StarMaster`. **Logic (UI-agnostic, reused since the WinForms era):** `Native` (scan-code `Press` + foreground-window P/Invoke), `Vk` (key map incl. `[` `]`), `Cmd`, `TimedWebClient`, `Updater` (self-update + `ParseVer`/`Compare`), `StarStrings` (check/install). **WPF UI:** `Ui` (Aurora brushes/fonts + `AccentGrad`), widget helpers (`Btn`, `Toggle`, `Check`, `TextField`, `Dropdown` custom dark combo), `AddKeyDialog`, `MainWindow` (the dashboard — built as a Grid of cards; config load/save; timer; tray; updater — split across two `partial` blocks). `App.Main` (`[STAThread]`, temp-installer cleanup, `Application.Run`).
+- `BackupForm.cs` — now **`BackupOps`** (plain static backup file-ops; `CopyTree` skips locked files). *(File kept its name; class is no longer a Form.)*
+- `app.manifest` — embedded via `/win32manifest`; DPI-aware (WPF renders crisp).
+- `Make-Icon.ps1` — regenerates `StarMaster.ico`: an **Aurora sparkle-star** (4-point ✦, cyan→violet gradient + glow) on a dark tile. The in-app header logo (`MainWindow.Header`) is the matching WPF `Polygon` star.
+- `StarMaster.ps1` + `StarMaster-Startup.vbs` — old PowerShell version + launcher. **The C# `.exe` is primary**; only touch the `.ps1` if asked.
+- `installer.iss` — Inno Setup → `StarMaster-Setup.exe`; installs to `%localappdata%\StarMaster`; `AppPublisher`="Elliot Borst", `UninstallDisplayName`="StarMaster", `CloseApplications=yes`.
 
-## Build (no Node / NuGet / internet)
+## Build (no Node / NuGet / MSBuild / internet)
 ```
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs
 ```
-- **`/win32manifest:app.manifest` required** (DPI). **`System.IO.Compression*` refs required** (StarStrings unzips via `ZipFile`).
-- **Close any running `StarMaster.exe` first** or the compiler can't overwrite it (`CS0016`).
-- Source is **ASCII-only** (no `/codepage` needed).
+- **It's code-only WPF** — the WPF refs (full framework paths; the 3 `WPF\` assemblies + `System.Xaml`) are required. WinForms/Drawing are for the tray `NotifyIcon`; Compression for the StarStrings zip.
+- **Close any running `StarMaster.exe` first** (or csc can't overwrite it). When iterating, close only the repo instance (`Where-Object { $_.Path -like 'C:\GitHub\StarMaster\*' }`) so the user's installed copy is left alone.
+- Source is **ASCII-only** except a few UI glyph literals (✦/↻/▾ etc.) which the Roslyn csc handles fine without `/codepage`.
+- C# language version is **5** (this csc) — no string interpolation / `?.` / expression-bodied members.
 - The built `.exe` is gitignored (ships via Releases). Re-run `Make-Icon.ps1` only when the icon changes.
-- Installer: `ISCC.exe` (Inno Setup 6 via winget at `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`) → `& "<that path>" installer.iss` → `StarMaster-Setup.exe` (build `StarMaster.exe` first; it's embedded).
+- Installer: `ISCC.exe` (Inno Setup 6 via winget at `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`) → `& "<that path>" installer.iss` → `StarMaster-Setup.exe` (build the exe first; it's embedded).
 
 ## Conventions / facts
-- **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run — **Wipe Visor** (Alt+X, 600 s, enabled) and **Auto Accept** (`[`, 1 s, disabled) — so an end user only needs the exe. `Vk.Map` keys: A-Z, 0-9, F1-F12, Space/Enter/Tab/Esc, `[` `]`.
-- **Focus guard fails CLOSED** — blank title → sends nothing. Case-insensitive contains; default "Star Citizen" (SC's actual window title is `"Star Citizen "`, which matches).
-- **Game input needs SCAN CODES** — see `Native.Press`. vk-only does not register in SC.
-- **Version** = `MainForm.Version` const (`"5"`); shown in title/header, **must match the Release tag** (`vN`) and `installer.iss` `MyAppVersion`.
-- **High-DPI / window:** crispness = `app.manifest`; sizing = `ScaleToDpi()` (`AutoScaleMode = None`). The window is **resizable + maximizable** (`FormBorderStyle.Sizable`, `MaximizeBox`, `MinimumSize` = designed size). The ~1100×902-logical content panel stays **centered** inside a `middle` Dock.Fill panel via `CenterContent()` on resize; header/banner stretch full-width with right-anchored buttons.
+- **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
+- **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
+- **Game input needs SCAN CODES** (`Native.Press`).
+- **Version** = `MainWindow.Version` const (`"6"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`.
+- **WPF UI thread:** worker (ThreadPool) callbacks touch UI only via `Dispatcher.BeginInvoke`. Keep-alive sends are queued off-thread.
 - Don't commit `config.txt`, `config.json`, `Backups/`, `StarMaster.exe`, or `StarMaster-Setup.exe`.
-- **SC environment:** install root `C:\Program Files\Roberts Space Industries\StarCitizen`; channels `LIVE` / `HOTFIX`.
+- **SC environment:** root `C:\Program Files\Roberts Space Industries\StarCitizen`; channels `LIVE`/`HOTFIX`.
 
 ## Review history
-- 2026-06-18: focus-guard fail-open → fail-closed; NumericUpDown clamp.
-- 2026-06-19: backup locked-file mid-copy fix (`CopyTree` skips + counts locked files).
-- 2026-06-19: **v2** — dark HUD GUI, GitHub self-updater, public + locked-down repo. Adversarial review fixed 7 issues. Then fixed blurry GUI (DPI manifest + manual `ScaleToDpi`). Repo history re-authored solely to Elliot Borst (Claude co-author trailers removed).
-- 2026-06-19: **v3** — third tool **StarStrings**; consolidated into a single fixed **2-column window** (Backup is now an embedded `BackupControl`, no popup, no scroll); **scan-code keyboard input** (fixed keep-alive not registering in-game — SC reads raw input); default Wipe Visor interval → 600 s; installer publisher "Elliot Borst" + Add/Remove name "StarMaster". *Note: StarStrings install path is new — live-test before relying on it.*
-- 2026-06-19: **v4** — **Auto Accept** keep-alive default (`[` @1 s, disabled; `[`/`]` keys added, min interval now 1 s) + **close-to-tray** (X hides to a dark-themed `NotifyIcon`; app keeps running, keep-alive stays active; restore/quit via tray menu).
-- 2026-06-19: **v5** — window is now **resizable + maximizable**; the fixed-size content panel stays **centered** in a Dock.Fill `middle` via manual `CenterContent` on resize (`Anchor=None` centered wrong — landed content bottom-right when maximized).
+- 2026-06-18/19: v1–v2 (focus-guard fail-closed, backup locked-file handling, dark HUD GUI, self-updater, public repo). v2 fixed blurry GUI (DPI manifest + manual scaling).
+- 2026-06-19: **v3** StarStrings tool + single-window 2-col layout + scan-code input; **v4** Auto Accept default + close-to-tray; **v5** resizable window. Repo history re-authored solely to Elliot Borst.
+- 2026-06-19: **v6** — full **WPF rewrite** (code-only, csc-built): Aurora dashboard-cards UI, vector/auto-DPI, new sparkle-star icon. Adversarial review fixed 11 issues (tray-icon-null → unreachable fallback; restored same-source==target copy guard; keep-alive send moved off the UI thread; ported installer-temp cleanup; StarStrings channel detection; preserve LastFire on edit; "Open backups folder"; Dropdown value validation; docs build command).
 
 ## Backlog / ideas
-Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI (currently system-DPI-aware). *Done: v2 auto-updater + modern UI + high-DPI; v3 StarStrings + single-window layout + scan-code input; v4 Auto Accept default + close-to-tray + dark tray menu; v5 resizable/maximizable window.*
-
-**Close-to-tray:** the **X** button hides the window to a `NotifyIcon` (the app keeps running, keep-alive stays active); restore via tray double-click / "Open StarMaster", quit via tray "Exit" (sets `exiting` then `Close()`). See `MainForm_FormClosing`/`BuildTray`.
+Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI; theme the self-update prompt as an in-app banner (currently a MessageBox). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite.*
 
 > This file is the app's handoff doc — a fresh Claude Code session opened in this folder has everything it needs to continue.

@@ -10,13 +10,14 @@
 #define MyAppName "StarMaster"
 #define MyAppVersion "2"
 #define MyAppExe "StarMaster.exe"
-#define MyAppPublisher "Egbor"
+#define MyAppPublisher "Elliot Borst"
 
 [Setup]
 AppId={{8F3A1C2B-5D6E-4A7F-9B0C-1D2E3F4A5B6C}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppPublisherURL=https://github.com/elliot-borst/StarMaster
 DefaultDirName={localappdata}\StarMaster
 DefaultGroupName=StarMaster
 DisableProgramGroupPage=yes
@@ -26,6 +27,7 @@ OutputBaseFilename=StarMaster-Setup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\{#MyAppExe}
+UninstallDisplayName={#MyAppName}
 WizardStyle=modern
 SetupIconFile=StarMaster.ico
 ; In-app updater downloads this installer and runs it while StarMaster is open;

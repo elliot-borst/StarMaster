@@ -35,7 +35,7 @@
 - **Close any running `StarMaster.exe` first**, or the compiler can't overwrite it (`CS0016 ... being used by another process`).
 - Source is **ASCII-only** (no `/codepage` needed) — keep it that way.
 - The built `.exe` is gitignored (distributed via Releases). Re-run `Make-Icon.ps1` only when the icon changes.
-- Installer: needs Inno Setup (`ISCC.exe`, free from jrsoftware.org) → compile `installer.iss`.
+- Installer: `ISCC.exe` (Inno Setup 6, installed via winget at `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`) → `& "<that path>" installer.iss` produces `StarMaster-Setup.exe`, then `gh release upload vN StarMaster-Setup.exe`. (`StarMaster.exe` must be built first; it gets embedded.)
 
 ## Conventions / facts
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` lines (`autostart`, `focusguard`, `wintitle`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 5–3600 s. App writes its own defaults (Wipe Visor) on first run, so an end user only needs the exe.

@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free C# WinForms program (needs only the .NET Framework Windows ships). **Three tools** (keep-alive, backup, StarStrings) in one window, plus a GitHub self-updater and a dark "HUD" UI. **Current version: 3.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free C# WinForms program (needs only the .NET Framework Windows ships). **Three tools** (keep-alive, backup, StarStrings) in one window, plus a GitHub self-updater and a dark "HUD" UI. **Current version: 4.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater can read Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo/project — **StarBinding** — not here.
 
@@ -45,7 +45,7 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run — **Wipe Visor** (Alt+X, 600 s, enabled) and **Auto Accept** (`[`, 1 s, disabled) — so an end user only needs the exe. `Vk.Map` keys: A-Z, 0-9, F1-F12, Space/Enter/Tab/Esc, `[` `]`.
 - **Focus guard fails CLOSED** — blank title → sends nothing. Case-insensitive contains; default "Star Citizen" (SC's actual window title is `"Star Citizen "`, which matches).
 - **Game input needs SCAN CODES** — see `Native.Press`. vk-only does not register in SC.
-- **Version** = `MainForm.Version` const (`"3"`); shown in title/header, **must match the Release tag** (`vN`) and `installer.iss` `MyAppVersion`.
+- **Version** = `MainForm.Version` const (`"4"`); shown in title/header, **must match the Release tag** (`vN`) and `installer.iss` `MyAppVersion`.
 - **High-DPI:** crispness = `app.manifest`; sizing = `ScaleToDpi()`. `AutoScaleMode = None`. The fixed window is ~1100×902 logical (fits the user's 4K @ 200% → ~1920×1032 logical desktop).
 - Don't commit `config.txt`, `config.json`, `Backups/`, `StarMaster.exe`, or `StarMaster-Setup.exe`.
 - **SC environment:** install root `C:\Program Files\Roberts Space Industries\StarCitizen`; channels `LIVE` / `HOTFIX`.
@@ -55,9 +55,10 @@
 - 2026-06-19: backup locked-file mid-copy fix (`CopyTree` skips + counts locked files).
 - 2026-06-19: **v2** — dark HUD GUI, GitHub self-updater, public + locked-down repo. Adversarial review fixed 7 issues. Then fixed blurry GUI (DPI manifest + manual `ScaleToDpi`). Repo history re-authored solely to Elliot Borst (Claude co-author trailers removed).
 - 2026-06-19: **v3** — third tool **StarStrings**; consolidated into a single fixed **2-column window** (Backup is now an embedded `BackupControl`, no popup, no scroll); **scan-code keyboard input** (fixed keep-alive not registering in-game — SC reads raw input); default Wipe Visor interval → 600 s; installer publisher "Elliot Borst" + Add/Remove name "StarMaster". *Note: StarStrings install path is new — live-test before relying on it.*
+- 2026-06-19: **v4** — **Auto Accept** keep-alive default (`[` @1 s, disabled; `[`/`]` keys added, min interval now 1 s) + **close-to-tray** (X hides to a dark-themed `NotifyIcon`; app keeps running, keep-alive stays active; restore/quit via tray menu).
 
 ## Backlog / ideas
-Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI (currently system-DPI-aware). *Done: v2 auto-updater + modern UI + high-DPI; v3 StarStrings + single-window layout + scan-code input. Pending release (on `main`, post-v3): Auto Accept default + close-to-tray.*
+Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI (currently system-DPI-aware). *Done: v2 auto-updater + modern UI + high-DPI; v3 StarStrings + single-window layout + scan-code input; v4 Auto Accept default + close-to-tray + dark tray menu.*
 
 **Close-to-tray:** the **X** button hides the window to a `NotifyIcon` (the app keeps running, keep-alive stays active); restore via tray double-click / "Open StarMaster", quit via tray "Exit" (sets `exiting` then `Close()`). See `MainForm_FormClosing`/`BuildTray`.
 

@@ -403,7 +403,7 @@ namespace StarMaster {
         string cfgPath;
         string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
 
-        public const string Version = "3";   // bump per release; matches the GitHub Release tag (vN)
+        public const string Version = "4";   // bump per release; matches the GitHub Release tag (vN)
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
 
         const int HeaderH = 58;

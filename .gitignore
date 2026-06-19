@@ -3,7 +3,8 @@ config.txt
 config.json
 Backups/
 
-# Installer build output (rebuild from installer.iss)
+# Build output — binaries are distributed via GitHub Releases, not tracked here
+StarMaster.exe
 StarMaster-Setup.exe
 
 # Scratch / temp

@@ -68,6 +68,8 @@ namespace StarMaster {
         List<Cmd> commands = new List<Cmd>();
         string cfgPath;
 
+        public const string Version = "1";   // bump per release; shown in the title bar and matches the GitHub Release tag (vN)
+
         Label NewLabel(string t, int x, int y, int w) {
             Label l = new Label();
             l.Text = t; l.SetBounds(x, y, w, 20);
@@ -79,7 +81,7 @@ namespace StarMaster {
             bool autostart, focusguard; string wintitle;
             LoadConfig(out autostart, out focusguard, out wintitle);
 
-            Text = "StarMaster";
+            Text = "StarMaster v" + Version;
             ClientSize = new Size(500, 520);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;

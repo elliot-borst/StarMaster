@@ -1,8 +1,8 @@
-# Generates SC-KeepAlive.ico (multi-resolution: 16/32/48/64/128/256) from the
+# Generates StarMaster.ico (multi-resolution: 16/32/48/64/128/256) from the
 # "HUD heartbeat pulse on a dark panel" design, using GDI+ (offline, no dependencies).
 Add-Type -AssemblyName System.Drawing
 $d = $PSScriptRoot
-$icoPath = Join-Path $d 'SC-KeepAlive.ico'
+$icoPath = Join-Path $d 'StarMaster.ico'
 
 function New-RoundRect([single]$x,[single]$y,[single]$w,[single]$h,[single]$r) {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath

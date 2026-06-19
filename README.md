@@ -1,28 +1,26 @@
-# StarMaster — Star Citizen Master Tools
+# StarMaster
 
-A small, personal collection of dependency-free Windows tools for Star Citizen (needs only the .NET Framework that Windows already ships).
+A personal **Star Citizen helper app** for Windows — dependency-free (needs only the .NET Framework Windows already ships). Built to grow; two features so far:
 
-## Tools
+- **Keep-alive (anti-idle)** — sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
+- **Backup / Restore** — copies the config a patch or channel-switch wipes (`user\` settings + key bindings, the StarStrings `data\Localization`, and `user.cfg`) between channels (LIVE / HOTFIX) or from a saved snapshot. Overwrites only (never deletes), touches only those 3 paths, asks first, and warns if Star Citizen has files locked.
 
-### 🫀 Keep-Alive — `SC-KeepAlive.exe`
-- **Anti-idle.** Sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
-- **Backup / Restore.** Copies the config a patch or channel-switch wipes — `user\` (settings + key bindings), `data\Localization\` (the StarStrings text mod), and `user.cfg` — between channels (LIVE / HOTFIX) or from a saved snapshot. Only overwrites (never deletes), only touches those three sub-paths, asks before writing, and warns if Star Citizen has files open.
-
-Run by double-clicking `SC-KeepAlive.exe`.
+## Run
+Double-click **`StarMaster.exe`**. Tick *Auto-start* and drop a shortcut in `shell:startup` for run-on-boot.
 
 ## Build
 ```
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:SC-KeepAlive.ico /out:SC-KeepAlive.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll SC-KeepAlive.cs BackupForm.cs
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /out:StarMaster.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll StarMaster.cs BackupForm.cs
 ```
 `csc.exe` ships with Windows — no Node / NuGet / internet required.
 
 ## Files
 | File | Purpose |
 |------|---------|
-| `SC-KeepAlive.cs`, `BackupForm.cs` | Keep-Alive app source (C# WinForms) |
-| `SC-KeepAlive.ps1`, `SC-KeepAlive-Startup.vbs` | PowerShell version + hidden launcher |
-| `Make-Icon.ps1` | Regenerates `SC-KeepAlive.ico` (GDI+, offline) |
-| `installer.iss` | Inno Setup script → `SC-KeepAlive-Setup.exe` |
-| `CLAUDE.md` | Project guide / context for Claude Code |
+| `StarMaster.cs`, `BackupForm.cs` | App source (C# WinForms) |
+| `StarMaster.ps1`, `StarMaster-Startup.vbs` | PowerShell version + hidden launcher |
+| `Make-Icon.ps1` | Regenerates `StarMaster.ico` (GDI+, offline) |
+| `installer.iss` | Inno Setup script → `StarMaster-Setup.exe` |
+| `CLAUDE.md` | Project context / handoff doc |
 
-Runtime config (`config.txt` / `config.json`) and backups are kept out of git.
+Runtime config (`config.txt` / `config.json`) stays out of git. Backups are saved to `Documents\StarMaster\Backups\`.

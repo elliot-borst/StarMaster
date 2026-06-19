@@ -4,7 +4,7 @@ config.json
 Backups/
 
 # Installer build output (rebuild from installer.iss)
-SC-KeepAlive-Setup.exe
+StarMaster-Setup.exe
 
 # Scratch / temp
 _test.ps1

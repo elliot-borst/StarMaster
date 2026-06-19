@@ -1,4 +1,4 @@
-# SC-KeepAlive.ps1
+# StarMaster.ps1
 # Tiny scheduled-keystroke "keep-alive" utility with a small GUI. No install needed.
 # Add commands (key + interval), press Start, leave it running to avoid the idle logout.
 # SAFETY: by default it only sends keystrokes while Star Citizen is the ACTIVE window.
@@ -94,12 +94,12 @@ foreach ($c in $script:commands) {
 
 # ---- UI ----
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'SC Keep-Alive'
+$form.Text = 'StarMaster'
 $form.Size = New-Object System.Drawing.Size(520,560)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
-try { $form.Icon = New-Object System.Drawing.Icon((Join-Path $PSScriptRoot 'SC-KeepAlive.ico')) } catch { }
+try { $form.Icon = New-Object System.Drawing.Icon((Join-Path $PSScriptRoot 'StarMaster.ico')) } catch { }
 
 function NewLabel($t,$x,$y,$w=70) { $l=New-Object System.Windows.Forms.Label; $l.Text=$t; $l.Location=New-Object System.Drawing.Point($x,$y); $l.Size=New-Object System.Drawing.Size($w,20); $form.Controls.Add($l); return $l }
 

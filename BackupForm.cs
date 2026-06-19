@@ -4,13 +4,13 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
-namespace SCKeepAlive {
+namespace StarMaster {
 
     // Backup / restore the things a Star Citizen patch or channel-switch wipes:
     //   - user\                  (in-game settings + key bindings)
     //   - data\Localization\     (StarStrings text mod, e.g. global.ini)
     //   - user.cfg               (StarStrings language line)
-    // Backups are copied to Documents\SC-KeepAlive\Backups\<channel>-<timestamp>\.
+    // Backups are copied to Documents\StarMaster\Backups\<channel>-<timestamp>\.
     // Copy/restore only ever writes those 3 known sub-paths, overwrites (never deletes), and asks first.
     public class BackupForm : Form {
         TextBox txtRoot, txtLog;
@@ -19,13 +19,13 @@ namespace SCKeepAlive {
         Button btnBackup, btnCopy, btnRefresh, btnOpen;
         ListBox lstBackups;
 
-        string BackupsRoot { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SC-KeepAlive", "Backups"); } }
+        string BackupsRoot { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "StarMaster", "Backups"); } }
         string ScRoot { get { return txtRoot.Text.Trim(); } }
 
         Label L(string t, int x, int y, int w) { Label l = new Label(); l.Text = t; l.SetBounds(x, y, w, 20); Controls.Add(l); return l; }
 
         public BackupForm() {
-            Text = "SC Keep-Alive - Backup / Restore";
+            Text = "StarMaster - Backup / Restore";
             ClientSize = new Size(544, 540);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false; MinimizeBox = false;

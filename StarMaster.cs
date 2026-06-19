@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 
-namespace SCKeepAlive {
+namespace StarMaster {
 
     static class Native {
         [DllImport("user32.dll")] static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -79,7 +79,7 @@ namespace SCKeepAlive {
             bool autostart, focusguard; string wintitle;
             LoadConfig(out autostart, out focusguard, out wintitle);
 
-            Text = "SC Keep-Alive";
+            Text = "StarMaster";
             ClientSize = new Size(500, 520);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -237,7 +237,7 @@ namespace SCKeepAlive {
         void SaveConfig() {
             try {
                 StringBuilder sb = new StringBuilder();
-                sb.AppendLine("# SC Keep-Alive config");
+                sb.AppendLine("# StarMaster config");
                 sb.AppendLine("autostart=" + (chkAuto.Checked ? "1" : "0"));
                 sb.AppendLine("focusguard=" + (chkFocus.Checked ? "1" : "0"));
                 sb.AppendLine("wintitle=" + txtTitle.Text);

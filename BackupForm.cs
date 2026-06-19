@@ -31,6 +31,8 @@ namespace StarMaster {
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Ui;
+            AutoScaleMode = AutoScaleMode.None;
 
             L("Star Citizen folder:", 12, 14, 128);
             txtRoot = new TextBox(); txtRoot.SetBounds(144, 11, 388, 22);
@@ -41,12 +43,12 @@ namespace StarMaster {
             chkLoc = new CheckBox(); chkLoc.Text = "StarStrings text mod  (data\\Localization\\)"; chkLoc.SetBounds(24, 88, 340, 20); chkLoc.Checked = true; Controls.Add(chkLoc);
             chkCfg = new CheckBox(); chkCfg.Text = "StarStrings language line  (user.cfg)"; chkCfg.SetBounds(24, 110, 340, 20); chkCfg.Checked = true; Controls.Add(chkCfg);
 
-            L("1.  Back up a channel to a safe folder", 12, 144, 340);
+            Label sec1 = L("1.  Back up a channel to a safe folder", 12, 144, 340);
             L("Channel:", 24, 170, 60);
             cmbBackupCh = new ComboBox(); cmbBackupCh.DropDownStyle = ComboBoxStyle.DropDownList; cmbBackupCh.SetBounds(88, 167, 130, 22); Controls.Add(cmbBackupCh);
             btnBackup = new Button(); btnBackup.Text = "Back up now"; btnBackup.SetBounds(228, 165, 120, 26); Controls.Add(btnBackup);
 
-            L("2.  Copy / restore into a channel", 12, 202, 340);
+            Label sec2 = L("2.  Copy / restore into a channel", 12, 202, 340);
             L("From:", 24, 228, 40);
             cmbFrom = new ComboBox(); cmbFrom.DropDownStyle = ComboBoxStyle.DropDownList; cmbFrom.SetBounds(66, 225, 300, 22); Controls.Add(cmbFrom);
             L("To:", 374, 228, 26);
@@ -66,6 +68,15 @@ namespace StarMaster {
             btnRefresh.Click += delegate { Populate(); };
             btnOpen.Click += delegate { try { Directory.CreateDirectory(BackupsRoot); System.Diagnostics.Process.Start("explorer.exe", "\"" + BackupsRoot + "\""); } catch (Exception ex) { Log("ERROR: " + ex.Message); } };
             txtRoot.Leave += delegate { Populate(); };
+
+            Theme.Apply(this);
+            Theme.StyleButton(btnBackup, true);
+            Theme.StyleButton(btnCopy, true);
+            sec1.Font = Theme.UiBold; sec1.ForeColor = Theme.Amber;
+            sec2.Font = Theme.UiBold; sec2.ForeColor = Theme.Amber;
+
+            float f = Theme.DpiFactor(this);
+            if (f > 1.0f) { Theme.ScaleControls(this, f); ClientSize = new Size((int)Math.Round(544 * f), (int)Math.Round(540 * f)); }
 
             Populate();
         }

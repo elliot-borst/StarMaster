@@ -8,7 +8,7 @@
 ;   3. Out pops StarMaster-Setup.exe in this folder - that's the installer you can run/share.
 
 #define MyAppName "StarMaster"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2"
 #define MyAppExe "StarMaster.exe"
 #define MyAppPublisher "Egbor"
 
@@ -28,6 +28,10 @@ SolidCompression=yes
 UninstallDisplayIcon={app}\{#MyAppExe}
 WizardStyle=modern
 SetupIconFile=StarMaster.ico
+; In-app updater downloads this installer and runs it while StarMaster is open;
+; offer to close the running copy so files can be replaced (no forced reboot).
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "StarMaster.exe"; DestDir: "{app}"; Flags: ignoreversion

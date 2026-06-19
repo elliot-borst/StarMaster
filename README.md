@@ -5,7 +5,7 @@ A personal **Star Citizen helper app** for Windows — dependency-free (needs on
 **Tools:**
 - **Keep-Alive** — anti-idle: sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
 - **Backup / Restore** — copies the config a patch or channel-switch wipes (`user\` settings + key bindings, the StarStrings `data\Localization`, and `user.cfg`) between channels (LIVE / HOTFIX) or from a saved snapshot. Overwrites only (never deletes), touches only those 3 paths, asks first, and warns if Star Citizen has files locked.
-- **StarStrings** *(new in v3 — in progress)* — keeps [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) community localization mod current: shows your installed build vs. the latest available, and updates it in one click (downloads the release and copies it into your Star Citizen folder).
+- **StarStrings** — keeps [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) community localization mod current: shows your installed build vs. the latest available, and installs/updates it in one click (downloads the release and copies it into your Star Citizen folder, safely merging `user.cfg`).
 
 ## Download & install
 Grab the latest from the **[Releases page](https://github.com/elliot-borst/StarMaster/releases/latest)**:
@@ -22,7 +22,7 @@ StarMaster checks for newer versions on launch and offers to update.
 ## Build from source
 Only needs the C# compiler that ships with Windows — no Node / NuGet / internet:
 ```
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll StarMaster.cs BackupForm.cs
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs
 ```
 The installer is built by compiling `installer.iss` with [Inno Setup](https://jrsoftware.org/isdl.php). See `CLAUDE.md` for full details.
 

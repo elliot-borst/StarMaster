@@ -12,7 +12,7 @@ namespace StarMaster {
     //   - user.cfg               (StarStrings language line)
     // Backups are copied to Documents\StarMaster\Backups\<channel>-<timestamp>\.
     // Copy/restore only ever writes those 3 known sub-paths, overwrites (never deletes), and asks first.
-    public class BackupForm : Form {
+    public class BackupControl : UserControl {
         TextBox txtRoot, txtLog;
         CheckBox chkUser, chkLoc, chkCfg;
         ComboBox cmbBackupCh, cmbFrom, cmbTo;
@@ -24,24 +24,18 @@ namespace StarMaster {
 
         Label L(string t, int x, int y, int w) { Label l = new Label(); l.Text = t; l.SetBounds(x, y, w, 20); Controls.Add(l); return l; }
 
-        public BackupForm() {
-            Text = "StarMaster - Backup / Restore";
-            ClientSize = new Size(544, 540);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false; MinimizeBox = false;
-            StartPosition = FormStartPosition.CenterParent;
-            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+        public BackupControl() {
+            Size = new Size(544, 540);
             BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Ui;
-            AutoScaleMode = AutoScaleMode.None;
 
             L("Star Citizen folder:", 12, 14, 128);
             txtRoot = new TextBox(); txtRoot.SetBounds(144, 11, 388, 22);
             txtRoot.Text = @"C:\Program Files\Roberts Space Industries\StarCitizen"; Controls.Add(txtRoot);
 
             L("What to copy:", 12, 44, 120);
-            chkUser = new CheckBox(); chkUser.Text = "User settings & key bindings  (user\\)"; chkUser.SetBounds(24, 66, 340, 20); chkUser.Checked = true; Controls.Add(chkUser);
-            chkLoc = new CheckBox(); chkLoc.Text = "StarStrings text mod  (data\\Localization\\)"; chkLoc.SetBounds(24, 88, 340, 20); chkLoc.Checked = true; Controls.Add(chkLoc);
-            chkCfg = new CheckBox(); chkCfg.Text = "StarStrings language line  (user.cfg)"; chkCfg.SetBounds(24, 110, 340, 20); chkCfg.Checked = true; Controls.Add(chkCfg);
+            chkUser = new ThemedCheckBox(); chkUser.Text = "User settings & key bindings  (user\\)"; chkUser.SetBounds(24, 66, 340, 20); chkUser.Checked = true; Controls.Add(chkUser);
+            chkLoc = new ThemedCheckBox(); chkLoc.Text = "StarStrings text mod  (data\\Localization\\)"; chkLoc.SetBounds(24, 88, 340, 20); chkLoc.Checked = true; Controls.Add(chkLoc);
+            chkCfg = new ThemedCheckBox(); chkCfg.Text = "StarStrings language line  (user.cfg)"; chkCfg.SetBounds(24, 110, 340, 20); chkCfg.Checked = true; Controls.Add(chkCfg);
 
             Label sec1 = L("1.  Back up a channel to a safe folder", 12, 144, 340);
             L("Channel:", 24, 170, 60);
@@ -74,9 +68,6 @@ namespace StarMaster {
             Theme.StyleButton(btnCopy, true);
             sec1.Font = Theme.UiBold; sec1.ForeColor = Theme.Amber;
             sec2.Font = Theme.UiBold; sec2.ForeColor = Theme.Amber;
-
-            float f = Theme.DpiFactor(this);
-            if (f > 1.0f) { Theme.ScaleControls(this, f); ClientSize = new Size((int)Math.Round(544 * f), (int)Math.Round(540 * f)); }
 
             Populate();
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -14,18 +15,31 @@ namespace StarMaster {
         [DllImport("user32.dll")] static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-        const uint UP = 0x2;
+        [DllImport("user32.dll")] static extern uint MapVirtualKey(uint uCode, uint uMapType);
+        const uint KEYUP = 0x2;
+        const uint SCANCODE = 0x8;
+        const uint EXTENDED = 0x1;
         public static string ActiveTitle() {
             StringBuilder sb = new StringBuilder(256);
             GetWindowText(GetForegroundWindow(), sb, 256);
             return sb.ToString();
         }
+        // Send one key by HARDWARE SCAN CODE, not just the virtual key. Games like Star Citizen read raw
+        // input / DirectInput and ignore vk-only synthetic keys (scan code 0) - so the old path did nothing
+        // in-game. This is what VoiceAttack does too.
+        static void Key(byte vk, bool up) {
+            uint sc = MapVirtualKey(vk, 0);   // MAPVK_VK_TO_VSC
+            uint flags = SCANCODE | (up ? KEYUP : 0);
+            if (vk == 0xA5 || vk == 0xA3 || (vk >= 0x21 && vk <= 0x28) || vk == 0x2D || vk == 0x2E || vk == 0x5B || vk == 0x5C)
+                flags |= EXTENDED;            // right alt/ctrl, nav cluster, ins/del, win keys are "extended"
+            keybd_event(vk, (byte)sc, flags, UIntPtr.Zero);
+        }
         public static void Press(byte[] mods, byte key) {
-            foreach (byte m in mods) keybd_event(m, 0, 0, UIntPtr.Zero);
-            keybd_event(key, 0, 0, UIntPtr.Zero);
+            foreach (byte m in mods) Key(m, false);
+            Key(key, false);
             System.Threading.Thread.Sleep(40);
-            keybd_event(key, 0, UP, UIntPtr.Zero);
-            for (int i = mods.Length - 1; i >= 0; i--) keybd_event(mods[i], 0, UP, UIntPtr.Zero);
+            Key(key, true);
+            for (int i = mods.Length - 1; i >= 0; i--) Key(mods[i], true);
         }
     }
 
@@ -54,13 +68,12 @@ namespace StarMaster {
         public string Label = "Command";
         public bool Shift, Ctrl, Alt;
         public string Key = "";
-        public int Interval = 120;
+        public int Interval = 600;
         public bool Enabled = true;
         public DateTime LastFire = DateTime.MinValue;
     }
 
     // Dark "HUD" theme (amber on near-black) - matches the app icon and the Star Citizen aesthetic.
-    // Dependency-free: just colors, fonts and WinForms/GDI+ styling helpers.
     static class Theme {
         public static readonly Color Bg       = Color.FromArgb(14, 18, 22);
         public static readonly Color Surface  = Color.FromArgb(22, 28, 34);
@@ -107,7 +120,6 @@ namespace StarMaster {
             c.FlatAppearance.BorderColor = Line;
         }
 
-        // Recursively apply the theme to a container's controls (used by BackupForm).
         public static void Apply(Control root) {
             foreach (Control k in root.Controls) {
                 if (k is TextBox)        { k.BackColor = Surface; k.ForeColor = Text; ((TextBox)k).BorderStyle = BorderStyle.FixedSingle; }
@@ -120,13 +132,13 @@ namespace StarMaster {
             }
         }
 
-        // DPI scale factor for the screen this control is on (1.0 at 96 DPI, 1.5 at 144, 2.0 at 192...).
+        // DPI scale factor for the screen this control is on (1.0 at 96 DPI, 1.5 at 144...).
         public static float DpiFactor(Control c) {
             using (Graphics g = c.CreateGraphics()) return g.DpiX / 96f;
         }
 
-        // Multiply every child control's bounds (and owner-drawn ListBox row height) by f. Point-based
-        // fonts already grow with DPI, so we scale only geometry here to match.
+        // Multiply every child control's bounds (and owner-drawn ListBox row height) by f. Point fonts
+        // already grow with DPI, so we scale only geometry here to match.
         public static void ScaleControls(Control parent, float f) {
             foreach (Control c in parent.Controls) {
                 c.Bounds = new Rectangle((int)Math.Round(c.Left * f), (int)Math.Round(c.Top * f), (int)Math.Round(c.Width * f), (int)Math.Round(c.Height * f));
@@ -137,7 +149,39 @@ namespace StarMaster {
         }
     }
 
-    // WebClient with a real timeout so a stalled asset download fails fast instead of hanging forever.
+    // Owner-drawn checkbox: a clear bordered box that fills amber with a dark check when ticked.
+    // The default flat checkbox is nearly invisible on the dark theme.
+    class ThemedCheckBox : CheckBox {
+        public ThemedCheckBox() {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            ForeColor = Theme.Text;
+            Cursor = Cursors.Hand;
+            CheckedChanged += delegate { Invalidate(); };
+        }
+        protected override void OnPaint(PaintEventArgs e) {
+            Graphics g = e.Graphics;
+            Color bg = (Parent != null) ? Parent.BackColor : Theme.Bg;
+            using (SolidBrush bb = new SolidBrush(bg)) g.FillRectangle(bb, ClientRectangle);
+            int box = Math.Min(Height - 2, Font.Height);
+            Rectangle r = new Rectangle(1, (Height - box) / 2, box, box);
+            using (SolidBrush fill = new SolidBrush(Checked ? Theme.Amber : Theme.Surface)) g.FillRectangle(fill, r);
+            using (Pen p = new Pen(Checked ? Theme.Amber : Theme.Line)) g.DrawRectangle(p, r);
+            if (Checked) {
+                System.Drawing.Drawing2D.SmoothingMode old = g.SmoothingMode;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (Pen cp = new Pen(Color.FromArgb(20, 18, 10), Math.Max(2f, box / 8f)))
+                    g.DrawLines(cp, new Point[] {
+                        new Point(r.X + box * 3 / 16, r.Y + box / 2),
+                        new Point(r.X + box * 6 / 16, r.Y + box * 11 / 16),
+                        new Point(r.X + box * 12 / 16, r.Y + box / 4) });
+                g.SmoothingMode = old;
+            }
+            Rectangle tr = new Rectangle(r.Right + 6, 0, Width - r.Right - 6, Height);
+            TextRenderer.DrawText(g, Text, Font, tr, ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    // WebClient with a real timeout so a stalled download fails fast instead of hanging forever.
     class TimedWebClient : WebClient {
         protected override WebRequest GetWebRequest(Uri address) {
             WebRequest r = base.GetWebRequest(address);
@@ -147,7 +191,7 @@ namespace StarMaster {
         }
     }
 
-    // Checks GitHub Releases for a newer version. Works against a PUBLIC repo (no token needed).
+    // Checks GitHub Releases for a newer version of StarMaster itself. Works against a PUBLIC repo.
     static class Updater {
         const string Owner = "elliot-borst";
         const string Repo  = "StarMaster";
@@ -156,7 +200,7 @@ namespace StarMaster {
 
         public class Info { public int[] Version; public string Tag; public string SetupUrl; public string PageUrl; }
 
-        // Parse every numeric component of a tag: "v2" -> {2}, "v2.1" -> {2,1}, "2025.06" -> {2025,6}; {} if none.
+        // Parse every numeric component of a tag: "v2" -> {2}, "v2.1" -> {2,1}; {} if none.
         public static int[] ParseVer(string tag) {
             List<int> parts = new List<int>();
             if (!string.IsNullOrEmpty(tag)) {
@@ -167,7 +211,7 @@ namespace StarMaster {
             return parts.ToArray();
         }
 
-        // Component-wise compare; >0 if a is newer than b. Missing components count as 0 (so "2" == "2.0").
+        // Component-wise compare; >0 if a is newer than b. Missing components count as 0.
         public static int Compare(int[] a, int[] b) {
             int n = Math.Max(a.Length, b.Length);
             for (int i = 0; i < n; i++) {
@@ -178,12 +222,11 @@ namespace StarMaster {
             return 0;
         }
 
-        // Returns info for the latest release, or null on any failure (no connection, private repo, etc).
         public static Info CheckLatest() {
             try {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; // GitHub requires TLS 1.2+
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ApiUrl);
-                req.UserAgent = "StarMaster-Updater";          // GitHub API rejects requests with no User-Agent
+                req.UserAgent = "StarMaster-Updater";
                 req.Accept = "application/vnd.github+json";
                 req.Timeout = 8000;
                 string json;
@@ -198,24 +241,19 @@ namespace StarMaster {
                 info.Version = ParseVer(info.Tag);
                 Match page = Regex.Match(json, "\"html_url\"\\s*:\\s*\"([^\"]+)\"");
                 info.PageUrl = page.Success ? page.Groups[1].Value : ReleasesPage;
-
-                // Only a "*setup*.exe" asset counts as an installer; if a release has no setup asset,
-                // SetupUrl stays null and the UI offers "Open download page" instead of a bogus install.
-                info.SetupUrl = FindAsset(json, true);
+                info.SetupUrl = FindAsset(json);
                 return info;
             } catch { return null; }
         }
 
-        static string FindAsset(string json, bool requireSetup) {
+        static string FindAsset(string json) {
             foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"")) {
-                string url = m.Groups[1].Value;
-                string low = url.ToLower();
-                if (low.EndsWith(".exe") && (!requireSetup || low.Contains("setup"))) return url;
+                string low = m.Groups[1].Value.ToLower();
+                if (low.EndsWith(".exe") && low.Contains("setup")) return m.Groups[1].Value;
             }
             return null;
         }
 
-        // Download an installer to a temp file. Returns the temp path, or null on failure.
         public static string DownloadInstaller(string url) {
             try {
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
@@ -229,33 +267,137 @@ namespace StarMaster {
         }
     }
 
+    // StarStrings tool: keeps MrKraken's StarStrings community localization mod up to date.
+    // It's a rolling "latest" release (StarStrings.zip) re-published every SC patch, so the "version"
+    // is the release name (build date + short commit), not a clean vN.
+    static class StarStrings {
+        const string ApiLatest = "https://api.github.com/repos/MrKraken/StarStrings/releases/latest";
+        public const string RepoPage = "https://github.com/MrKraken/StarStrings";
+
+        public class Info { public string Build; public string ZipUrl; }
+
+        // Latest release info, or null on failure.
+        public static Info CheckLatest() {
+            try {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ApiLatest);
+                req.UserAgent = "StarMaster";
+                req.Accept = "application/vnd.github+json";
+                req.Timeout = 8000;
+                string json;
+                using (WebResponse resp = req.GetResponse())
+                using (StreamReader sr = new StreamReader(resp.GetResponseStream()))
+                    json = sr.ReadToEnd();
+                Info i = new Info();
+                Match name = Regex.Match(json, "\"name\"\\s*:\\s*\"([^\"]+)\"");        // "Latest Build (release-2026-06-17-7caecaf)"
+                Match pub  = Regex.Match(json, "\"published_at\"\\s*:\\s*\"([^\"]+)\"");
+                i.Build = name.Success ? name.Groups[1].Value : (pub.Success ? pub.Groups[1].Value : "latest");
+                foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"")) {
+                    if (m.Groups[1].Value.ToLower().EndsWith(".zip")) { i.ZipUrl = m.Groups[1].Value; break; }
+                }
+                return (i.ZipUrl != null) ? i : null;
+            } catch { return null; }
+        }
+
+        // Download the zip, extract, copy the Data\ folder into <channelRoot>\data and ensure user.cfg
+        // has the g_language line. Returns true on success; status text via msg.
+        public static bool Install(string zipUrl, string channelRoot, out string msg) {
+            string tmpZip = null, tmpDir = null;
+            try {
+                if (!Directory.Exists(channelRoot)) { msg = "channel folder not found: " + channelRoot; return false; }
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                tmpZip = Path.Combine(Path.GetTempPath(), "StarStrings-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".zip");
+                using (WebClient wc = new TimedWebClient()) { wc.Headers.Add("User-Agent", "StarMaster"); wc.DownloadFile(zipUrl, tmpZip); }
+                tmpDir = Path.Combine(Path.GetTempPath(), "StarStrings-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                ZipFile.ExtractToDirectory(tmpZip, tmpDir);
+
+                string dataSrc = FindDir(tmpDir, "Data");
+                if (dataSrc == null) { msg = "no Data folder in the downloaded zip"; return false; }
+                int files = CopyTree(dataSrc, Path.Combine(channelRoot, "data"));
+                EnsureLanguageLine(Path.Combine(channelRoot, "user.cfg"));
+                msg = "installed " + files + " file(s) into " + channelRoot + " (data\\ + user.cfg)";
+                return files > 0;
+            } catch (Exception ex) {
+                msg = "install failed: " + ex.Message; return false;
+            } finally {
+                try { if (tmpZip != null) File.Delete(tmpZip); } catch { }
+                try { if (tmpDir != null) Directory.Delete(tmpDir, true); } catch { }
+            }
+        }
+
+        static string FindDir(string root, string name) {
+            try {
+                string direct = Path.Combine(root, name);
+                if (Directory.Exists(direct)) return direct;
+                foreach (string d in Directory.GetDirectories(root, name, SearchOption.AllDirectories)) return d;
+            } catch { }
+            return null;
+        }
+
+        static int CopyTree(string src, string dst) {
+            Directory.CreateDirectory(dst);
+            int c = 0;
+            foreach (string f in Directory.GetFiles(src)) { File.Copy(f, Path.Combine(dst, Path.GetFileName(f)), true); c++; }
+            foreach (string sub in Directory.GetDirectories(src)) c += CopyTree(sub, Path.Combine(dst, Path.GetFileName(sub)));
+            return c;
+        }
+
+        static void EnsureLanguageLine(string userCfg) {
+            try {
+                const string line = "g_language = english";
+                if (File.Exists(userCfg)) {
+                    string txt = File.ReadAllText(userCfg);
+                    if (txt.IndexOf("g_language", StringComparison.OrdinalIgnoreCase) < 0) {
+                        if (txt.Length > 0 && !txt.EndsWith("\n")) txt += Environment.NewLine;
+                        File.WriteAllText(userCfg, txt + line + Environment.NewLine);
+                    }
+                } else {
+                    File.WriteAllText(userCfg, line + Environment.NewLine);
+                }
+            } catch { }
+        }
+    }
+
     public class MainForm : Form {
+        // keep-alive
         TextBox txtLabel, txtKey, txtTitle, txtLog;
         CheckBox chkShift, chkCtrl, chkAlt, chkFocus, chkAuto;
         NumericUpDown numInt;
-        Button btnAdd, btnRemove, btnStart, btnBackup, btnUpdate, btnGet, btnDismiss;
+        Button btnAdd, btnRemove, btnStart;
         ListBox lst;
-        Label lblStatus, lblBanner;
-        Panel header, banner, content;
+        Label lblStatus;
         Timer timer;
         List<Cmd> commands = new List<Cmd>();
-        string cfgPath;
-        int[] CurrentVer;
+        // chrome / app self-update
+        Button btnUpdate, btnGet, btnDismiss;
+        Label lblBanner;
+        Panel header, banner, content, paKeep, paStar;
+        BackupControl backup;
         Updater.Info pendingUpdate;
+        int[] CurrentVer;
+        // StarStrings tool
+        TextBox txtScRoot, txtSSLog;
+        ComboBox cmbSSChannel;
+        Label lblSSInstalled, lblSSAvailable, lblSSStatus;
+        Button btnSSCheck, btnSSUpdate;
+        StarStrings.Info ssLatest;
+        // config
+        string cfgPath;
+        string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
 
-        public const string Version = "2";   // bump per release; shown in the title bar and matches the GitHub Release tag (vN)
+        public const string Version = "3";   // bump per release; matches the GitHub Release tag (vN)
+        const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
 
         const int HeaderH = 58;
-        const int ContentH = 520;
-        const int BaseClientW = 500;
-        const int BaseClientH = HeaderH + ContentH;
+        const int BaseClientW = 1100;            // wide 2-column fixed layout (no scrolling)
+        const int BaseClientH = HeaderH + 844;
         const int BannerH = 40;
 
-        Label NewLabel(string t, int x, int y, int w) {
+        Label NewLabel(Control parent, string t, int x, int y, int w) {
             Label l = new Label();
             l.Text = t; l.SetBounds(x, y, w, 20);
             l.Font = Theme.Ui; l.ForeColor = Theme.Text; l.BackColor = Color.Transparent;
-            content.Controls.Add(l); return l;
+            parent.Controls.Add(l); return l;
         }
 
         public MainForm() {
@@ -265,67 +407,52 @@ namespace StarMaster {
             LoadConfig(out autostart, out focusguard, out wintitle);
 
             Text = "StarMaster v" + Version;
-            // Scale the hand-coded layout from its 96-DPI design size to the current display DPI.
             AutoScaleMode = AutoScaleMode.None;   // hand-coded layout is scaled manually in ScaleToDpi()
             ClientSize = new Size(BaseClientW, BaseClientH);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            BackColor = Theme.Bg;
-            ForeColor = Theme.Text;
-            Font = Theme.Ui;
+            BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Ui;
             try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             BuildHeader();
             BuildBanner();
             BuildContent();
-
-            // Dock order: add the Fill panel first, then the top-docked banner, then the header last
-            // so they stack top-to-bottom as header / banner / content.
             Controls.Add(content);
             Controls.Add(banner);
             Controls.Add(header);
             ScaleToDpi();
 
             timer = new Timer(); timer.Interval = 1000; timer.Tick += Timer_Tick;
-
-            btnAdd.Click += BtnAdd_Click;
-            btnRemove.Click += BtnRemove_Click;
-            btnStart.Click += delegate { ToggleStart(); };
-            btnBackup.Click += delegate { using (BackupForm bf = new BackupForm()) { bf.ShowDialog(this); } };
-            lst.DoubleClick += delegate { int i = lst.SelectedIndex; if (i >= 0) { commands[i].Enabled = !commands[i].Enabled; RefreshList(); } };
-            lst.SelectedIndexChanged += delegate {
-                int i = lst.SelectedIndex;
-                if (i >= 0 && i < commands.Count) {
-                    Cmd c = commands[i];
-                    txtLabel.Text = c.Label; chkShift.Checked = c.Shift; chkCtrl.Checked = c.Ctrl; chkAlt.Checked = c.Alt;
-                    txtKey.Text = c.Key; numInt.Value = Math.Max(numInt.Minimum, Math.Min(numInt.Maximum, c.Interval));
-                }
-            };
+            WireKeepAlive();
+            WireStarStrings();
 
             RefreshList();
             chkAuto.Checked = autostart; chkFocus.Checked = focusguard; txtTitle.Text = wintitle;
+            if (ssRootCfg.Length > 0) txtScRoot.Text = ssRootCfg;
+            PopulateSSChannels();
+            lblSSInstalled.Text = ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed via StarMaster)";
+
             FormClosing += delegate { timer.Stop(); SaveConfig(); };
-            Shown += delegate { CheckForUpdates(false); };
+            Shown += delegate { CheckForUpdates(false); SSCheck(false); };
             if (autostart) ToggleStart();
         }
+
+        // ---------- header / banner ----------
 
         void BuildHeader() {
             header = new Panel(); header.Dock = DockStyle.Top; header.Height = HeaderH; header.BackColor = Theme.Surface2;
             header.Paint += delegate(object s, PaintEventArgs e) {
                 using (Pen p = new Pen(Theme.Amber)) e.Graphics.DrawLine(p, 0, header.Height - 1, header.Width, header.Height - 1);
             };
-
             PictureBox pic = new PictureBox(); pic.SetBounds(14, 13, 32, 32); pic.SizeMode = PictureBoxSizeMode.StretchImage; pic.BackColor = Color.Transparent;
             try { if (Icon != null) { using (Icon ico = new Icon(Icon, 32, 32)) pic.Image = ico.ToBitmap(); } } catch { }
             header.Controls.Add(pic);
-
-            Label t = new Label(); t.Text = "StarMaster"; t.Font = Theme.Title; t.ForeColor = Theme.Amber; t.BackColor = Color.Transparent; t.SetBounds(52, 8, 250, 28);
+            Label t = new Label(); t.Text = "StarMaster"; t.Font = Theme.Title; t.ForeColor = Theme.Amber; t.BackColor = Color.Transparent; t.SetBounds(52, 8, 260, 28);
             header.Controls.Add(t);
-            Label sub = new Label(); sub.Text = "Star Citizen toolkit - v" + Version; sub.Font = Theme.Small; sub.ForeColor = Theme.TextDim; sub.BackColor = Color.Transparent; sub.SetBounds(54, 35, 280, 16);
+            Label sub = new Label(); sub.Text = "Star Citizen toolkit - v" + Version; sub.Font = Theme.Small; sub.ForeColor = Theme.TextDim; sub.BackColor = Color.Transparent; sub.SetBounds(54, 35, 300, 16);
             header.Controls.Add(sub);
-
-            btnUpdate = new Button(); btnUpdate.Text = "Check for updates"; btnUpdate.Font = Theme.Ui; btnUpdate.SetBounds(350, 16, 138, 26);
+            btnUpdate = new Button(); btnUpdate.Text = "Check for updates"; btnUpdate.Font = Theme.Ui; btnUpdate.SetBounds(950, 16, 138, 26);
             Theme.StyleButton(btnUpdate, false);
             btnUpdate.Click += delegate { Log("checking for updates..."); CheckForUpdates(true); };
             header.Controls.Add(btnUpdate);
@@ -336,60 +463,112 @@ namespace StarMaster {
             banner.Paint += delegate(object s, PaintEventArgs e) {
                 using (SolidBrush b = new SolidBrush(Theme.Amber)) e.Graphics.FillRectangle(b, 0, 0, 3, banner.Height);
             };
-            lblBanner = new Label(); lblBanner.SetBounds(16, 11, 290, 18); lblBanner.Font = Theme.UiBold; lblBanner.ForeColor = Theme.Amber; lblBanner.BackColor = Color.Transparent;
+            lblBanner = new Label(); lblBanner.SetBounds(16, 11, 840, 18); lblBanner.Font = Theme.UiBold; lblBanner.ForeColor = Theme.Amber; lblBanner.BackColor = Color.Transparent;
             banner.Controls.Add(lblBanner);
-            btnGet = new Button(); btnGet.Text = "Download & Install"; btnGet.Font = Theme.Ui; btnGet.SetBounds(312, 7, 150, 26);
+            btnGet = new Button(); btnGet.Text = "Download & Install"; btnGet.Font = Theme.Ui; btnGet.SetBounds(904, 7, 150, 26);
             Theme.StyleButton(btnGet, true);
             btnGet.Click += delegate { DownloadUpdate(); };
             banner.Controls.Add(btnGet);
-            btnDismiss = new Button(); btnDismiss.Text = "X"; btnDismiss.Font = Theme.Ui; btnDismiss.SetBounds(466, 7, 24, 26);
+            btnDismiss = new Button(); btnDismiss.Text = "X"; btnDismiss.Font = Theme.Ui; btnDismiss.SetBounds(1064, 7, 24, 26);
             Theme.StyleButton(btnDismiss, false);
             btnDismiss.Click += delegate { HideBanner(); };
             banner.Controls.Add(btnDismiss);
         }
 
+        // ---------- content: 3 stacked sections ----------
+
+        int AddSection(string title, int x, int y, int w) {
+            Label h = new Label(); h.Text = title; h.Font = Theme.UiBold; h.ForeColor = Theme.Amber; h.BackColor = Color.Transparent; h.SetBounds(x, y, w, 20);
+            content.Controls.Add(h);
+            Panel line = new Panel(); line.SetBounds(x, y + 21, w, 1); line.BackColor = Theme.Line;
+            content.Controls.Add(line);
+            return y + 30;
+        }
+
         void BuildContent() {
-            content = new Panel(); content.Dock = DockStyle.Fill; content.BackColor = Theme.Bg;
+            content = new Panel(); content.Dock = DockStyle.Fill; content.BackColor = Theme.Bg;   // fixed size, no scrolling
 
-            NewLabel("Label:", 10, 12, 42);
-            txtLabel = new TextBox(); txtLabel.SetBounds(54, 9, 120, 22); StyleInput(txtLabel); content.Controls.Add(txtLabel);
-            chkShift = new CheckBox(); chkShift.Text = "Shift"; chkShift.SetBounds(182, 10, 55, 20); Theme.StyleCheck(chkShift); content.Controls.Add(chkShift);
-            chkCtrl = new CheckBox(); chkCtrl.Text = "Ctrl"; chkCtrl.SetBounds(238, 10, 48, 20); Theme.StyleCheck(chkCtrl); content.Controls.Add(chkCtrl);
-            chkAlt = new CheckBox(); chkAlt.Text = "Alt"; chkAlt.SetBounds(288, 10, 44, 20); Theme.StyleCheck(chkAlt); content.Controls.Add(chkAlt);
-            NewLabel("Key:", 336, 12, 30);
-            txtKey = new TextBox(); txtKey.SetBounds(368, 9, 40, 22); StyleInput(txtKey); content.Controls.Add(txtKey);
+            int leftX = 12, leftW = 500;
+            int rightX = 528, rightW = 548;
+            int topY = 8;
 
-            NewLabel("Every (sec):", 10, 44, 72);
-            numInt = new NumericUpDown(); numInt.SetBounds(86, 42, 60, 22); numInt.Minimum = 5; numInt.Maximum = 3600; numInt.Value = 120;
-            numInt.BackColor = Theme.Surface; numInt.ForeColor = Theme.Text; numInt.BorderStyle = BorderStyle.FixedSingle; content.Controls.Add(numInt);
-            btnAdd = new Button(); btnAdd.Text = "Add / Update"; btnAdd.SetBounds(160, 40, 110, 26); Theme.StyleButton(btnAdd, false); content.Controls.Add(btnAdd);
-            btnRemove = new Button(); btnRemove.Text = "Remove"; btnRemove.SetBounds(278, 40, 90, 26); Theme.StyleButton(btnRemove, false); content.Controls.Add(btnRemove);
+            // Left column: Keep-Alive
+            int ky = AddSection("KEEP-ALIVE", leftX, topY, leftW);
+            paKeep = new Panel(); paKeep.SetBounds(leftX, ky, leftW, 482); paKeep.BackColor = Theme.Bg;
+            BuildKeepAlive(paKeep);
+            content.Controls.Add(paKeep);
 
-            lst = new ListBox(); lst.SetBounds(10, 78, 472, 150);
+            // Right column: Backup / Restore
+            int by = AddSection("BACKUP / RESTORE", rightX, topY, rightW);
+            backup = new BackupControl(); backup.Location = new Point(rightX, by);
+            content.Controls.Add(backup);
+
+            // Full-width row underneath: StarStrings
+            int rowBottom = Math.Max(ky + 482, by + backup.Height);
+            int sy = AddSection("STARSTRINGS  (MrKraken localization)", leftX, rowBottom + 16, BaseClientW - 24);
+            paStar = new Panel(); paStar.SetBounds(leftX, sy, BaseClientW - 24, 210); paStar.BackColor = Theme.Bg;
+            BuildStarStrings(paStar);
+            content.Controls.Add(paStar);
+        }
+
+        void BuildKeepAlive(Panel p) {
+            NewLabel(p, "Label:", 10, 12, 42);
+            txtLabel = new TextBox(); txtLabel.SetBounds(54, 9, 120, 22); StyleInput(txtLabel); p.Controls.Add(txtLabel);
+            chkShift = new ThemedCheckBox(); chkShift.Text = "Shift"; chkShift.SetBounds(182, 10, 55, 20); Theme.StyleCheck(chkShift); p.Controls.Add(chkShift);
+            chkCtrl = new ThemedCheckBox(); chkCtrl.Text = "Ctrl"; chkCtrl.SetBounds(238, 10, 48, 20); Theme.StyleCheck(chkCtrl); p.Controls.Add(chkCtrl);
+            chkAlt = new ThemedCheckBox(); chkAlt.Text = "Alt"; chkAlt.SetBounds(288, 10, 44, 20); Theme.StyleCheck(chkAlt); p.Controls.Add(chkAlt);
+            NewLabel(p, "Key:", 336, 12, 30);
+            txtKey = new TextBox(); txtKey.SetBounds(368, 9, 40, 22); StyleInput(txtKey); p.Controls.Add(txtKey);
+
+            NewLabel(p, "Every (sec):", 10, 44, 72);
+            numInt = new NumericUpDown(); numInt.SetBounds(86, 42, 60, 22); numInt.Minimum = 5; numInt.Maximum = 3600; numInt.Value = 600;
+            numInt.BackColor = Theme.Surface; numInt.ForeColor = Theme.Text; numInt.BorderStyle = BorderStyle.FixedSingle; p.Controls.Add(numInt);
+            btnAdd = new Button(); btnAdd.Text = "Add / Update"; btnAdd.SetBounds(160, 40, 110, 26); Theme.StyleButton(btnAdd, false); p.Controls.Add(btnAdd);
+            btnRemove = new Button(); btnRemove.Text = "Remove"; btnRemove.SetBounds(278, 40, 90, 26); Theme.StyleButton(btnRemove, false); p.Controls.Add(btnRemove);
+
+            lst = new ListBox(); lst.SetBounds(10, 78, 472, 132);
             lst.BackColor = Theme.Surface; lst.ForeColor = Theme.Text; lst.BorderStyle = BorderStyle.FixedSingle;
             lst.DrawMode = DrawMode.OwnerDrawFixed; lst.ItemHeight = 24; lst.IntegralHeight = false;
             lst.DrawItem += Lst_DrawItem;
-            content.Controls.Add(lst);
-            Label tip = NewLabel("Tip: double-click a row to toggle ON/off; click a row + Add/Update to overwrite it.", 10, 232, 480);
+            p.Controls.Add(lst);
+            Label tip = NewLabel(p, "Tip: double-click a row to toggle ON/off; click a row + Add/Update to overwrite it.", 10, 214, 480);
             tip.ForeColor = Theme.TextDim; tip.Font = Theme.Small;
 
-            chkFocus = new CheckBox(); chkFocus.Text = "Only send while active window contains:"; chkFocus.SetBounds(10, 258, 248, 20); Theme.StyleCheck(chkFocus); content.Controls.Add(chkFocus);
-            txtTitle = new TextBox(); txtTitle.SetBounds(260, 256, 150, 22); StyleInput(txtTitle); content.Controls.Add(txtTitle);
-            chkAuto = new CheckBox(); chkAuto.Text = "Auto-start when launched (use this for run-on-boot)"; chkAuto.SetBounds(10, 284, 400, 20); Theme.StyleCheck(chkAuto); content.Controls.Add(chkAuto);
+            chkFocus = new ThemedCheckBox(); chkFocus.Text = "Only send while active window contains:"; chkFocus.SetBounds(10, 240, 248, 20); Theme.StyleCheck(chkFocus); p.Controls.Add(chkFocus);
+            txtTitle = new TextBox(); txtTitle.SetBounds(260, 238, 150, 22); StyleInput(txtTitle); p.Controls.Add(txtTitle);
+            chkAuto = new ThemedCheckBox(); chkAuto.Text = "Auto-start when launched (use this for run-on-boot)"; chkAuto.SetBounds(10, 266, 400, 20); Theme.StyleCheck(chkAuto); p.Controls.Add(chkAuto);
 
-            btnStart = new Button(); btnStart.Text = "Start"; btnStart.SetBounds(10, 312, 110, 34); Theme.StyleButton(btnStart, true); btnStart.Font = Theme.UiBold; content.Controls.Add(btnStart);
-            lblStatus = new Label(); lblStatus.Text = "Stopped"; lblStatus.Font = Theme.UiBold; lblStatus.ForeColor = Theme.Bad; lblStatus.BackColor = Color.Transparent; lblStatus.SetBounds(128, 320, 150, 20); content.Controls.Add(lblStatus);
-            btnBackup = new Button(); btnBackup.Text = "Backup / Restore..."; btnBackup.SetBounds(286, 312, 164, 34); Theme.StyleButton(btnBackup, false); content.Controls.Add(btnBackup);
+            btnStart = new Button(); btnStart.Text = "Start"; btnStart.SetBounds(10, 294, 130, 34); Theme.StyleButton(btnStart, true); btnStart.Font = Theme.UiBold; p.Controls.Add(btnStart);
+            lblStatus = new Label(); lblStatus.Text = "Stopped"; lblStatus.Font = Theme.UiBold; lblStatus.ForeColor = Theme.Bad; lblStatus.BackColor = Color.Transparent; lblStatus.SetBounds(150, 302, 150, 20); p.Controls.Add(lblStatus);
 
-            NewLabel("Log:", 10, 356, 40);
-            txtLog = new TextBox(); txtLog.SetBounds(10, 376, 472, 128); txtLog.Multiline = true; txtLog.ReadOnly = true; txtLog.ScrollBars = ScrollBars.Vertical;
-            txtLog.BackColor = Theme.Surface; txtLog.ForeColor = Theme.TextDim; txtLog.BorderStyle = BorderStyle.FixedSingle; txtLog.Font = Theme.Mono; content.Controls.Add(txtLog);
+            NewLabel(p, "Log:", 10, 338, 40);
+            txtLog = new TextBox(); txtLog.SetBounds(10, 358, 472, 120); txtLog.Multiline = true; txtLog.ReadOnly = true; txtLog.ScrollBars = ScrollBars.Vertical;
+            txtLog.BackColor = Theme.Surface; txtLog.ForeColor = Theme.TextDim; txtLog.BorderStyle = BorderStyle.FixedSingle; txtLog.Font = Theme.Mono; p.Controls.Add(txtLog);
+        }
+
+        void BuildStarStrings(Panel p) {
+            NewLabel(p, "Star Citizen folder:", 10, 10, 124);
+            txtScRoot = new TextBox(); txtScRoot.SetBounds(138, 8, 410, 22); StyleInput(txtScRoot); txtScRoot.Text = DefaultScRoot; p.Controls.Add(txtScRoot);
+
+            NewLabel(p, "Channel:", 10, 42, 56);
+            cmbSSChannel = new ComboBox(); cmbSSChannel.DropDownStyle = ComboBoxStyle.DropDownList; cmbSSChannel.SetBounds(70, 39, 110, 22);
+            cmbSSChannel.BackColor = Theme.Surface; cmbSSChannel.ForeColor = Theme.Text; cmbSSChannel.FlatStyle = FlatStyle.Flat; p.Controls.Add(cmbSSChannel);
+            btnSSCheck = new Button(); btnSSCheck.Text = "Check for update"; btnSSCheck.SetBounds(196, 38, 150, 26); Theme.StyleButton(btnSSCheck, false); p.Controls.Add(btnSSCheck);
+
+            NewLabel(p, "Installed build:", 10, 74, 100);
+            lblSSInstalled = new Label(); lblSSInstalled.SetBounds(116, 74, 432, 18); lblSSInstalled.ForeColor = Theme.Text; lblSSInstalled.BackColor = Color.Transparent; lblSSInstalled.Font = Theme.Small; p.Controls.Add(lblSSInstalled);
+            NewLabel(p, "Latest build:", 10, 96, 100);
+            lblSSAvailable = new Label(); lblSSAvailable.SetBounds(116, 96, 432, 18); lblSSAvailable.ForeColor = Theme.Amber; lblSSAvailable.BackColor = Color.Transparent; lblSSAvailable.Font = Theme.Small; lblSSAvailable.Text = "(not checked yet)"; p.Controls.Add(lblSSAvailable);
+
+            btnSSUpdate = new Button(); btnSSUpdate.Text = "Download & install update"; btnSSUpdate.SetBounds(10, 124, 220, 30); Theme.StyleButton(btnSSUpdate, true); btnSSUpdate.Enabled = false; p.Controls.Add(btnSSUpdate);
+            lblSSStatus = new Label(); lblSSStatus.SetBounds(240, 130, 308, 18); lblSSStatus.ForeColor = Theme.TextDim; lblSSStatus.BackColor = Color.Transparent; p.Controls.Add(lblSSStatus);
+
+            txtSSLog = new TextBox(); txtSSLog.SetBounds(10, 164, 1056, 40); txtSSLog.Multiline = true; txtSSLog.ReadOnly = true; txtSSLog.ScrollBars = ScrollBars.Vertical;
+            txtSSLog.BackColor = Theme.Surface; txtSSLog.ForeColor = Theme.TextDim; txtSSLog.BorderStyle = BorderStyle.FixedSingle; txtSSLog.Font = Theme.Mono; p.Controls.Add(txtSSLog);
         }
 
         void StyleInput(TextBox t) { t.BackColor = Theme.Surface; t.ForeColor = Theme.Text; t.BorderStyle = BorderStyle.FixedSingle; }
 
-        // Scale the hand-coded 96-DPI layout up to the current display DPI (the manifest makes us DPI-aware,
-        // so DpiFactor reads the real DPI instead of a lied-to 96).
         void ScaleToDpi() {
             float f = Theme.DpiFactor(this);
             if (f <= 1.0f) return;
@@ -409,7 +588,22 @@ namespace StarMaster {
             TextRenderer.DrawText(e.Graphics, text, Theme.Ui, r, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
         }
 
-        // ----- Update checking (notify + 1-click download) -----
+        void WireKeepAlive() {
+            btnAdd.Click += BtnAdd_Click;
+            btnRemove.Click += BtnRemove_Click;
+            btnStart.Click += delegate { ToggleStart(); };
+            lst.DoubleClick += delegate { int i = lst.SelectedIndex; if (i >= 0) { commands[i].Enabled = !commands[i].Enabled; RefreshList(); } };
+            lst.SelectedIndexChanged += delegate {
+                int i = lst.SelectedIndex;
+                if (i >= 0 && i < commands.Count) {
+                    Cmd c = commands[i];
+                    txtLabel.Text = c.Label; chkShift.Checked = c.Shift; chkCtrl.Checked = c.Ctrl; chkAlt.Checked = c.Alt;
+                    txtKey.Text = c.Key; numInt.Value = Math.Max(numInt.Minimum, Math.Min(numInt.Maximum, c.Interval));
+                }
+            };
+        }
+
+        // ---------- app self-update ----------
 
         void CheckForUpdates(bool announce) {
             if (btnUpdate != null) btnUpdate.Enabled = false;
@@ -433,7 +627,6 @@ namespace StarMaster {
             pendingUpdate = info;
             lblBanner.Text = "Update available - StarMaster " + info.Tag;
             btnGet.Enabled = true;
-            // 1-click install only applies to an installed copy that has a real setup asset; otherwise offer the page.
             bool canInstall = info.SetupUrl != null && RunningFromInstallDir();
             btnGet.Text = canInstall ? "Download & Install" : "Open download page";
             if (!banner.Visible) { banner.Visible = true; ClientSize = new Size(LogicalToDeviceUnits(BaseClientW), LogicalToDeviceUnits(BaseClientH + BannerH)); }
@@ -446,8 +639,6 @@ namespace StarMaster {
 
         void DownloadUpdate() {
             if (pendingUpdate == null) return;
-            // Without a real installer asset, or when running the portable exe (not the installed copy under
-            // %localappdata%\StarMaster), an in-place install would silently diverge - just open the release page.
             if (string.IsNullOrEmpty(pendingUpdate.SetupUrl) || !RunningFromInstallDir()) { OpenReleasePage(); return; }
             btnGet.Enabled = false;
             lblBanner.Text = "Downloading " + pendingUpdate.Tag + "...";
@@ -457,9 +648,7 @@ namespace StarMaster {
                 try {
                     if (!IsHandleCreated) return;
                     BeginInvoke((MethodInvoker)delegate {
-                        if (path != null) {
-                            try { System.Diagnostics.Process.Start(path); Close(); return; } catch { }
-                        }
+                        if (path != null) { try { System.Diagnostics.Process.Start(path); Close(); return; } catch { } }
                         btnGet.Enabled = true;
                         lblBanner.Text = "Download failed - opening download page";
                         OpenReleasePage();
@@ -473,8 +662,6 @@ namespace StarMaster {
             try { System.Diagnostics.Process.Start(u); } catch { }
         }
 
-        // True only when this exe runs from the installer's target dir (%localappdata%\StarMaster),
-        // i.e. an installed copy where running the downloaded setup actually upgrades the right files.
         static bool RunningFromInstallDir() {
             try {
                 string installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster");
@@ -483,7 +670,100 @@ namespace StarMaster {
             } catch { return false; }
         }
 
-        // ----- Keystroke commands (unchanged behaviour) -----
+        // ---------- StarStrings tool ----------
+
+        void WireStarStrings() {
+            btnSSCheck.Click += delegate { SSCheck(true); };
+            btnSSUpdate.Click += delegate { SSUpdate(); };
+            txtScRoot.Leave += delegate { PopulateSSChannels(); };
+        }
+
+        void PopulateSSChannels() {
+            string sel = cmbSSChannel.SelectedItem as string;
+            cmbSSChannel.Items.Clear();
+            try {
+                string root = txtScRoot.Text.Trim();
+                if (Directory.Exists(root)) {
+                    foreach (string d in Directory.GetDirectories(root)) {
+                        string n = Path.GetFileName(d);
+                        if (Directory.Exists(Path.Combine(d, "data")) || Directory.Exists(Path.Combine(d, "user")) ||
+                            n.Equals("LIVE", StringComparison.OrdinalIgnoreCase) || n.Equals("HOTFIX", StringComparison.OrdinalIgnoreCase))
+                            cmbSSChannel.Items.Add(n);
+                    }
+                }
+            } catch { }
+            if (cmbSSChannel.Items.Count == 0) { cmbSSChannel.Items.Add("LIVE"); cmbSSChannel.Items.Add("HOTFIX"); }
+            int idx = -1;
+            if (sel != null) idx = cmbSSChannel.Items.IndexOf(sel);
+            if (idx < 0 && ssChannelCfg.Length > 0) idx = cmbSSChannel.Items.IndexOf(ssChannelCfg);
+            if (idx < 0) idx = cmbSSChannel.Items.IndexOf("LIVE");
+            cmbSSChannel.SelectedIndex = idx >= 0 ? idx : 0;
+        }
+
+        void SSLog(string m) { txtSSLog.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + m + "\r\n"); }
+
+        void SSCheck(bool announce) {
+            btnSSCheck.Enabled = false;
+            if (announce) lblSSAvailable.Text = "checking...";
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                StarStrings.Info info = StarStrings.CheckLatest();
+                try {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke((MethodInvoker)delegate {
+                        btnSSCheck.Enabled = true;
+                        ssLatest = info;
+                        if (info == null) {
+                            lblSSAvailable.Text = "(offline or unavailable)";
+                            btnSSUpdate.Enabled = false;
+                            if (announce) SSLog("StarStrings check failed - no connection");
+                            return;
+                        }
+                        lblSSAvailable.Text = info.Build;
+                        btnSSUpdate.Enabled = true;
+                        bool current = ssInstalledBuild.Length > 0 && ssInstalledBuild == info.Build;
+                        if (ssInstalledBuild.Length == 0) { btnSSUpdate.Text = "Download & install"; lblSSStatus.Text = "not installed yet"; lblSSStatus.ForeColor = Theme.Amber; }
+                        else if (current) { btnSSUpdate.Text = "Re-install (up to date)"; lblSSStatus.Text = "up to date"; lblSSStatus.ForeColor = Theme.Good; }
+                        else { btnSSUpdate.Text = "Update now"; lblSSStatus.Text = "update available"; lblSSStatus.ForeColor = Theme.Amber; }
+                    });
+                } catch { }
+            });
+        }
+
+        void SSUpdate() {
+            if (ssLatest == null || string.IsNullOrEmpty(ssLatest.ZipUrl)) { SSLog("nothing to install - click Check first"); return; }
+            string root = txtScRoot.Text.Trim();
+            string ch = cmbSSChannel.SelectedItem as string;
+            if (string.IsNullOrEmpty(ch)) { SSLog("pick a channel"); return; }
+            string channelRoot = Path.Combine(root, ch);
+            DialogResult r = MessageBox.Show(
+                "Install MrKraken's StarStrings into:\n\n" + channelRoot + "\n\nThis copies the data\\ folder and ensures user.cfg has 'g_language = english'. Close Star Citizen first. Proceed?",
+                "Install StarStrings", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (r != DialogResult.Yes) { SSLog("cancelled"); return; }
+            btnSSUpdate.Enabled = false; lblSSStatus.Text = "downloading..."; lblSSStatus.ForeColor = Theme.TextDim;
+            SSLog("downloading + installing into " + channelRoot + " ...");
+            string zip = ssLatest.ZipUrl; string build = ssLatest.Build;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
+                try {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke((MethodInvoker)delegate {
+                        btnSSUpdate.Enabled = true;
+                        SSLog(msg);
+                        if (ok) {
+                            ssInstalledBuild = build;
+                            lblSSInstalled.Text = build;
+                            lblSSStatus.Text = "installed - restart Star Citizen"; lblSSStatus.ForeColor = Theme.Good;
+                            btnSSUpdate.Text = "Re-install (up to date)";
+                            SaveConfig();
+                        } else {
+                            lblSSStatus.Text = "failed"; lblSSStatus.ForeColor = Theme.Bad;
+                        }
+                    });
+                } catch { }
+            });
+        }
+
+        // ---------- keep-alive (unchanged behaviour) ----------
 
         void BtnAdd_Click(object s, EventArgs e) {
             string key = txtKey.Text.Trim();
@@ -525,8 +805,6 @@ namespace StarMaster {
                 if (!c.Enabled) continue;
                 if ((DateTime.Now - c.LastFire).TotalSeconds < c.Interval) continue;
                 if (chkFocus.Checked) {
-                    // Fail CLOSED: if the guard is on but no title is set, send nothing
-                    // (rather than firing keystrokes into whatever window is focused).
                     string t = txtTitle.Text.Trim().ToLower();
                     if (t.Length == 0 || !Native.ActiveTitle().ToLower().Contains(t)) continue;
                 }
@@ -551,6 +829,8 @@ namespace StarMaster {
             }
         }
 
+        // ---------- config ----------
+
         void LoadConfig(out bool autostart, out bool focusguard, out string wintitle) {
             autostart = false; focusguard = true; wintitle = "Star Citizen";
             commands = new List<Cmd>();
@@ -574,12 +854,15 @@ namespace StarMaster {
                             if (k == "autostart") autostart = v == "1";
                             else if (k == "focusguard") focusguard = v == "1";
                             else if (k == "wintitle") wintitle = v;
+                            else if (k == "starstrings_build") ssInstalledBuild = v;
+                            else if (k == "starstrings_root") ssRootCfg = v;
+                            else if (k == "starstrings_channel") ssChannelCfg = v;
                         }
                     }
                 }
             } catch { }
             if (commands.Count == 0) {
-                Cmd c = new Cmd(); c.Label = "Wipe Visor"; c.Alt = true; c.Key = "X"; c.Interval = 120; c.Enabled = true;
+                Cmd c = new Cmd(); c.Label = "Wipe Visor"; c.Alt = true; c.Key = "X"; c.Interval = 600; c.Enabled = true;
                 commands.Add(c);
             }
         }
@@ -591,6 +874,9 @@ namespace StarMaster {
                 sb.AppendLine("autostart=" + (chkAuto.Checked ? "1" : "0"));
                 sb.AppendLine("focusguard=" + (chkFocus.Checked ? "1" : "0"));
                 sb.AppendLine("wintitle=" + txtTitle.Text);
+                sb.AppendLine("starstrings_build=" + ssInstalledBuild);
+                sb.AppendLine("starstrings_root=" + (txtScRoot != null ? txtScRoot.Text : ""));
+                sb.AppendLine("starstrings_channel=" + (cmbSSChannel != null && cmbSSChannel.SelectedItem != null ? cmbSSChannel.SelectedItem.ToString() : ""));
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands)
                     sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
@@ -601,14 +887,13 @@ namespace StarMaster {
         [STAThread]
         static void Main() {
             // DPI awareness is declared in app.manifest (embedded via /win32manifest) so it applies before
-            // any window is created; AutoScaleMode.Dpi then scales the layout. See CLAUDE.md build command.
+            // any window is created; ScaleToDpi() then scales the layout. See CLAUDE.md build command.
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             CleanupOldInstallers();
             Application.Run(new MainForm());
         }
 
-        // Best-effort: remove installers left in %TEMP% by a previous in-app update (a running one stays locked, so it's skipped).
         static void CleanupOldInstallers() {
             try {
                 foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-Setup-*.exe")) {

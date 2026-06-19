@@ -3,8 +3,9 @@
 A personal **Star Citizen helper app** for Windows — dependency-free (needs only the .NET Framework that already ships with Windows). Dark "HUD" interface with a built-in update checker.
 
 **Tools:**
-- **Keep-alive (anti-idle)** — sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
+- **Keep-Alive** — anti-idle: sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
 - **Backup / Restore** — copies the config a patch or channel-switch wipes (`user\` settings + key bindings, the StarStrings `data\Localization`, and `user.cfg`) between channels (LIVE / HOTFIX) or from a saved snapshot. Overwrites only (never deletes), touches only those 3 paths, asks first, and warns if Star Citizen has files locked.
+- **StarStrings** *(new in v3 — in progress)* — keeps [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) community localization mod current: shows your installed build vs. the latest available, and updates it in one click (downloads the release and copies it into your Star Citizen folder).
 
 ## Download & install
 Grab the latest from the **[Releases page](https://github.com/elliot-borst/StarMaster/releases/latest)**:

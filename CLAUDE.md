@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 9.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 10.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -38,7 +38,7 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).
-- **Version** = `MainWindow.Version` const (`"9"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`.
+- **Version** = `MainWindow.Version` const (`"10"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`.
 - **WPF UI thread:** worker (ThreadPool) callbacks touch UI only via `Dispatcher.BeginInvoke`. Keep-alive sends are queued off-thread.
 - Don't commit `config.txt`, `config.json`, `Backups/`, `StarMaster.exe`, or `StarMaster-Setup.exe`.
 - **SC environment:** root `C:\Program Files\Roberts Space Industries\StarCitizen`; channels `LIVE`/`HOTFIX`.

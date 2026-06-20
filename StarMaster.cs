@@ -165,7 +165,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "19";
+        public const string Version = "20";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -651,7 +651,7 @@ namespace StarMaster {
             m.Items.Add("Open StarMaster", null, delegate { Restore(); });
             m.Items.Add("Exit StarMaster", null, delegate { exiting = true; Close(); });
             trayIcon.ContextMenuStrip = m;
-            trayIcon.DoubleClick += delegate { Restore(); };
+            trayIcon.MouseClick += delegate (object s, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) Restore(); };   // single left-click opens; right-click still shows the menu
         }
         void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); WindowState = WindowState.Normal; Activate(); })); }
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {

@@ -196,7 +196,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "17";
+        public const string Version = "18";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -230,7 +230,7 @@ namespace StarMaster {
 
             Title = "StarMaster v" + Version;
             // never scrolls: the window resizes to fit and clamps at a minimum that keeps everything visible
-            Width = 1120; Height = 910; MinWidth = 1080; MinHeight = 870;
+            Width = 1120; Height = 1040; MinWidth = 1080; MinHeight = 1000;   // min keeps each star row tall enough that no card clips
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
@@ -293,11 +293,12 @@ namespace StarMaster {
         UIElement Cards() {
             Grid g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition());
-            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            FrameworkElement ka = KeepAliveCard(); Grid.SetRow(ka, 0); Grid.SetColumn(ka, 0); ka.Margin = new Thickness(0, 0, 9, 18); g.Children.Add(ka);
-            FrameworkElement bk = BackupCard(); Grid.SetRow(bk, 0); Grid.SetColumn(bk, 1); bk.Margin = new Thickness(9, 0, 0, 18); g.Children.Add(bk);
-            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); ss.Margin = new Thickness(0, 0, 9, 0); g.Children.Add(ss);
-            FrameworkElement sc = ShaderCacheCard(); Grid.SetRow(sc, 1); Grid.SetColumn(sc, 1); sc.Margin = new Thickness(9, 0, 0, 0); g.Children.Add(sc);
+            // equal star rows + stretched cards => the 2x2 tiles fill the whole window (no empty space when enlarged)
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            FrameworkElement ka = KeepAliveCard(); Grid.SetRow(ka, 0); Grid.SetColumn(ka, 0); ka.Margin = new Thickness(0, 0, 9, 18); ka.VerticalAlignment = VerticalAlignment.Stretch; g.Children.Add(ka);
+            FrameworkElement bk = BackupCard(); Grid.SetRow(bk, 0); Grid.SetColumn(bk, 1); bk.Margin = new Thickness(9, 0, 0, 18); bk.VerticalAlignment = VerticalAlignment.Stretch; g.Children.Add(bk);
+            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); ss.Margin = new Thickness(0, 0, 9, 0); ss.VerticalAlignment = VerticalAlignment.Stretch; g.Children.Add(ss);
+            FrameworkElement sc = ShaderCacheCard(); Grid.SetRow(sc, 1); Grid.SetColumn(sc, 1); sc.Margin = new Thickness(9, 0, 0, 0); sc.VerticalAlignment = VerticalAlignment.Stretch; g.Children.Add(sc);
             return g;
         }
         // ---------- shader cache card (half-width tile) ----------

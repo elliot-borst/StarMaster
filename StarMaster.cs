@@ -183,14 +183,14 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "6";
+        public const string Version = "7";
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
         // keep-alive
         List<Cmd> commands = new List<Cmd>();
         StackPanel cmdPanel; TextBlock statusText; Border statusDot; Border startBtn; TextBlock startLbl;
-        bool running = false, focusGuard = true, autostart = false; TextBox winTitleBox;
+        bool running = false, focusGuard = true, autostart = false, startMinimized = false; TextBox winTitleBox;
         DispatcherTimer timer;
         // backup
         TextBox bkRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;
@@ -222,6 +222,7 @@ namespace StarMaster {
             BuildTray();
             Closing += OnClosing;
             Loaded += delegate { CheckUpdate(false); SSCheck(false); };
+            if (startMinimized) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }   // launch straight to the tray
             if (autostart) ToggleRun();
         }
 
@@ -287,6 +288,9 @@ namespace StarMaster {
             StackPanel au = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             au.Children.Add(Toggle(autostart, delegate (bool v) { autostart = v; })); au.Children.Add(new TextBlock { Text = "  Auto-start on launch", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(au);
+            StackPanel mn = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            mn.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; })); mn.Children.Add(new TextBlock { Text = "  Start minimised to tray", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(mn);
             startBtn = Btn("▶  Start", Ui.AccentGrad(), Ui.Ink, true, delegate { ToggleRun(); }); startBtn.Margin = new Thickness(0, 16, 0, 0); startLbl = (TextBlock)startBtn.Child;
             body.Children.Add(startBtn);
             return card;
@@ -519,7 +523,7 @@ namespace StarMaster {
             trayIcon.ContextMenuStrip = m;
             trayIcon.DoubleClick += delegate { Restore(); };
         }
-        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { Show(); WindowState = WindowState.Normal; Activate(); })); }
+        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); WindowState = WindowState.Normal; Activate(); })); }
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {
             SaveConfig();
             if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { e.Cancel = true; Hide(); return; }
@@ -528,12 +532,12 @@ namespace StarMaster {
 
         // ---------- config ----------
         void LoadConfig() {
-            commands = new List<Cmd>(); autostart = false; focusGuard = true; winTitleField = "Star Citizen";
+            commands = new List<Cmd>(); autostart = false; focusGuard = true; startMinimized = false; winTitleField = "Star Citizen";
             try {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; }
                 }
             } catch { }
             if (commands.Count == 0) { commands.Add(new Cmd { Label = "Wipe Visor", Alt = true, Key = "X", Interval = 600, Enabled = true }); commands.Add(new Cmd { Label = "Auto Accept", Key = "[", Interval = 1, Enabled = false }); }
@@ -544,6 +548,7 @@ namespace StarMaster {
                 sb.AppendLine("# StarMaster config");
                 sb.AppendLine("autostart=" + (autostart ? "1" : "0"));
                 sb.AppendLine("focusguard=" + (focusGuard ? "1" : "0"));
+                sb.AppendLine("startminimized=" + (startMinimized ? "1" : "0"));
                 sb.AppendLine("wintitle=" + (winTitleBox != null ? winTitleBox.Text : winTitleField));
                 sb.AppendLine("starstrings_build=" + ssInstalledBuild);
                 sb.AppendLine("starstrings_root=" + (ssRoot != null ? ssRoot.Text : ssRootCfg));

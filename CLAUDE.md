@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 20.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 21.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -40,7 +40,7 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).
-- **Version** = `MainWindow.Version` const (`"20"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
+- **Version** = `MainWindow.Version` const (`"21"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
 - **Layout** = 2×2 card grid (`Cards()`): Keep-Alive | Backup on top, StarStrings | Shader Cache below. StarStrings is a narrow tile (stacked vertically). **Equal star rows + `VerticalAlignment.Stretch` cards → tiles fill the window (no empty space).** No scroll; window 1120x1040, min 1080x1000 — the min keeps each star row tall enough that the tallest card (Keep-Alive) never clips; if a card grows, raise MinHeight.
 - **Single instance:** `App.Main` holds a per-user named `Mutex` (`App.MutexName`); a second launch signals `App.ActivateEvent` so the running instance surfaces (restores from tray) and the duplicate exits. Shared across the installed + portable builds.
 - **No scrolling:** the main window has no ScrollViewer — content sizes to fit. Window defaults 1120x880, `MinWidth`/`MinHeight` 1080/840 clamp it so nothing clips. If you add UI that makes a card taller, bump the default/min height too.
@@ -66,6 +66,7 @@
 - 2026-06-20: **v18** — 2×2 tiles now stretch to fill the window (equal star rows + stretched cards) so there's no empty space when enlarged/maximized; window 1120x1040, min 1080x1000.
 - 2026-06-20: **v19** — eliminated ALL OS popups: new in-app modal overlay (`BuildOverlay`/`ShowConfirm`/`ShowAlert`/`ShowKeyForm`) replaces every `MessageBox` and the `AddKeyDialog` window. Project rule: no OS popups, ever.
 - 2026-06-20: **v20** — single left-click on the tray icon opens/restores the window (was double-click); right-click still shows the menu.
+- 2026-06-20: **v21** — StarStrings credit line: "Source: <link>" moved to its own line (LineBreak) so the URL no longer wraps.
 
 ## Backlog / ideas
 Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI; theme the self-update prompt as an in-app banner (currently a MessageBox). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite.*

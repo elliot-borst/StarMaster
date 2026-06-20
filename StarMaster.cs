@@ -165,7 +165,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "20";
+        public const string Version = "21";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -524,7 +524,9 @@ namespace StarMaster {
             body.Children.Add(ctl);
             // full credit to MrKraken, the creator of StarStrings
             TextBlock credit = new TextBlock { Margin = new Thickness(0, 14, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 16 };
-            credit.Inlines.Add(new Run("Created and maintained by MrKraken — all credit to him. Source: "));
+            credit.Inlines.Add(new Run("Created and maintained by MrKraken — all credit to him."));
+            credit.Inlines.Add(new LineBreak());
+            credit.Inlines.Add(new Run("Source: "));
             Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
             try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
             link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };

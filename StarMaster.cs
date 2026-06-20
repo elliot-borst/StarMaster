@@ -196,7 +196,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "14";
+        public const string Version = "15";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -394,7 +394,8 @@ namespace StarMaster {
             body.Children.Add(checks);
             StackPanel r1 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             bkChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, "LIVE", 120); r1.Children.Add(bkChannel); r1.Children.Add(Sp(9));
-            Border bk = Btn("Back up now", Ui.AccentGrad(), Ui.Ink, true, delegate { DoBackup(); }); bk.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(bk);
+            Border bk = Btn("Back up now", Ui.AccentGrad(), Ui.Ink, true, delegate { DoBackup(); }); bk.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(bk); r1.Children.Add(Sp(9));
+            Border clr = Btn("Clear shader cache", Ui.Card2, Ui.Text, false, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(clr);
             body.Children.Add(r1);
             StackPanel r2 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
             cpFrom = new Dropdown(new string[] { "LIVE (current)" }, "LIVE (current)", 150); r2.Children.Add(cpFrom);
@@ -441,6 +442,17 @@ namespace StarMaster {
             if (System.Windows.MessageBox.Show("Copy the ticked items\n\nFROM:  " + from + "\nTO:      " + to + " channel\n\nExisting files are overwritten (nothing deleted). Close Star Citizen first. Proceed?", "Confirm copy / restore", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) { bkStatus.Text = "cancelled"; return; }
             bkStatus.Text = "copying " + from + " → " + to + " ...";
             RunBg(delegate { int n = BackupOps.CopyItems(srcBase, dstBase, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("done - copied " + n + " files into " + to + ". Restart Star Citizen.") : "nothing copied"; }, null);
+        }
+        // delete the SC shader cache (%LOCALAPPDATA%\Star Citizen) - it regenerates on next launch; fixes most graphical glitches
+        void ClearShaderCache() {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Star Citizen");
+            if (!Directory.Exists(dir)) { bkStatus.Text = "no shader cache found at " + dir; return; }
+            if (System.Windows.MessageBox.Show("Delete the Star Citizen shader cache?\n\n" + dir + "\n\nSafe to do - the game rebuilds it on next launch (the first load will be a bit slower). Close Star Citizen first.", "Clear shader cache", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            bkStatus.Text = "clearing shader cache ...";
+            RunBg(delegate {
+                try { Directory.Delete(dir, true); return "shader cache cleared - it rebuilds on next launch"; }
+                catch (Exception ex) { return "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; }
+            }, null);
         }
         void BkLog(string m) { Dispatcher.BeginInvoke(new Action(delegate { bkStatus.Text = m; })); }
         void RunBg(Func<string> work, Action then) {

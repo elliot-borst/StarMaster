@@ -183,7 +183,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "8";
+        public const string Version = "9";
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -244,6 +244,11 @@ namespace StarMaster {
             Border upd = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(true); }); upd.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(upd, Dock.Right); d.Children.Add(upd);
             updStatus = new TextBlock { Foreground = Ui.Good, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0), Opacity = 0 };
             DockPanel.SetDock(updStatus, Dock.Right); d.Children.Add(updStatus);   // sits to the LEFT of the button (docked Right after it)
+            // app-wide setting lives in the top bar, not the Keep-Alive card
+            StackPanel mnBar = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 18, 0) };
+            mnBar.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
+            mnBar.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            DockPanel.SetDock(mnBar, Dock.Right); d.Children.Add(mnBar);
             return d;
         }
 
@@ -292,9 +297,6 @@ namespace StarMaster {
             StackPanel au = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             au.Children.Add(Toggle(autostart, delegate (bool v) { autostart = v; })); au.Children.Add(new TextBlock { Text = "  Auto-start on launch", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(au);
-            StackPanel mn = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            mn.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; })); mn.Children.Add(new TextBlock { Text = "  Start minimised to tray", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
-            body.Children.Add(mn);
             startBtn = Btn("▶  Start", Ui.AccentGrad(), Ui.Ink, true, delegate { ToggleRun(); }); startBtn.Margin = new Thickness(0, 16, 0, 0); startLbl = (TextBlock)startBtn.Child;
             body.Children.Add(startBtn);
             return card;

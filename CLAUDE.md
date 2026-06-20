@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 16.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 17.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -39,7 +39,8 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).
-- **Version** = `MainWindow.Version` const (`"16"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
+- **Version** = `MainWindow.Version` const (`"17"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
+- **Layout** = 2×2 card grid (`Cards()`): Keep-Alive | Backup on top, StarStrings | Shader Cache below. StarStrings is a narrow tile (stacked vertically). No scroll; window 1120x910, min 1080x870 — if a card grows, re-tune these.
 - **Single instance:** `App.Main` holds a per-user named `Mutex` (`App.MutexName`); a second launch signals `App.ActivateEvent` so the running instance surfaces (restores from tray) and the duplicate exits. Shared across the installed + portable builds.
 - **No scrolling:** the main window has no ScrollViewer — content sizes to fit. Window defaults 1120x880, `MinWidth`/`MinHeight` 1080/840 clamp it so nothing clips. If you add UI that makes a card taller, bump the default/min height too.
 - **WPF UI thread:** worker (ThreadPool) callbacks touch UI only via `Dispatcher.BeginInvoke`. Keep-alive sends are queued off-thread.
@@ -60,6 +61,7 @@
 - 2026-06-20: **v14** — update check shows a specific failure reason ("Rate-limited - try later" / "No connection" / "Check failed" via `Updater.LastError`); the automatic launch check backs off if one ran in the last 5 min (persisted as `lastcheck` in config), while manual button clicks always check.
 - 2026-06-20: **v15** — "Clear shader cache" button (Backup card) deletes `%LOCALAPPDATA%\Star Citizen` after a confirm; fixes graphical glitches.
 - 2026-06-20: **v16** — Shader Cache promoted to its own full-width card (`ShaderCacheCard`, 3rd grid row); window default/min height grown to 1060/1000 to fit it without scrolling.
+- 2026-06-20: **v17** — bottom two cards reworked into a 2×2 grid of equal tiles (StarStrings restacked vertically for half-width; Shader Cache beside it); window shrunk to 1120x910 / min 1080x870 to remove the empty space.
 
 ## Backlog / ideas
 Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI; theme the self-update prompt as an in-app banner (currently a MessageBox). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite.*

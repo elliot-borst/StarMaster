@@ -196,7 +196,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "16";
+        public const string Version = "17";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -230,7 +230,7 @@ namespace StarMaster {
 
             Title = "StarMaster v" + Version;
             // never scrolls: the window resizes to fit and clamps at a minimum that keeps everything visible
-            Width = 1120; Height = 1060; MinWidth = 1080; MinHeight = 1000;
+            Width = 1120; Height = 910; MinWidth = 1080; MinHeight = 870;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
@@ -293,19 +293,19 @@ namespace StarMaster {
         UIElement Cards() {
             Grid g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition());
-            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             FrameworkElement ka = KeepAliveCard(); Grid.SetRow(ka, 0); Grid.SetColumn(ka, 0); ka.Margin = new Thickness(0, 0, 9, 18); g.Children.Add(ka);
             FrameworkElement bk = BackupCard(); Grid.SetRow(bk, 0); Grid.SetColumn(bk, 1); bk.Margin = new Thickness(9, 0, 0, 18); g.Children.Add(bk);
-            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); Grid.SetColumnSpan(ss, 2); ss.Margin = new Thickness(0, 0, 0, 18); g.Children.Add(ss);
-            FrameworkElement sc = ShaderCacheCard(); Grid.SetRow(sc, 2); Grid.SetColumn(sc, 0); Grid.SetColumnSpan(sc, 2); g.Children.Add(sc);
+            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); ss.Margin = new Thickness(0, 0, 9, 0); g.Children.Add(ss);
+            FrameworkElement sc = ShaderCacheCard(); Grid.SetRow(sc, 1); Grid.SetColumn(sc, 1); sc.Margin = new Thickness(9, 0, 0, 0); g.Children.Add(sc);
             return g;
         }
-        // ---------- shader cache card ----------
+        // ---------- shader cache card (half-width tile) ----------
         FrameworkElement ShaderCacheCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "fixes graphical glitches - rebuilt on next launch");
-            Border clr = Btn("Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(18, 10, 18, 10); clr.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(clr, Dock.Right); head.Children.Add(clr);
-            body.Children.Add(new TextBlock { Text = "Deletes %LOCALAPPDATA%\\Star Citizen - the game rebuilds it on next launch (first load is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
-            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap }; body.Children.Add(shaderStatus);
+            body.Children.Add(new TextBlock { Text = "Deletes the Star Citizen shader cache at %LOCALAPPDATA%\\Star Citizen. Safe to do - the game rebuilds it automatically on next launch (the first load afterwards is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 14) });
+            Border clr = Btn("♻  Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(18, 10, 18, 10); clr.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(clr);
+            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) }; body.Children.Add(shaderStatus);
             return card;
         }
 
@@ -474,27 +474,21 @@ namespace StarMaster {
             });
         }
 
-        // ---------- starstrings card ----------
+        // ---------- starstrings card (half-width tile: stacked vertically) ----------
         FrameworkElement StarStringsCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization");
             StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint; ssBadge.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(ssBadge, Dock.Right); head.Children.Add(ssBadge);
             ssRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); body.Children.Add(LabeledField("SC folder", ssRoot));
-            DockPanel d = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 4, 0, 0) };
-            StackPanel builds = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
-            builds.Children.Add(BuildCol("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text));
-            builds.Children.Add(BuildCol("Latest", out ssLatest, "(check)", Ui.Accent));
-            StackPanel chCol = new StackPanel { Margin = new Thickness(0, 0, 28, 0) }; chCol.Children.Add(Caps("Channel"));
-            ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 110); ssChannel.Margin = new Thickness(0, 4, 0, 0); chCol.Children.Add(ssChannel);
-            builds.Children.Add(chCol);
-            DockPanel.SetDock(builds, Dock.Left); d.Children.Add(builds);
-            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
-            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(16, 10, 16, 10); btns.Children.Add(ck); btns.Children.Add(Sp(10));
-            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { SSInstall(); }); ssUpdateBtn.Padding = new Thickness(18, 10, 18, 10); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; btns.Children.Add(ssUpdateBtn);
-            DockPanel.SetDock(btns, Dock.Right); d.Children.Add(btns);
-            body.Children.Add(d);
+            body.Children.Add(BuildRow("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text));
+            body.Children.Add(BuildRow("Latest", out ssLatest, "(check)", Ui.Accent));
+            StackPanel ctl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+            ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 100); ctl.Children.Add(ssChannel); ctl.Children.Add(Sp(9));
+            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 9, 14, 9); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
+            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 9, 14, 9); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
+            body.Children.Add(ctl);
             // full credit to MrKraken, the creator of StarStrings
-            TextBlock credit = new TextBlock { Margin = new Thickness(0, 16, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 17 };
-            credit.Inlines.Add(new Run("StarStrings is created and maintained by MrKraken — all credit for the localization goes to him. Source: "));
+            TextBlock credit = new TextBlock { Margin = new Thickness(0, 14, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 16 };
+            credit.Inlines.Add(new Run("Created and maintained by MrKraken — all credit to him. Source: "));
             Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
             try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
             link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };
@@ -503,7 +497,8 @@ namespace StarMaster {
             body.Children.Add(credit);
             return card;
         }
-        StackPanel BuildCol(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 0, 28, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 4, 0, 0) }; s.Children.Add(val); return s; }
+        // a stacked label + wrapping mono value (for the half-width tile)
+        StackPanel BuildRow(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 8, 0, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap }; s.Children.Add(val); return s; }
         void SSCheck(bool announce) {
             if (announce) ssLatest.Text = "checking...";
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {

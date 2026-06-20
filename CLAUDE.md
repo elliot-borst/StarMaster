@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 13.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 14.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -38,7 +38,7 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).
-- **Version** = `MainWindow.Version` const (`"13"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
+- **Version** = `MainWindow.Version` const (`"14"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
 - **Single instance:** `App.Main` holds a per-user named `Mutex` (`App.MutexName`); a second launch signals `App.ActivateEvent` so the running instance surfaces (restores from tray) and the duplicate exits. Shared across the installed + portable builds.
 - **No scrolling:** the main window has no ScrollViewer — content sizes to fit. Window defaults 1120x880, `MinWidth`/`MinHeight` 1080/840 clamp it so nothing clips. If you add UI that makes a card taller, bump the default/min height too.
 - **WPF UI thread:** worker (ThreadPool) callbacks touch UI only via `Dispatcher.BeginInvoke`. Keep-alive sends are queued off-thread.
@@ -56,6 +56,7 @@
 - 2026-06-20: **v11** — header redesign: left-aligned dashboard section (version + `VersionDate` + Start-minimised toggle); the "Check for updates" button label now doubles as the status ("Up to date" / "Update available" / "Check failed"), replacing the inline flash message; removed the title version pill. StarStrings card now credits MrKraken with a clickable link to his repo.
 - 2026-06-20: **v12** — update-available notice moved into the header top row (Download/Later inline; Check button hides while pending) instead of a separate banner row; removed the ScrollViewer (window never scrolls) and added a clamped minimum size so content never clips.
 - 2026-06-20: **v13** — single-instance guard (named Mutex in `App.Main`); a second launch surfaces the running instance and exits instead of opening a duplicate.
+- 2026-06-20: **v14** — update check shows a specific failure reason ("Rate-limited - try later" / "No connection" / "Check failed" via `Updater.LastError`); the automatic launch check backs off if one ran in the last 5 min (persisted as `lastcheck` in config), while manual button clicks always check.
 
 ## Backlog / ideas
 Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI; theme the self-update prompt as an in-app banner (currently a MessageBox). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite.*

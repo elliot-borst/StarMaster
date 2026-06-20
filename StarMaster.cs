@@ -71,6 +71,7 @@ namespace StarMaster {
         const string ApiUrl = "https://api.github.com/repos/" + Owner + "/" + Repo + "/releases/latest";
         public const string ReleasesPage = "https://github.com/" + Owner + "/" + Repo + "/releases/latest";
         public class Info { public int[] Version; public string Tag; public string SetupUrl; public string PageUrl; }
+        public static string LastError = "";   // human-readable reason set when CheckLatest returns null
         public static int[] ParseVer(string tag) {
             List<int> parts = new List<int>();
             if (!string.IsNullOrEmpty(tag)) foreach (Match m in Regex.Matches(tag, "[0-9]+")) { int v; if (int.TryParse(m.Value, out v)) parts.Add(v); }
@@ -82,17 +83,27 @@ namespace StarMaster {
             return 0;
         }
         public static Info CheckLatest() {
+            LastError = "";
             try {
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ApiUrl);
                 req.UserAgent = "StarMaster-Updater"; req.Accept = "application/vnd.github+json"; req.Timeout = 8000;
                 string json; using (WebResponse resp = req.GetResponse()) using (StreamReader sr = new StreamReader(resp.GetResponseStream())) json = sr.ReadToEnd();
-                Match tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\""); if (!tag.Success) return null;
+                Match tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\""); if (!tag.Success) { LastError = "Check failed"; return null; }
                 Info info = new Info(); info.Tag = tag.Groups[1].Value; info.Version = ParseVer(info.Tag);
                 Match page = Regex.Match(json, "\"html_url\"\\s*:\\s*\"([^\"]+)\""); info.PageUrl = page.Success ? page.Groups[1].Value : ReleasesPage;
                 foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"")) { string low = m.Groups[1].Value.ToLower(); if (low.EndsWith(".exe") && low.Contains("setup")) { info.SetupUrl = m.Groups[1].Value; break; } }
                 return info;
-            } catch { return null; }
+            } catch (WebException wex) { LastError = ClassifyWebError(wex); return null; }
+            catch { LastError = "Check failed"; return null; }
+        }
+        // turn a WebException into a short, user-facing reason
+        static string ClassifyWebError(WebException wex) {
+            HttpWebResponse hr = wex.Response as HttpWebResponse;
+            if (hr != null && (int)hr.StatusCode == 403) return "Rate-limited - try later";   // GitHub anon cap is 60/hour per IP
+            if (wex.Status == WebExceptionStatus.NameResolutionFailure || wex.Status == WebExceptionStatus.ConnectFailure
+                || wex.Status == WebExceptionStatus.Timeout || wex.Status == WebExceptionStatus.SendFailure) return "No connection";
+            return "Check failed";
         }
         public static string DownloadInstaller(string url) {
             try {
@@ -185,7 +196,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "13";
+        public const string Version = "14";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -206,6 +217,7 @@ namespace StarMaster {
         System.Threading.EventWaitHandle singleInstanceEvent;
         // header update button (its own label doubles as the status)
         Border updBtn; TextBlock updBtnLbl;
+        DateTime lastUpdateCheck = DateTime.MinValue;   // throttles the automatic launch check (persisted in config)
         // in-app "update available" notice that lives in the header top row (replaces the popup)
         StackPanel updateNotice; TextBlock updateNoticeText;
 
@@ -235,7 +247,7 @@ namespace StarMaster {
             } catch { }
             BuildTray();
             Closing += OnClosing;
-            Loaded += delegate { CheckUpdate(); SSCheck(false); };
+            Loaded += delegate { CheckUpdate(true); SSCheck(false); };
             if (startMinimized) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }   // launch straight to the tray
             if (autostart) ToggleRun();
         }
@@ -262,7 +274,7 @@ namespace StarMaster {
             secRow.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
             secRow.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
-            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
+            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
             // inline "update available" notice in the top row; shown instead of the Check button while an update is pending
             updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
             updateNotice.Children.Add(new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = Ui.Good, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
@@ -499,14 +511,18 @@ namespace StarMaster {
 
         // ---------- self-update ----------
         void SetUpdBtn(string text, Brush fg) { if (updBtnLbl != null) { updBtnLbl.Text = text; updBtnLbl.Foreground = fg; } }
-        void CheckUpdate() {
+        void CheckUpdate(bool auto) {
+            // auto (launch) checks back off if one ran in the last 5 minutes - avoids hammering GitHub's anon rate limit
+            if (auto && (DateTime.Now - lastUpdateCheck).TotalMinutes < 5) return;
             SetUpdBtn("↻  Checking...", Ui.Dim);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 Updater.Info info = Updater.CheckLatest();
+                lastUpdateCheck = DateTime.Now;
                 Dispatcher.BeginInvoke(new Action(delegate {
-                    if (info == null) SetUpdBtn("⚠  Check failed", Ui.DangerFg);
+                    if (info == null) SetUpdBtn("⚠  " + (Updater.LastError.Length > 0 ? Updater.LastError : "Check failed"), Ui.DangerFg);
                     else if (Updater.Compare(info.Version, CurrentVer) > 0) { SetUpdBtn("↑  Update available", Ui.Accent); ShowUpdateBanner(info); }
                     else SetUpdBtn("✓  Up to date", Ui.Good);
+                    SaveConfig();   // persist lastUpdateCheck so rapid relaunches stay throttled too
                 }));
             });
         }
@@ -595,7 +611,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } }
                 }
             } catch { }
             if (commands.Count == 0) { commands.Add(new Cmd { Label = "Wipe Visor", Alt = true, Key = "X", Interval = 600, Enabled = true }); commands.Add(new Cmd { Label = "Auto Accept", Key = "[", Interval = 1, Enabled = false }); }
@@ -611,6 +627,7 @@ namespace StarMaster {
                 sb.AppendLine("starstrings_build=" + ssInstalledBuild);
                 sb.AppendLine("starstrings_root=" + (ssRoot != null ? ssRoot.Text : ssRootCfg));
                 sb.AppendLine("starstrings_channel=" + (ssChannel != null ? ssChannel.Value : ssChannelCfg));
+                sb.AppendLine("lastcheck=" + lastUpdateCheck.Ticks);
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
                 File.WriteAllText(cfgPath, sb.ToString());

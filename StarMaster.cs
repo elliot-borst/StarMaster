@@ -9,7 +9,9 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Navigation;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -183,7 +185,8 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "10";
+        public const string Version = "11";
+        public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -199,8 +202,8 @@ namespace StarMaster {
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
         // tray
         System.Windows.Forms.NotifyIcon trayIcon; bool exiting = false;
-        // header update status (inline, instead of a popup)
-        TextBlock updStatus; DispatcherTimer updStatusTimer;
+        // header update button (its own label doubles as the status)
+        Border updBtn; TextBlock updBtnLbl;
         // in-app "update available" banner (replaces the Yes/No popup)
         Border updateBanner; TextBlock updateBannerText;
 
@@ -227,7 +230,7 @@ namespace StarMaster {
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
             BuildTray();
             Closing += OnClosing;
-            Loaded += delegate { CheckUpdate(false); SSCheck(false); };
+            Loaded += delegate { CheckUpdate(); SSCheck(false); };
             if (startMinimized) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }   // launch straight to the tray
             if (autostart) ToggleRun();
         }
@@ -240,19 +243,21 @@ namespace StarMaster {
             star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
             logo.Child = star; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
             StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
-            StackPanel tr = new StackPanel { Orientation = Orientation.Horizontal };
-            tr.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 23, FontWeight = FontWeights.Bold });
-            tr.Children.Add(new Border { Margin = new Thickness(9, 2, 0, 0), Padding = new Thickness(9, 3, 9, 3), CornerRadius = new CornerRadius(999), Background = Ui.B("#1a2340"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = "v" + Version, Foreground = Ui.Accent2, FontSize = 11, FontWeight = FontWeights.SemiBold } });
-            ttl.Children.Add(tr); ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
+            ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 23, FontWeight = FontWeights.Bold });
+            ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
             DockPanel.SetDock(ttl, Dock.Left); d.Children.Add(ttl);
-            Border upd = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(true); }); upd.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(upd, Dock.Right); d.Children.Add(upd);
-            updStatus = new TextBlock { Foreground = Ui.Good, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0), Opacity = 0 };
-            DockPanel.SetDock(updStatus, Dock.Right); d.Children.Add(updStatus);   // sits to the LEFT of the button (docked Right after it)
-            // app-wide setting lives in the top bar, not the Keep-Alive card
-            StackPanel mnBar = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 18, 0) };
-            mnBar.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
-            mnBar.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
-            DockPanel.SetDock(mnBar, Dock.Right); d.Children.Add(mnBar);
+            // left-aligned dashboard section: version + release date + the app-wide Start-minimised setting
+            Border sec = new Border { Margin = new Thickness(26, 0, 0, 0), Padding = new Thickness(16, 9, 16, 9), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+            StackPanel secRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            StackPanel ver = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            ver.Children.Add(new TextBlock { Text = "Version " + Version, Foreground = Ui.Accent2, FontSize = 13, FontWeight = FontWeights.SemiBold });
+            ver.Children.Add(new TextBlock { Text = "Released " + VersionDate, Foreground = Ui.Faint, FontSize = 11 });
+            secRow.Children.Add(ver);
+            secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(16, 2, 16, 2) });
+            secRow.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
+            secRow.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
+            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
             return d;
         }
 
@@ -452,6 +457,15 @@ namespace StarMaster {
             ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { SSInstall(); }); ssUpdateBtn.Padding = new Thickness(18, 10, 18, 10); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; btns.Children.Add(ssUpdateBtn);
             DockPanel.SetDock(btns, Dock.Right); d.Children.Add(btns);
             body.Children.Add(d);
+            // full credit to MrKraken, the creator of StarStrings
+            TextBlock credit = new TextBlock { Margin = new Thickness(0, 16, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 17 };
+            credit.Inlines.Add(new Run("StarStrings is created and maintained by MrKraken — all credit for the localization goes to him. Source: "));
+            Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
+            try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
+            link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };
+            link.Cursor = Cursors.Hand;
+            credit.Inlines.Add(link);
+            body.Children.Add(credit);
             return card;
         }
         StackPanel BuildCol(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 0, 28, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 4, 0, 0) }; s.Children.Add(val); return s; }
@@ -485,12 +499,15 @@ namespace StarMaster {
         }
 
         // ---------- self-update ----------
-        void CheckUpdate(bool announce) {
+        void SetUpdBtn(string text, Brush fg) { if (updBtnLbl != null) { updBtnLbl.Text = text; updBtnLbl.Foreground = fg; } }
+        void CheckUpdate() {
+            SetUpdBtn("↻  Checking...", Ui.Dim);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 Updater.Info info = Updater.CheckLatest();
                 Dispatcher.BeginInvoke(new Action(delegate {
-                    if (info != null && Updater.Compare(info.Version, CurrentVer) > 0) ShowUpdateBanner(info);
-                    else if (announce) FlashUpd(info == null ? "Update check failed - no connection" : "You're on the latest version", info != null);
+                    if (info == null) SetUpdBtn("⚠  Check failed", Ui.DangerFg);
+                    else if (Updater.Compare(info.Version, CurrentVer) > 0) { SetUpdBtn("↑  Update available", Ui.Accent); ShowUpdateBanner(info); }
+                    else SetUpdBtn("✓  Up to date", Ui.Good);
                 }));
             });
         }
@@ -506,15 +523,6 @@ namespace StarMaster {
             updateBanner.Tag = info;
             if (updateBannerText != null) updateBannerText.Text = "StarMaster " + info.Tag + " is available (you have v" + Version + ").";
             updateBanner.Visibility = Visibility.Visible;
-        }
-        // inline status shown to the left of the "Check for updates" button, auto-clears after 5 s
-        void FlashUpd(string msg, bool ok) {
-            if (updStatus == null) return;
-            updStatus.Text = (ok ? "✓  " : "⚠  ") + msg;
-            updStatus.Foreground = ok ? Ui.Good : Ui.DangerFg;
-            updStatus.Opacity = 1;
-            if (updStatusTimer == null) { updStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) }; updStatusTimer.Tick += delegate { updStatusTimer.Stop(); if (updStatus != null) updStatus.Opacity = 0; }; }
-            updStatusTimer.Stop(); updStatusTimer.Start();
         }
         void OpenPage(Updater.Info info) { try { System.Diagnostics.Process.Start(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); } catch { } }
         static bool RunningFromInstallDir() {

@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 10.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 11.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -38,7 +38,7 @@
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).
-- **Version** = `MainWindow.Version` const (`"10"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`.
+- **Version** = `MainWindow.Version` const (`"11"`); must match the Release tag (`vN`) and `installer.iss` `MyAppVersion`. Bump `MainWindow.VersionDate` (shown in the header dashboard) at the same time.
 - **WPF UI thread:** worker (ThreadPool) callbacks touch UI only via `Dispatcher.BeginInvoke`. Keep-alive sends are queued off-thread.
 - Don't commit `config.txt`, `config.json`, `Backups/`, `StarMaster.exe`, or `StarMaster-Setup.exe`.
 - **SC environment:** root `C:\Program Files\Roberts Space Industries\StarCitizen`; channels `LIVE`/`HOTFIX`.
@@ -50,6 +50,8 @@
 - 2026-06-20: **v7** — "Start minimised to tray" toggle (Keep-Alive card; launches hidden to tray, `startminimized` in config).
 - 2026-06-20: **v8** — update-check result now shows as inline status text left of the header "Check for updates" button (auto-clears after 5 s) instead of a MessageBox; status badges ("Running" / "up to date") moved to the top-right of their cards.
 - 2026-06-20: **v9** — "Start minimised" toggle moved from the Keep-Alive card to the top bar (it's an app-wide setting, not keep-alive-specific).
+- 2026-06-20: **v10** — in-app "update available" banner (under the header, Download/Later buttons) replaces the Yes/No update popup.
+- 2026-06-20: **v11** — header redesign: left-aligned dashboard section (version + `VersionDate` + Start-minimised toggle); the "Check for updates" button label now doubles as the status ("Up to date" / "Update available" / "Check failed"), replacing the inline flash message; removed the title version pill. StarStrings card now credits MrKraken with a clickable link to his repo.
 
 ## Backlog / ideas
 Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning); per-monitor-V2 DPI; theme the self-update prompt as an in-app banner (currently a MessageBox). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite.*

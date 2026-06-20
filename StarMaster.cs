@@ -185,7 +185,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "12";
+        public const string Version = "13";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -202,6 +202,8 @@ namespace StarMaster {
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
         // tray
         System.Windows.Forms.NotifyIcon trayIcon; bool exiting = false;
+        // single-instance: a second launch signals this handle to surface the existing window
+        System.Threading.EventWaitHandle singleInstanceEvent;
         // header update button (its own label doubles as the status)
         Border updBtn; TextBlock updBtnLbl;
         // in-app "update available" notice that lives in the header top row (replaces the popup)
@@ -226,6 +228,11 @@ namespace StarMaster {
             Content = root;
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
+            // listen for a second launch wanting to bring us forward (e.g. user re-runs while we're in the tray)
+            try {
+                singleInstanceEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, App.ActivateEvent);
+                System.Threading.ThreadPool.RegisterWaitForSingleObject(singleInstanceEvent, delegate { Dispatcher.BeginInvoke(new Action(delegate { Restore(); })); }, null, -1, false);
+            } catch { }
             BuildTray();
             Closing += OnClosing;
             Loaded += delegate { CheckUpdate(); SSCheck(false); };
@@ -644,10 +651,21 @@ namespace StarMaster {
     }
 
     public class App {
+        // single-instance plumbing (shared by the installed and portable builds, per-user)
+        public const string MutexName = "StarMaster.SingleInstance.v1";
+        public const string ActivateEvent = "StarMaster.Activate.v1";
+        static System.Threading.Mutex mtx;
         [STAThread]
         static void Main() {
+            bool createdNew;
+            mtx = new System.Threading.Mutex(true, MutexName, out createdNew);
+            if (!createdNew) {                                  // already running: poke the live instance to surface, then bow out
+                try { System.Threading.EventWaitHandle.OpenExisting(ActivateEvent).Set(); } catch { }
+                return;
+            }
             System.Windows.Application app = new System.Windows.Application();
             app.Run(new MainWindow());
+            GC.KeepAlive(mtx);
         }
     }
 }

@@ -196,7 +196,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "15";
+        public const string Version = "16";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -208,6 +208,8 @@ namespace StarMaster {
         DispatcherTimer timer;
         // backup
         TextBox bkRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;
+        // shader cache
+        TextBlock shaderStatus;
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
@@ -228,7 +230,7 @@ namespace StarMaster {
 
             Title = "StarMaster v" + Version;
             // never scrolls: the window resizes to fit and clamps at a minimum that keeps everything visible
-            Width = 1120; Height = 880; MinWidth = 1080; MinHeight = 840;
+            Width = 1120; Height = 1060; MinWidth = 1080; MinHeight = 1000;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
@@ -291,11 +293,20 @@ namespace StarMaster {
         UIElement Cards() {
             Grid g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition());
-            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             FrameworkElement ka = KeepAliveCard(); Grid.SetRow(ka, 0); Grid.SetColumn(ka, 0); ka.Margin = new Thickness(0, 0, 9, 18); g.Children.Add(ka);
             FrameworkElement bk = BackupCard(); Grid.SetRow(bk, 0); Grid.SetColumn(bk, 1); bk.Margin = new Thickness(9, 0, 0, 18); g.Children.Add(bk);
-            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); Grid.SetColumnSpan(ss, 2); g.Children.Add(ss);
+            FrameworkElement ss = StarStringsCard(); Grid.SetRow(ss, 1); Grid.SetColumn(ss, 0); Grid.SetColumnSpan(ss, 2); ss.Margin = new Thickness(0, 0, 0, 18); g.Children.Add(ss);
+            FrameworkElement sc = ShaderCacheCard(); Grid.SetRow(sc, 2); Grid.SetColumn(sc, 0); Grid.SetColumnSpan(sc, 2); g.Children.Add(sc);
             return g;
+        }
+        // ---------- shader cache card ----------
+        FrameworkElement ShaderCacheCard() {
+            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "fixes graphical glitches - rebuilt on next launch");
+            Border clr = Btn("Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(18, 10, 18, 10); clr.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(clr, Dock.Right); head.Children.Add(clr);
+            body.Children.Add(new TextBlock { Text = "Deletes %LOCALAPPDATA%\\Star Citizen - the game rebuilds it on next launch (first load is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap }; body.Children.Add(shaderStatus);
+            return card;
         }
 
         Border CardShell(out StackPanel body, out DockPanel head, string icon, string title, string sub) {
@@ -394,8 +405,7 @@ namespace StarMaster {
             body.Children.Add(checks);
             StackPanel r1 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             bkChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, "LIVE", 120); r1.Children.Add(bkChannel); r1.Children.Add(Sp(9));
-            Border bk = Btn("Back up now", Ui.AccentGrad(), Ui.Ink, true, delegate { DoBackup(); }); bk.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(bk); r1.Children.Add(Sp(9));
-            Border clr = Btn("Clear shader cache", Ui.Card2, Ui.Text, false, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(clr);
+            Border bk = Btn("Back up now", Ui.AccentGrad(), Ui.Ink, true, delegate { DoBackup(); }); bk.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(bk);
             body.Children.Add(r1);
             StackPanel r2 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
             cpFrom = new Dropdown(new string[] { "LIVE (current)" }, "LIVE (current)", 150); r2.Children.Add(cpFrom);
@@ -446,13 +456,15 @@ namespace StarMaster {
         // delete the SC shader cache (%LOCALAPPDATA%\Star Citizen) - it regenerates on next launch; fixes most graphical glitches
         void ClearShaderCache() {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Star Citizen");
-            if (!Directory.Exists(dir)) { bkStatus.Text = "no shader cache found at " + dir; return; }
+            if (!Directory.Exists(dir)) { shaderStatus.Text = "no shader cache found at " + dir; shaderStatus.Foreground = Ui.Dim; return; }
             if (System.Windows.MessageBox.Show("Delete the Star Citizen shader cache?\n\n" + dir + "\n\nSafe to do - the game rebuilds it on next launch (the first load will be a bit slower). Close Star Citizen first.", "Clear shader cache", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            bkStatus.Text = "clearing shader cache ...";
-            RunBg(delegate {
-                try { Directory.Delete(dir, true); return "shader cache cleared - it rebuilds on next launch"; }
-                catch (Exception ex) { return "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; }
-            }, null);
+            shaderStatus.Text = "clearing shader cache ..."; shaderStatus.Foreground = Ui.Dim;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string res; Brush fg;
+                try { Directory.Delete(dir, true); res = "shader cache cleared - it rebuilds on next launch"; fg = Ui.Good; }
+                catch (Exception ex) { res = "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; fg = Ui.DangerFg; }
+                Dispatcher.BeginInvoke(new Action(delegate { shaderStatus.Text = res; shaderStatus.Foreground = fg; }));
+            });
         }
         void BkLog(string m) { Dispatcher.BeginInvoke(new Action(delegate { bkStatus.Text = m; })); }
         void RunBg(Func<string> work, Action then) {

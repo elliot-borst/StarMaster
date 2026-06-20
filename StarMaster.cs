@@ -183,7 +183,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "7";
+        public const string Version = "8";
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -199,6 +199,8 @@ namespace StarMaster {
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
         // tray
         System.Windows.Forms.NotifyIcon trayIcon; bool exiting = false;
+        // header update status (inline, instead of a popup)
+        TextBlock updStatus; DispatcherTimer updStatusTimer;
 
         public MainWindow() {
             cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
@@ -240,6 +242,8 @@ namespace StarMaster {
             ttl.Children.Add(tr); ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
             DockPanel.SetDock(ttl, Dock.Left); d.Children.Add(ttl);
             Border upd = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(true); }); upd.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(upd, Dock.Right); d.Children.Add(upd);
+            updStatus = new TextBlock { Foreground = Ui.Good, FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0), Opacity = 0 };
+            DockPanel.SetDock(updStatus, Dock.Right); d.Children.Add(updStatus);   // sits to the LEFT of the button (docked Right after it)
             return d;
         }
 
@@ -275,7 +279,7 @@ namespace StarMaster {
         // ---------- keep-alive card ----------
         FrameworkElement KeepAliveCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♥", "Keep-Alive", "anti-idle keystrokes");
-            head.Children.Add(StatusBadge(out statusDot, out statusText, "Stopped", Ui.Dim)); statusDot.Background = Ui.Faint;
+            StackPanel kaBadge = StatusBadge(out statusDot, out statusText, "Stopped", Ui.Dim); statusDot.Background = Ui.Faint; kaBadge.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(kaBadge, Dock.Right); head.Children.Add(kaBadge);
             cmdPanel = new StackPanel(); body.Children.Add(cmdPanel); RefreshCommands();
             Border add = new Border { Margin = new Thickness(0, 2, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Child = new TextBlock { Text = "+  Add keystroke", Foreground = Ui.Dim, FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center } };
             add.MouseLeftButtonUp += delegate { AddKey(); }; body.Children.Add(add);
@@ -411,7 +415,7 @@ namespace StarMaster {
         // ---------- starstrings card ----------
         FrameworkElement StarStringsCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization");
-            head.Children.Add(StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim)); ssDot.Background = Ui.Faint;
+            StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint; ssBadge.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(ssBadge, Dock.Right); head.Children.Add(ssBadge);
             ssRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); body.Children.Add(LabeledField("SC folder", ssRoot));
             DockPanel d = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 4, 0, 0) };
             StackPanel builds = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
@@ -469,9 +473,18 @@ namespace StarMaster {
                                 System.Threading.ThreadPool.QueueUserWorkItem(delegate { string p = Updater.DownloadInstaller(info.SetupUrl); Dispatcher.BeginInvoke(new Action(delegate { if (p != null) { try { System.Diagnostics.Process.Start(p); exiting = true; System.Windows.Application.Current.Shutdown(); return; } catch { } } OpenPage(info); })); });
                             } else OpenPage(info);
                         }
-                    } else if (announce) System.Windows.MessageBox.Show(info == null ? "Update check failed - no connection." : "You're on the latest version (v" + Version + ").", "StarMaster", MessageBoxButton.OK, info == null ? MessageBoxImage.Warning : MessageBoxImage.Information);
+                    } else if (announce) FlashUpd(info == null ? "Update check failed - no connection" : "You're on the latest version", info != null);
                 }));
             });
+        }
+        // inline status shown to the left of the "Check for updates" button, auto-clears after 5 s
+        void FlashUpd(string msg, bool ok) {
+            if (updStatus == null) return;
+            updStatus.Text = (ok ? "✓  " : "⚠  ") + msg;
+            updStatus.Foreground = ok ? Ui.Good : Ui.DangerFg;
+            updStatus.Opacity = 1;
+            if (updStatusTimer == null) { updStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) }; updStatusTimer.Tick += delegate { updStatusTimer.Stop(); if (updStatus != null) updStatus.Opacity = 0; }; }
+            updStatusTimer.Stop(); updStatusTimer.Start();
         }
         void OpenPage(Updater.Info info) { try { System.Diagnostics.Process.Start(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); } catch { } }
         static bool RunningFromInstallDir() {

@@ -164,39 +164,8 @@ namespace StarMaster {
     }
 
     // small modal to add / edit a keystroke
-    public class AddKeyDialog : Window {
-        TextBox label, key, interval; bool[] sh = { false }, ct = { false }, al = { false };
-        public Cmd Result;
-        public AddKeyDialog(Cmd edit) {
-            Title = "Keystroke"; Width = 360; Height = 290; WindowStartupLocation = WindowStartupLocation.CenterOwner; ResizeMode = ResizeMode.NoResize;
-            Background = Ui.Card; FontFamily = Ui.Font;
-            StackPanel s = new StackPanel { Margin = new Thickness(18) };
-            s.Children.Add(Lbl("Label")); label = Tb(edit != null ? edit.Label : ""); s.Children.Add(label);
-            StackPanel mods = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            mods.Children.Add(Mod("Shift", sh, edit != null && edit.Shift)); mods.Children.Add(Mod("Ctrl", ct, edit != null && edit.Ctrl)); mods.Children.Add(Mod("Alt", al, edit != null && edit.Alt));
-            s.Children.Add(mods);
-            s.Children.Add(Lbl("Key  (A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ ])")); key = Tb(edit != null ? edit.Key : ""); s.Children.Add(key);
-            s.Children.Add(Lbl("Every (seconds)")); interval = Tb(edit != null ? edit.Interval.ToString() : "600"); s.Children.Add(interval);
-            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-            Border cancel = MainWindow.Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { Close(); }); cancel.Padding = new Thickness(16, 8, 16, 8);
-            Border save = MainWindow.Btn("Save", Ui.AccentGrad(), Ui.Ink, true, delegate { Save(); }); save.Padding = new Thickness(20, 8, 20, 8); save.Margin = new Thickness(10, 0, 0, 0);
-            btns.Children.Add(cancel); btns.Children.Add(save); s.Children.Add(btns);
-            Content = s;
-        }
-        TextBlock Lbl(string t) { return new TextBlock { Text = t, Foreground = Ui.Dim, FontSize = 11.5, Margin = new Thickness(0, 8, 0, 4) }; }
-        TextBox Tb(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(7, 5, 7, 5), FontSize = 13 }; }
-        UIElement Mod(string t, bool[] state, bool on) { state[0] = on; Border b = MainWindow.Btn(t, on ? (Brush)Ui.AccentGrad() : Ui.Card2, on ? Ui.Ink : Ui.Text, false, null); b.Margin = new Thickness(0, 0, 8, 0); b.Padding = new Thickness(14, 7, 14, 7); b.MouseLeftButtonUp += delegate { state[0] = !state[0]; b.Background = state[0] ? (Brush)Ui.AccentGrad() : Ui.Card2; ((TextBlock)b.Child).Foreground = state[0] ? Ui.Ink : Ui.Text; }; return b; }
-        void Save() {
-            string k = key.Text.Trim();
-            if (Vk.Map(k) == 0) { System.Windows.MessageBox.Show("Key '" + k + "' not recognized.\nUse A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ or ].", "Invalid key", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-            int iv; if (!int.TryParse(interval.Text.Trim(), out iv)) iv = 600; if (iv < 1) iv = 1; if (iv > 3600) iv = 3600;
-            Result = new Cmd { Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : "Command", Shift = sh[0], Ctrl = ct[0], Alt = al[0], Key = k, Interval = iv, Enabled = true };
-            DialogResult = true; Close();
-        }
-    }
-
     public partial class MainWindow : Window {
-        public const string Version = "18";
+        public const string Version = "19";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -222,6 +191,8 @@ namespace StarMaster {
         DateTime lastUpdateCheck = DateTime.MinValue;   // throttles the automatic launch check (persisted in config)
         // in-app "update available" notice that lives in the header top row (replaces the popup)
         StackPanel updateNotice; TextBlock updateNoticeText;
+        // in-app modal overlay - the ONLY way to show dialogs/messages (no OS popups anywhere)
+        Grid overlayHost; Border overlayCard;
 
         public MainWindow() {
             cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
@@ -239,7 +210,8 @@ namespace StarMaster {
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.Children.Add(Header());
             FrameworkElement cards = (FrameworkElement)Cards(); cards.Margin = new Thickness(0, 18, 0, 0); Grid.SetRow(cards, 1); root.Children.Add(cards);
-            Content = root;
+            Grid shell = new Grid(); shell.Children.Add(root); shell.Children.Add(BuildOverlay());
+            Content = shell;
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
             // listen for a second launch wanting to bring us forward (e.g. user re-runs while we're in the tray)
@@ -289,6 +261,67 @@ namespace StarMaster {
             DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
             return d;
         }
+
+        // ---------- in-app modal overlay (replaces every OS popup / MessageBox) ----------
+        UIElement BuildOverlay() {
+            overlayHost = new Grid { Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x06, 0x08, 0x0f)), Visibility = Visibility.Collapsed };
+            overlayHost.MouseLeftButtonDown += delegate (object s, MouseButtonEventArgs e) { e.Handled = true; };   // modal: swallow background clicks
+            overlayCard = new Border { Background = Ui.Card, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(22, 20, 22, 20), MaxWidth = 480, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            overlayHost.Children.Add(overlayCard);
+            return overlayHost;
+        }
+        void HideOverlay() { overlayHost.Visibility = Visibility.Collapsed; overlayCard.Child = null; }
+        StackPanel DialogShell(string title, double width) {
+            StackPanel s = new StackPanel(); if (width > 0) s.Width = width;
+            s.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
+            return s;
+        }
+        void ShowOverlay(UIElement content) { overlayCard.Child = content; overlayHost.Visibility = Visibility.Visible; }
+        // a yes/no confirm, in-app
+        void ShowConfirm(string title, string msg, string okText, Action onOk) {
+            StackPanel s = DialogShell(title, 0);
+            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+            Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 9, 16, 9); btns.Children.Add(cancel); btns.Children.Add(Sp(10));
+            Border ok = Btn(okText, Ui.AccentGrad(), Ui.Ink, true, delegate { HideOverlay(); if (onOk != null) onOk(); }); ok.Padding = new Thickness(18, 9, 18, 9); btns.Children.Add(ok);
+            s.Children.Add(btns); ShowOverlay(s);
+        }
+        // an OK-only message, in-app
+        void ShowAlert(string title, string msg) {
+            StackPanel s = DialogShell(title, 0);
+            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+            Border ok = Btn("OK", Ui.AccentGrad(), Ui.Ink, true, delegate { HideOverlay(); }); ok.Padding = new Thickness(18, 9, 18, 9); btns.Children.Add(ok);
+            s.Children.Add(btns); ShowOverlay(s);
+        }
+        // the add/edit-keystroke form, in-app (was a separate AddKeyDialog window)
+        void ShowKeyForm(Cmd edit, Action<Cmd> onSave) {
+            StackPanel s = DialogShell(edit == null ? "Add keystroke" : "Edit keystroke", 360);
+            s.Children.Add(FormLbl("Label")); TextBox label = FormTb(edit != null ? edit.Label : ""); s.Children.Add(label);
+            bool[] sh = { edit != null && edit.Shift }, ct = { edit != null && edit.Ctrl }, al = { edit != null && edit.Alt };
+            StackPanel mods = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            mods.Children.Add(ModBtn("Shift", sh)); mods.Children.Add(ModBtn("Ctrl", ct)); mods.Children.Add(ModBtn("Alt", al));
+            s.Children.Add(mods);
+            s.Children.Add(FormLbl("Key  (A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ ])")); TextBox key = FormTb(edit != null ? edit.Key : ""); s.Children.Add(key);
+            s.Children.Add(FormLbl("Every (seconds)")); TextBox interval = FormTb(edit != null ? edit.Interval.ToString() : "600"); s.Children.Add(interval);
+            TextBlock err = new TextBlock { Foreground = Ui.DangerFg, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
+            s.Children.Add(err);
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+            Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(cancel); btns.Children.Add(Sp(10));
+            Border save = Btn("Save", Ui.AccentGrad(), Ui.Ink, true, null); save.Padding = new Thickness(20, 8, 20, 8);
+            save.MouseLeftButtonUp += delegate {
+                string k = key.Text.Trim();
+                if (Vk.Map(k) == 0) { err.Text = "Key '" + k + "' not recognized. Use A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ or ]."; err.Visibility = Visibility.Visible; return; }
+                int iv; if (!int.TryParse(interval.Text.Trim(), out iv)) iv = 600; if (iv < 1) iv = 1; if (iv > 3600) iv = 3600;
+                Cmd r = new Cmd { Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : "Command", Shift = sh[0], Ctrl = ct[0], Alt = al[0], Key = k, Interval = iv, Enabled = true };
+                HideOverlay(); if (onSave != null) onSave(r);
+            };
+            btns.Children.Add(save); s.Children.Add(btns);
+            ShowOverlay(s);
+        }
+        TextBlock FormLbl(string t) { return new TextBlock { Text = t, Foreground = Ui.Dim, FontSize = 11.5, Margin = new Thickness(0, 8, 0, 4) }; }
+        TextBox FormTb(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(7, 5, 7, 5), FontSize = 13 }; }
+        UIElement ModBtn(string t, bool[] state) { Border b = Btn(t, state[0] ? (Brush)Ui.AccentGrad() : Ui.Card2, state[0] ? Ui.Ink : Ui.Text, false, null); b.Margin = new Thickness(0, 0, 8, 0); b.Padding = new Thickness(14, 7, 14, 7); b.MouseLeftButtonUp += delegate { state[0] = !state[0]; b.Background = state[0] ? (Brush)Ui.AccentGrad() : Ui.Card2; ((TextBlock)b.Child).Foreground = state[0] ? Ui.Ink : Ui.Text; }; return b; }
 
         UIElement Cards() {
             Grid g = new Grid();
@@ -373,8 +406,8 @@ namespace StarMaster {
             DockPanel.SetDock(right, Dock.Right); d.Children.Add(right);
             row.Child = d; return row;
         }
-        void AddKey() { AddKeyDialog dlg = new AddKeyDialog(null); dlg.Owner = this; if (dlg.ShowDialog() == true && dlg.Result != null) { commands.Add(dlg.Result); RefreshCommands(); } }
-        void EditKey(Cmd c) { AddKeyDialog dlg = new AddKeyDialog(c); dlg.Owner = this; if (dlg.ShowDialog() == true && dlg.Result != null) { int i = commands.IndexOf(c); dlg.Result.Enabled = c.Enabled; dlg.Result.LastFire = c.LastFire; commands[i] = dlg.Result; RefreshCommands(); } }
+        void AddKey() { ShowKeyForm(null, delegate (Cmd r) { commands.Add(r); RefreshCommands(); }); }
+        void EditKey(Cmd c) { ShowKeyForm(c, delegate (Cmd r) { int i = commands.IndexOf(c); r.Enabled = c.Enabled; r.LastFire = c.LastFire; commands[i] = r; RefreshCommands(); }); }
         string Combo(Cmd c) { List<string> p = new List<string>(); if (c.Shift) p.Add("Shift"); if (c.Ctrl) p.Add("Ctrl"); if (c.Alt) p.Add("Alt"); p.Add(c.Key); return string.Join("+", p.ToArray()); }
 
         void ToggleRun() {
@@ -450,21 +483,23 @@ namespace StarMaster {
             string dstBase = Path.Combine(root, to);
             if (!Directory.Exists(srcBase)) { bkStatus.Text = "source not found: " + srcBase; return; }
             try { if (string.Equals(Path.GetFullPath(srcBase).TrimEnd('\\'), Path.GetFullPath(dstBase).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { bkStatus.Text = "source and target are the same - nothing to do"; return; } } catch { }
-            if (System.Windows.MessageBox.Show("Copy the ticked items\n\nFROM:  " + from + "\nTO:      " + to + " channel\n\nExisting files are overwritten (nothing deleted). Close Star Citizen first. Proceed?", "Confirm copy / restore", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) { bkStatus.Text = "cancelled"; return; }
-            bkStatus.Text = "copying " + from + " → " + to + " ...";
-            RunBg(delegate { int n = BackupOps.CopyItems(srcBase, dstBase, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("done - copied " + n + " files into " + to + ". Restart Star Citizen.") : "nothing copied"; }, null);
+            ShowConfirm("Confirm copy / restore", "Copy the ticked items\n\nFROM:  " + from + "\nTO:      " + to + " channel\n\nExisting files are overwritten (nothing deleted). Close Star Citizen first.", "Copy / Restore", delegate {
+                bkStatus.Text = "copying " + from + " → " + to + " ...";
+                RunBg(delegate { int n = BackupOps.CopyItems(srcBase, dstBase, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("done - copied " + n + " files into " + to + ". Restart Star Citizen.") : "nothing copied"; }, null);
+            });
         }
         // delete the SC shader cache (%LOCALAPPDATA%\Star Citizen) - it regenerates on next launch; fixes most graphical glitches
         void ClearShaderCache() {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Star Citizen");
             if (!Directory.Exists(dir)) { shaderStatus.Text = "no shader cache found at " + dir; shaderStatus.Foreground = Ui.Dim; return; }
-            if (System.Windows.MessageBox.Show("Delete the Star Citizen shader cache?\n\n" + dir + "\n\nSafe to do - the game rebuilds it on next launch (the first load will be a bit slower). Close Star Citizen first.", "Clear shader cache", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            shaderStatus.Text = "clearing shader cache ..."; shaderStatus.Foreground = Ui.Dim;
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
-                string res; Brush fg;
-                try { Directory.Delete(dir, true); res = "shader cache cleared - it rebuilds on next launch"; fg = Ui.Good; }
-                catch (Exception ex) { res = "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; fg = Ui.DangerFg; }
-                Dispatcher.BeginInvoke(new Action(delegate { shaderStatus.Text = res; shaderStatus.Foreground = fg; }));
+            ShowConfirm("Clear shader cache", "Delete the Star Citizen shader cache?\n\n" + dir + "\n\nSafe to do - the game rebuilds it on next launch (the first load will be a bit slower). Close Star Citizen first.", "Clear cache", delegate {
+                shaderStatus.Text = "clearing shader cache ..."; shaderStatus.Foreground = Ui.Dim;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                    string res; Brush fg;
+                    try { Directory.Delete(dir, true); res = "shader cache cleared - it rebuilds on next launch"; fg = Ui.Good; }
+                    catch (Exception ex) { res = "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; fg = Ui.DangerFg; }
+                    Dispatcher.BeginInvoke(new Action(delegate { shaderStatus.Text = res; shaderStatus.Foreground = fg; }));
+                });
             });
         }
         void BkLog(string m) { Dispatcher.BeginInvoke(new Action(delegate { bkStatus.Text = m; })); }
@@ -518,14 +553,15 @@ namespace StarMaster {
         void SSInstall() {
             if (ssLatestInfo == null || string.IsNullOrEmpty(ssLatestInfo.ZipUrl)) { SSCheck(true); return; }
             string root = ssRoot.Text.Trim(); string ch = ssChannel.Value; string channelRoot = Path.Combine(root, ch);
-            if (System.Windows.MessageBox.Show("Install StarStrings into:\n\n" + channelRoot + "\n\nCopies the data\\ folder and ensures user.cfg has 'g_language = english'. Close Star Citizen first. Proceed?", "Install StarStrings", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-            ssStatus.Text = "installing..."; ssStatus.Foreground = Ui.Dim; string zip = ssLatestInfo.ZipUrl; string build = ssLatestInfo.Build;
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
-                string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
-                Dispatcher.BeginInvoke(new Action(delegate {
-                    if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; ssStatus.Text = "installed - restart SC"; ssStatus.Foreground = Ui.Good; ssDot.Background = Ui.Good; ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); }
-                    else { ssStatus.Text = "failed: " + msg; ssStatus.Foreground = Ui.DangerFg; }
-                }));
+            ShowConfirm("Install StarStrings", "Install StarStrings into:\n\n" + channelRoot + "\n\nCopies the data\\ folder and ensures user.cfg has 'g_language = english'. Close Star Citizen first.", "Install", delegate {
+                ssStatus.Text = "installing..."; ssStatus.Foreground = Ui.Dim; string zip = ssLatestInfo.ZipUrl; string build = ssLatestInfo.Build;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                    string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
+                    Dispatcher.BeginInvoke(new Action(delegate {
+                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; ssStatus.Text = "installed - restart SC"; ssStatus.Foreground = Ui.Good; ssDot.Background = Ui.Good; ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); }
+                        else { ssStatus.Text = "failed: " + msg; ssStatus.Foreground = Ui.DangerFg; }
+                    }));
+                });
             });
         }
 

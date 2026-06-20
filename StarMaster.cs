@@ -185,7 +185,7 @@ namespace StarMaster {
     }
 
     public partial class MainWindow : Window {
-        public const string Version = "11";
+        public const string Version = "12";
         public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -204,8 +204,8 @@ namespace StarMaster {
         System.Windows.Forms.NotifyIcon trayIcon; bool exiting = false;
         // header update button (its own label doubles as the status)
         Border updBtn; TextBlock updBtnLbl;
-        // in-app "update available" banner (replaces the Yes/No popup)
-        Border updateBanner; TextBlock updateBannerText;
+        // in-app "update available" notice that lives in the header top row (replaces the popup)
+        StackPanel updateNotice; TextBlock updateNoticeText;
 
         public MainWindow() {
             cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
@@ -213,18 +213,16 @@ namespace StarMaster {
             LoadConfig();
 
             Title = "StarMaster v" + Version;
-            Width = 1060; Height = 800; MinWidth = 900; MinHeight = 640;
+            // never scrolls: the window resizes to fit and clamps at a minimum that keeps everything visible
+            Width = 1120; Height = 880; MinWidth = 1080; MinHeight = 840;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
             Grid root = new Grid { Margin = new Thickness(22) };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.Children.Add(Header());
-            UIElement banner = UpdateBanner(); Grid.SetRow(banner, 1); root.Children.Add(banner);
-            ScrollViewer sv = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 18, 0, 0), Content = Cards() };
-            Grid.SetRow(sv, 2); root.Children.Add(sv);
+            FrameworkElement cards = (FrameworkElement)Cards(); cards.Margin = new Thickness(0, 18, 0, 0); Grid.SetRow(cards, 1); root.Children.Add(cards);
             Content = root;
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
@@ -258,23 +256,17 @@ namespace StarMaster {
             secRow.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
             updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
+            // inline "update available" notice in the top row; shown instead of the Check button while an update is pending
+            updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+            updateNotice.Children.Add(new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = Ui.Good, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            updateNoticeText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            updateNotice.Children.Add(updateNoticeText);
+            Border dl = Btn("↓  Download & install", Ui.AccentGrad(), Ui.Ink, true, delegate { StartUpdate(updateNotice != null ? (Updater.Info)updateNotice.Tag : null); });
+            dl.VerticalAlignment = VerticalAlignment.Center; dl.Margin = new Thickness(14, 0, 0, 0); updateNotice.Children.Add(dl);
+            Border later = Btn("Later", Ui.Card2, Ui.Dim, false, delegate { DismissUpdateNotice(); });
+            later.VerticalAlignment = VerticalAlignment.Center; later.Margin = new Thickness(8, 0, 0, 0); updateNotice.Children.Add(later);
+            DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
             return d;
-        }
-
-        // in-app banner shown under the header when a newer release exists (replaces the Yes/No popup)
-        UIElement UpdateBanner() {
-            updateBanner = new Border { Margin = new Thickness(0, 18, 0, 0), Padding = new Thickness(16, 11, 11, 11), CornerRadius = new CornerRadius(12), Background = Ui.B("#16203a"), BorderBrush = Ui.Accent, BorderThickness = new Thickness(1), Visibility = Visibility.Collapsed };
-            DockPanel dp = new DockPanel { LastChildFill = false };
-            Border dot = new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = Ui.Good, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 11, 0) };
-            DockPanel.SetDock(dot, Dock.Left); dp.Children.Add(dot);
-            updateBannerText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
-            DockPanel.SetDock(updateBannerText, Dock.Left); dp.Children.Add(updateBannerText);
-            Border later = Btn("Later", Ui.Card2, Ui.Dim, false, delegate { if (updateBanner != null) updateBanner.Visibility = Visibility.Collapsed; });
-            later.VerticalAlignment = VerticalAlignment.Center; later.Margin = new Thickness(8, 0, 0, 0); DockPanel.SetDock(later, Dock.Right); dp.Children.Add(later);
-            Border dl = Btn("↓  Download & install", Ui.AccentGrad(), Ui.Ink, true, delegate { StartUpdate(updateBanner != null ? (Updater.Info)updateBanner.Tag : null); });
-            dl.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(dl, Dock.Right); dp.Children.Add(dl);
-            updateBanner.Child = dp;
-            return updateBanner;
         }
 
         UIElement Cards() {
@@ -514,15 +506,23 @@ namespace StarMaster {
         void StartUpdate(Updater.Info info) {
             if (info == null) return;
             if (info.SetupUrl != null && RunningFromInstallDir()) {
-                if (updateBannerText != null) updateBannerText.Text = "Downloading StarMaster " + info.Tag + "...";
+                if (updateNoticeText != null) updateNoticeText.Text = "Downloading " + info.Tag + "...";
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate { string p = Updater.DownloadInstaller(info.SetupUrl); Dispatcher.BeginInvoke(new Action(delegate { if (p != null) { try { System.Diagnostics.Process.Start(p); exiting = true; System.Windows.Application.Current.Shutdown(); return; } catch { } } OpenPage(info); })); });
             } else OpenPage(info);
         }
+        // show the notice in the top row, hiding the Check button to make room
         void ShowUpdateBanner(Updater.Info info) {
-            if (updateBanner == null) return;
-            updateBanner.Tag = info;
-            if (updateBannerText != null) updateBannerText.Text = "StarMaster " + info.Tag + " is available (you have v" + Version + ").";
-            updateBanner.Visibility = Visibility.Visible;
+            if (updateNotice == null) return;
+            updateNotice.Tag = info;
+            if (updateNoticeText != null) updateNoticeText.Text = "StarMaster " + info.Tag + " available";
+            updateNotice.Visibility = Visibility.Visible;
+            if (updBtn != null) updBtn.Visibility = Visibility.Collapsed;
+        }
+        // dismiss the notice and bring the Check button back (still flagged that an update exists)
+        void DismissUpdateNotice() {
+            if (updateNotice != null) updateNotice.Visibility = Visibility.Collapsed;
+            if (updBtn != null) updBtn.Visibility = Visibility.Visible;
+            SetUpdBtn("↑  Update available", Ui.Accent);
         }
         void OpenPage(Updater.Info info) { try { System.Diagnostics.Process.Start(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); } catch { } }
         static bool RunningFromInstallDir() {

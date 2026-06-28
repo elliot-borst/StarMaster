@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.IO.MemoryMappedFiles;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -23,8 +24,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("32.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("32.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("33.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("33.0.0.0")]
 
 namespace StarMaster {
 
@@ -185,7 +186,7 @@ namespace StarMaster {
         [DllImport("nvml.dll", EntryPoint = "nvmlDeviceGetName")] static extern int NvName(IntPtr dev, StringBuilder name, uint len);
 
         public class Sample {
-            public double CpuTotal; public double[] Cores = new double[0]; public string CpuName = "CPU"; public int CpuMhz;
+            public double CpuTotal; public double[] Cores = new double[0]; public string CpuName = "CPU"; public int CpuMhz; public int CpuTempC = -1, CpuPowerW = -1;
             public double RamUsedGB, RamTotalGB; public int RamPct;
             public bool GpuOk; public string GpuName = "GPU";
             public int GpuPct, GpuTempC, GpuPowerW, GpuCoreMhz, GpuMemMhz, VramPct;
@@ -342,6 +343,88 @@ namespace StarMaster {
         }
     }
 
+    // ===== HWiNFO integration: reads CPU temp/watts from HWiNFO's shared memory (it does the ring-0 work; we just read). Optional - blank when HWiNFO isn't running. =====
+    public static class HwInfo {
+        public const string DownloadUrl = "https://www.hwinfo.com/download/";
+        public const int NotInstalled = 0, NotRunning = 1, NoSharedMem = 2, Connected = 3;
+        public static int CpuTempC = -1, CpuPowerW = -1;
+        public static int State = NotInstalled;
+        public static bool Autorun, StartMin, SmEnabled;   // from HWiNFO64.INI
+        static string exe; static bool located;
+
+        public static string Exe() { if (!located) Locate(); return exe; }
+
+        static void Locate() {
+            located = true;
+            try {
+                string[] keys = { @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1", @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1" };
+                foreach (string k in keys) {
+                    object il = Microsoft.Win32.Registry.GetValue(k, "InstallLocation", null);
+                    if (il != null) { string p = Path.Combine(il.ToString(), "HWiNFO64.exe"); if (File.Exists(p)) { exe = p; break; } }
+                    object di = Microsoft.Win32.Registry.GetValue(k, "DisplayIcon", null);
+                    if (di != null) { string p = di.ToString().Split(',')[0].Trim('"'); if (File.Exists(p)) { exe = p; break; } }
+                }
+                if (exe == null) {
+                    string pf = Environment.GetEnvironmentVariable("ProgramW6432"); if (string.IsNullOrEmpty(pf)) pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                    string p = Path.Combine(pf, "HWiNFO64", "HWiNFO64.exe"); if (File.Exists(p)) exe = p;
+                }
+                if (exe != null) ReadIni();
+            } catch { }
+        }
+        static void ReadIni() {
+            try {
+                string ini = Path.Combine(Path.GetDirectoryName(exe), "HWiNFO64.INI");
+                if (!File.Exists(ini)) return;
+                foreach (string line in File.ReadAllLines(ini)) {
+                    string l = line.Trim();
+                    if (l.StartsWith("SensorsSM=")) SmEnabled = l.EndsWith("1");
+                    else if (l.StartsWith("Autorun=")) Autorun = l.EndsWith("1");
+                    else if (l.StartsWith("MinimalizeSensors=")) StartMin = l.EndsWith("1");
+                }
+            } catch { }
+        }
+        static bool ProcRunning() {
+            try { return System.Diagnostics.Process.GetProcessesByName("HWiNFO64").Length > 0 || System.Diagnostics.Process.GetProcessesByName("HWiNFO32").Length > 0; } catch { return false; }
+        }
+
+        // fast (call every tick): read CPU temp/watts from shared memory. Returns true if shared memory is live.
+        public static bool ReadSensors() {
+            CpuTempC = -1; CpuPowerW = -1;
+            try {
+                using (MemoryMappedFile mmf = MemoryMappedFile.OpenExisting("Global\\HWiNFO_SENS_SM2", MemoryMappedFileRights.Read))
+                using (MemoryMappedViewAccessor a = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read)) {
+                    int roff = a.ReadInt32(32), rsize = a.ReadInt32(36), rnum = a.ReadInt32(40);   // packed SM2 header
+                    if (rsize < 200 || rsize > 8192 || rnum < 1 || rnum > 100000 || roff < 1) { roff = a.ReadInt32(36); rsize = a.ReadInt32(40); rnum = a.ReadInt32(44); }
+                    if (rsize < 200 || rsize > 8192 || rnum < 1 || rnum > 100000 || roff < 1) return true;
+                    byte[] lbl = new byte[128]; int tRank = 99, pRank = 99;
+                    for (int i = 0; i < rnum; i++) {
+                        long b = roff + (long)i * rsize;
+                        int type = a.ReadInt32(b);                       // 1 = temperature, 5 = power
+                        if (type != 1 && type != 5) continue;
+                        a.ReadArray(b + 12, lbl, 0, 128);
+                        int z = Array.IndexOf(lbl, (byte)0); if (z < 0) z = 128;
+                        string lo = Encoding.Default.GetString(lbl, 0, z);
+                        if (lo.IndexOf("CPU", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        double v = a.ReadDouble(b + 284);               // Value (current); szUnit[16]@268 precedes it
+                        if (type == 1 && v > 5 && v < 150) { int r = lo.IndexOf("Tctl") >= 0 ? 0 : (lo.IndexOf("Die") >= 0 ? 1 : 2); if (r < tRank) { tRank = r; CpuTempC = (int)(v + 0.5); } }
+                        else if (type == 5 && v > 0.3 && v < 600 && lo.IndexOf("Power") >= 0) { int r = lo.IndexOf("Package") >= 0 ? 0 : (lo.IndexOf("PPT") >= 0 ? 1 : 2); if (r < pRank) { pRank = r; CpuPowerW = (int)(v + 0.5); } }
+                    }
+                    return true;
+                }
+            } catch { return false; }   // shared memory not present => HWiNFO not running (or SM off)
+        }
+
+        // heavier (call occasionally): classify overall state for the status line + button
+        public static void RefreshState(bool smActive) {
+            if (!located) Locate();
+            if (smActive) { State = Connected; return; }
+            bool running = ProcRunning();
+            if (exe == null && !running) State = NotInstalled;
+            else if (!running) State = NotRunning;
+            else State = NoSharedMem;
+        }
+    }
+
     // ===== Aurora theme + widgets =====
     static class Ui {
         public static SolidColorBrush B(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16))); b.Freeze(); return b; }
@@ -356,7 +439,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "32";
+        public const string Version = "33";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -377,6 +460,7 @@ namespace StarMaster {
         MonWindow monWin; bool monOverlayOn = false, monLocked = false; double monOvX = 60, monOvY = 60;
         int monOvAlpha = 85; string monOvColor = "0a0e18";   // overlay background opacity (0-100, 10% steps) + colour
         bool monFpsOn = false; TextBlock monFpsTxt;
+        TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
@@ -595,6 +679,16 @@ namespace StarMaster {
             body.Children.Add(MetricRow("VRAM", out monVramBar, out monVramTxt));
             monGpuDetail = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 12, FontFamily = Ui.Mono, Margin = new Thickness(46, 4, 0, 0), TextWrapping = TextWrapping.Wrap };
             body.Children.Add(monGpuDetail);
+            // HWiNFO status (CPU temp/watts come from it). Shows install/run state + an action button.
+            Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            StackPanel hwIn = new StackPanel();
+            DockPanel hwTop = new DockPanel { LastChildFill = false };
+            monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
+            monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
+            hwIn.Children.Add(hwTop);
+            monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+            hwIn.Children.Add(monHwTip);
+            hwBox.Child = hwIn; body.Children.Add(hwBox);
             return card;
         }
         FrameworkElement MetricRow(string label, out MonBar bar, out TextBlock val) {
@@ -621,14 +715,40 @@ namespace StarMaster {
             if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); }
             else { FpsMon.Stop(); if (monFpsTxt != null) monFpsTxt.Text = "uses PresentMon - asks for admin once when turned on"; }
         }
+        // launch/get HWiNFO depending on detected state
+        void HwAction() {
+            try {
+                if (HwInfo.State == HwInfo.NotInstalled) System.Diagnostics.Process.Start(HwInfo.DownloadUrl);
+                else { string p = HwInfo.Exe(); if (p != null) System.Diagnostics.Process.Start(p); }   // start it (or bring it up to enable Shared Memory)
+            } catch { }
+        }
+        void UpdateHwUi() {
+            if (monHwTxt == null) return;
+            TextBlock lbl = (TextBlock)monHwBtn.Child;
+            if (HwInfo.State == HwInfo.Connected) {
+                monHwTxt.Text = "HWiNFO connected" + (HwInfo.CpuTempC >= 0 ? "  -  CPU " + HwInfo.CpuTempC + " °C" + (HwInfo.CpuPowerW >= 0 ? " · " + HwInfo.CpuPowerW + " W" : "") : "");
+                monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
+                bool tipNeeded = !HwInfo.Autorun || !HwInfo.StartMin;
+                monHwTip.Text = tipNeeded ? "Tip: in HWiNFO enable Auto Start + Minimize on startup so it's always ready." : "";
+                monHwTip.Visibility = tipNeeded ? Visibility.Visible : Visibility.Collapsed;
+            } else {
+                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Dim; monHwTip.Visibility = Visibility.Collapsed;
+                if (HwInfo.State == HwInfo.NotInstalled) { monHwTxt.Text = "HWiNFO not installed (needed for CPU temp / watts)."; lbl.Text = "Get HWiNFO"; }
+                else if (HwInfo.State == HwInfo.NotRunning) { monHwTxt.Text = "HWiNFO is installed but not running."; lbl.Text = "Start HWiNFO"; monHwTip.Text = (!HwInfo.Autorun || !HwInfo.StartMin) ? "Tip: enable Auto Start + Minimize on startup in HWiNFO." : ""; monHwTip.Visibility = monHwTip.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
+                else { monHwTxt.Text = "HWiNFO running, but Shared Memory is off."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings, then it'll connect."; monHwTip.Visibility = Visibility.Visible; }
+            }
+        }
         void MonTick(object s, EventArgs e) {
             bool overlay = monWin != null && monOverlayOn;
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
+            bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
+            if (++hwTick >= 5) { hwTick = 0; HwInfo.RefreshState(sm); }   // heavier state check every ~5s
             if (IsVisible) {
+                if (hwTick == 0) UpdateHwUi();
                 int cpu = (int)(smp.CpuTotal + 0.5);
-                monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = cpu + " %" + (smp.CpuMhz > 0 ? "   " + smp.CpuMhz + " MHz" : "");
+                monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = cpu + " %" + (smp.CpuTempC >= 0 ? "   " + smp.CpuTempC + " °C" : "") + (smp.CpuPowerW >= 0 ? "   " + smp.CpuPowerW + " W" : "") + (smp.CpuMhz > 0 ? "   " + smp.CpuMhz + " MHz" : "");
                 if (monFpsOn && FpsMon.Status.Length > 0) monFpsTxt.Text = FpsMon.Status + (FpsMon.Fps > 0 ? "  -  " + FpsMon.Fps + " FPS" : "");
                 monRamBar.Set(smp.RamPct); monRamTxt.Text = smp.RamUsedGB.ToString("0.0") + " / " + smp.RamTotalGB.ToString("0") + " GB (" + smp.RamPct + "%)";
                 if (smp.GpuOk) {
@@ -1124,7 +1244,7 @@ namespace StarMaster {
             string cn = CleanName(s.CpuName), gn = CleanName(s.GpuName);
             int w = System.Math.Max(System.Math.Max(cn.Length, gn.Length), 4) + 1;   // shared name-column width => the % column lines up no matter the name lengths
             cpu.Foreground = BrandColor(s.CpuName);
-            cpu.Text = Row(cn, w, (int)(s.CpuTotal + 0.5), -1, -1, s.CpuMhz);   // CPU temp/watts not readable without a driver -> blank columns (kept aligned)
+            cpu.Text = Row(cn, w, (int)(s.CpuTotal + 0.5), s.CpuTempC, s.CpuPowerW, s.CpuMhz);   // temp/watts present only when HWiNFO is running; else -1 -> blank (aligned)
             ram.Text = "RAM".PadRight(w) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
             if (s.GpuOk) {
                 gpu.Foreground = BrandColor(s.GpuName);

@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.IO.MemoryMappedFiles;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -24,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("39.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("39.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("40.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("40.0.0.0")]
 
 namespace StarMaster {
 
@@ -281,12 +282,27 @@ namespace StarMaster {
         const string PmUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe";
         const string MsCol = "msBetweenPresents";
         static System.Threading.Thread reader; static volatile bool running; static volatile int fps;
-        static volatile bool gotFrames; static bool adminMode; static DateTime startedAt; static string procName = "StarCitizen.exe";
-        static string csvPath;
+        static volatile bool gotFrames; static string csvPath;
         public static volatile string Status = "";
         public static int Fps { get { return fps; } }
         public static bool Running { get { return running; } }
+        public static bool GotFrames { get { return gotFrames; } }
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
+
+        // Is the current user in "Performance Log Users"? If so, PresentMon can capture without elevation - no per-session UAC.
+        public static bool PerfAccess() {
+            try { return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(new SecurityIdentifier(WellKnownSidType.BuiltinPerformanceLoggingUsersSid, null)); } catch { return true; }
+        }
+        // one-time: add this user to "Performance Log Users" (elevated -> single UAC). Returns net.exe exit code (0 added, 2 already a member, else fail/declined).
+        public static int GrantPerfAccess() {
+            try {
+                string g = new SecurityIdentifier(WellKnownSidType.BuiltinPerformanceLoggingUsersSid, null).Translate(typeof(NTAccount)).ToString();
+                int bs = g.IndexOf('\\'); if (bs >= 0) g = g.Substring(bs + 1);
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c net localgroup \"" + g + "\" \"" + WindowsIdentity.GetCurrent().Name + "\" /add");
+                psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+                System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi); p.WaitForExit(); return p.ExitCode;
+            } catch { return -1; }   // includes the user declining the UAC prompt
+        }
 
         static bool EnsurePm() {
             string p = PmPath();
@@ -300,32 +316,26 @@ namespace StarMaster {
             } catch (Exception ex) { Status = "PresentMon download failed: " + ex.Message; return false; }
         }
 
-        // Start non-elevated (no UAC). Capturing frames needs admin on most PCs; if no frames arrive in a few seconds,
-        // MonTick calls StartAdmin() to relaunch elevated (one UAC consent). PresentMon writes CSV to a temp file (via cmd
-        // redirect, which - unlike PresentMon's own --output_file - allows our concurrent read), and we tail that file.
-        public static void Start(string pn) { Launch(pn, false); }
-        public static void StartAdmin(string pn) { Launch(pn, true); }
-        // true when the non-elevated attempt produced no frames and we should escalate (called from the UI tick)
-        public static bool NeedsAdminRetry() { return running && !gotFrames && !adminMode && (DateTime.Now - startedAt).TotalSeconds > 6; }
-
-        static void Launch(string pn, bool elevated) {
+        // Always non-elevated. PresentMon writes CSV to a temp file via a cmd redirect (which - unlike PresentMon's own
+        // --output_file - allows our concurrent read), and we tail it. Works with no UAC once the user is in Performance
+        // Log Users (the one-time GrantPerfAccess setup); otherwise the trace silently captures nothing.
+        public static void Start(string pn) {
             KillProc();
             if (!EnsurePm()) return;
-            procName = pn; adminMode = elevated; gotFrames = false; fps = 0; running = true; startedAt = DateTime.Now;
-            Status = elevated ? "Starting (admin)..." : "Waiting for frames...";
+            gotFrames = false; fps = 0; running = true;
+            Status = "Waiting for frames...";
             try {
                 csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
                 string pmArgs = "--stop_existing_session --session_name StarMasterFPS --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + pn + " --output_stdout";
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd.exe");
                 psi.Arguments = "/c \"\"" + PmPath() + "\" " + pmArgs + " > \"" + csvPath + "\"\"";
                 psi.UseShellExecute = true; psi.CreateNoWindow = true; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-                if (elevated) psi.Verb = "runas";
                 System.Diagnostics.Process.Start(psi);
                 reader = new System.Threading.Thread(ReadLoop); reader.IsBackground = true; reader.Start();
-            } catch (Exception ex) { Status = elevated ? "Admin declined - FPS off" : ("FPS start failed: " + ex.Message); running = false; }
+            } catch (Exception ex) { Status = "FPS start failed: " + ex.Message; running = false; }
         }
 
-        public static void Stop() { running = false; fps = 0; gotFrames = false; adminMode = false; Status = ""; KillProc(); }
+        public static void Stop() { running = false; fps = 0; gotFrames = false; Status = ""; KillProc(); }
         static void KillProc() {
             // best effort: terminate our PresentMon (own-integrity ones). Elevated ones self-exit when SC exits or on the next --stop_existing_session.
             try { foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName("PresentMon")) { try { if (!p.HasExited) p.Kill(); } catch { } } } catch { }
@@ -461,7 +471,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "39";
+        public const string Version = "40";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -485,7 +495,7 @@ namespace StarMaster {
         bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
         TextBox monCpuNameBox, monGpuNameBox;
-        bool monFpsOn = true, fpsEscalated = false; TextBlock monFpsTxt;
+        bool monFpsOn = true; TextBlock monFpsTxt; Border monFpsBtn;
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
@@ -685,10 +695,11 @@ namespace StarMaster {
             body.Children.Add(NameColorRow(monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
             monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; }; body.Children.Add(LabeledField("GPU name", monGpuNameBox));
             body.Children.Add(NameColorRow(monGpuNameCol, delegate (string h) { monGpuNameCol = h; }));
-            // FPS via PresentMon (self-elevates -> one UAC prompt). Off by default; not persisted (so no surprise UAC on launch).
+            // FPS via PresentMon (reads frames via ETW). Needs the user in "Performance Log Users" - a one-time setup the button does.
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
             fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Margin = new Thickness(16, 0, 0, 0); monFpsBtn.VerticalAlignment = VerticalAlignment.Center; monFpsBtn.Visibility = Visibility.Collapsed; fp.Children.Add(monFpsBtn);
             body.Children.Add(fp);
             monFpsTxt = new TextBlock { Text = "uses PresentMon (downloaded on first use); shows while Star Citizen is running", Foreground = Ui.Faint, FontSize = 11, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
             body.Children.Add(monFpsTxt);
@@ -769,9 +780,33 @@ namespace StarMaster {
         void SetOverlayStyle() { if (monWin != null) monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); }
         // turn FPS on/off (PresentMon, off the UI thread - download + UAC can block)
         void ToggleFps(bool on) {
-            monFpsOn = on; fpsEscalated = false;
+            monFpsOn = on;
             if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); }
-            else { FpsMon.Stop(); if (monFpsTxt != null) monFpsTxt.Text = "uses PresentMon (downloaded on first use); shows while Star Citizen is running"; }
+            else { FpsMon.Stop(); }
+            UpdateFpsUi();
+        }
+        void UpdateFpsUi() {
+            if (monFpsTxt == null) return;
+            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Text = "frame rate overlay - off"; return; }
+            if (!FpsMon.PerfAccess()) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
+                monFpsBtn.Visibility = Visibility.Visible;
+                monFpsTxt.Text = "FPS needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
+            } else {
+                monFpsBtn.Visibility = Visibility.Collapsed;
+                monFpsTxt.Text = FpsMon.GotFrames ? ("running  -  " + FpsMon.Fps + " FPS") : (FpsMon.Status.Length > 0 ? FpsMon.Status : "waiting for Star Citizen...");
+            }
+        }
+        // one-time: add the user to Performance Log Users so PresentMon can capture without elevation thereafter
+        void EnableFpsAccess() {
+            if (monFpsTxt != null) monFpsTxt.Text = "requesting admin (one time)...";
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                int r = FpsMon.GrantPerfAccess();
+                Dispatcher.BeginInvoke(new Action(delegate {
+                    if (r == 0 || r == 2) ShowAlert("FPS enabled", "Done! Sign out and back in (or restart the PC) once, and the frame-rate overlay will work every session automatically - no more prompts.");
+                    else ShowAlert("Setup not completed", "Couldn't enable FPS access (the admin prompt may have been declined). Click \"Enable FPS\" and choose Yes to try again.");
+                    UpdateFpsUi();
+                }));
+            });
         }
         // launch/get HWiNFO depending on detected state
         void HwAction() {
@@ -801,7 +836,6 @@ namespace StarMaster {
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
-            if (monFpsOn && !fpsEscalated && FpsMon.NeedsAdminRetry()) { fpsEscalated = true; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.StartAdmin("StarCitizen.exe"); }); }   // no frames non-elevated -> escalate (one UAC)
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
             bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
             if (++hwTick >= 5) { hwTick = 0; HwInfo.RefreshState(sm); }   // heavier state check every ~5s
@@ -809,7 +843,7 @@ namespace StarMaster {
                 if (hwTick == 0) UpdateHwUi();
                 // clean preview: 4 equal bars, each with just its primary value (full detail is in the overlay)
                 monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = (int)(smp.CpuTotal + 0.5) + " %";
-                if (monFpsOn && FpsMon.Status.Length > 0) monFpsTxt.Text = FpsMon.Status + (FpsMon.Fps > 0 ? "  -  " + FpsMon.Fps + " FPS" : "");
+                UpdateFpsUi();
                 monRamBar.Set(smp.RamPct); monRamTxt.Text = smp.RamUsedGB.ToString("0.0") + " / " + smp.RamTotalGB.ToString("0") + " GB (" + smp.RamPct + "%)";
                 if (smp.GpuOk) {
                     monGpuBar.Set(smp.GpuPct); monGpuTxt.Text = smp.GpuPct + " %";

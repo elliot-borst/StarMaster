@@ -23,8 +23,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("30.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("30.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("31.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("31.0.0.0")]
 
 namespace StarMaster {
 
@@ -356,7 +356,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "30";
+        public const string Version = "31";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -564,7 +564,7 @@ namespace StarMaster {
             // FPS via PresentMon (self-elevates -> one UAC prompt). Off by default; not persisted (so no surprise UAC on launch).
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
-            fp.Children.Add(new TextBlock { Text = "  Frame rate (FPS)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(fp);
             monFpsTxt = new TextBlock { Text = "uses PresentMon - asks for admin once when turned on", Foreground = Ui.Faint, FontSize = 11, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
             body.Children.Add(monFpsTxt);

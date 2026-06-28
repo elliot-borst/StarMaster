@@ -55,7 +55,7 @@ namespace StarMaster {
         }
     }
 
-    public class Cmd { public string Label = "Command"; public bool Shift, Ctrl, Alt; public string Key = ""; public int Interval = 600; public bool Enabled = true; public DateTime LastFire = DateTime.MinValue; }
+    public class Cmd { public string Label = "Command"; public bool Shift, Ctrl, Alt; public string Key = ""; public int Interval = 600; public bool Enabled = true; public DateTime LastFire = DateTime.MinValue; public bool Locked; }
 
     class TimedWebClient : WebClient {
         protected override WebRequest GetWebRequest(Uri address) {
@@ -165,8 +165,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "21";
-        public const string VersionDate = "2026-06-20";   // bump alongside Version at release time
+        public const string Version = "22";
+        public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -297,7 +297,7 @@ namespace StarMaster {
         // the add/edit-keystroke form, in-app (was a separate AddKeyDialog window)
         void ShowKeyForm(Cmd edit, Action<Cmd> onSave) {
             StackPanel s = DialogShell(edit == null ? "Add keystroke" : "Edit keystroke", 360);
-            s.Children.Add(FormLbl("Label")); TextBox label = FormTb(edit != null ? edit.Label : ""); s.Children.Add(label);
+            s.Children.Add(FormLbl(edit != null && edit.Locked ? "Label  (built-in - fixed)" : "Label")); TextBox label = FormTb(edit != null ? edit.Label : ""); if (edit != null && edit.Locked) { label.IsReadOnly = true; label.Opacity = 0.6; } s.Children.Add(label);
             bool[] sh = { edit != null && edit.Shift }, ct = { edit != null && edit.Ctrl }, al = { edit != null && edit.Alt };
             StackPanel mods = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             mods.Children.Add(ModBtn("Shift", sh)); mods.Children.Add(ModBtn("Ctrl", ct)); mods.Children.Add(ModBtn("Alt", al));
@@ -401,13 +401,18 @@ namespace StarMaster {
             DockPanel.SetDock(left, Dock.Left); d.Children.Add(left);
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
             Border tg = Toggle(c.Enabled, delegate (bool v) { cc.Enabled = v; row.Opacity = v ? 1.0 : 0.6; }); tg.Margin = new Thickness(0, 0, 10, 0); right.Children.Add(tg);
-            Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            del.MouseLeftButtonUp += delegate { commands.Remove(cc); RefreshCommands(); }; right.Children.Add(del);
+            if (c.Locked) {
+                // built-in default: no delete button, just a lock glyph so it's clear why
+                right.Children.Add(new TextBlock { Text = "🔒", Foreground = Ui.Faint, FontSize = 12, Width = 22, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Built-in keystroke (can't be removed)" });
+            } else {
+                Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+                del.MouseLeftButtonUp += delegate { commands.Remove(cc); RefreshCommands(); }; right.Children.Add(del);
+            }
             DockPanel.SetDock(right, Dock.Right); d.Children.Add(right);
             row.Child = d; return row;
         }
         void AddKey() { ShowKeyForm(null, delegate (Cmd r) { commands.Add(r); RefreshCommands(); }); }
-        void EditKey(Cmd c) { ShowKeyForm(c, delegate (Cmd r) { int i = commands.IndexOf(c); r.Enabled = c.Enabled; r.LastFire = c.LastFire; commands[i] = r; RefreshCommands(); }); }
+        void EditKey(Cmd c) { ShowKeyForm(c, delegate (Cmd r) { int i = commands.IndexOf(c); r.Enabled = c.Enabled; r.LastFire = c.LastFire; r.Locked = c.Locked; if (c.Locked) r.Label = c.Label; commands[i] = r; RefreshCommands(); }); }
         string Combo(Cmd c) { List<string> p = new List<string>(); if (c.Shift) p.Add("Shift"); if (c.Ctrl) p.Add("Ctrl"); if (c.Alt) p.Add("Alt"); p.Add(c.Key); return string.Join("+", p.ToArray()); }
 
         void ToggleRun() {
@@ -672,7 +677,19 @@ namespace StarMaster {
                     else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } }
                 }
             } catch { }
-            if (commands.Count == 0) { commands.Add(new Cmd { Label = "Wipe Visor", Alt = true, Key = "X", Interval = 600, Enabled = true }); commands.Add(new Cmd { Label = "Auto Accept", Key = "[", Interval = 1, Enabled = false }); }
+            // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
+            foreach (Cmd def in DefaultCmds()) {
+                Cmd existing = null;
+                foreach (Cmd c in commands) if (string.Equals(c.Label, def.Label, StringComparison.OrdinalIgnoreCase)) { existing = c; break; }
+                if (existing == null) commands.Add(def); else existing.Locked = true;
+            }
+        }
+        // The built-in keystrokes that every user gets and cannot delete. Enabled-state and key/interval stay user-editable; the label is fixed (so back-fill matching stays stable).
+        static Cmd[] DefaultCmds() {
+            return new Cmd[] {
+                new Cmd { Label = "Wipe Visor", Alt = true, Key = "X", Interval = 600, Enabled = true, Locked = true },
+                new Cmd { Label = "Auto Accept", Key = "[", Interval = 1, Enabled = false, Locked = true },
+            };
         }
         void SaveConfig() {
             try {

@@ -23,8 +23,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("31.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("31.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("32.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("32.0.0.0")]
 
 namespace StarMaster {
 
@@ -356,7 +356,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "31";
+        public const string Version = "32";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1121,19 +1121,21 @@ namespace StarMaster {
         static TextBlock Line(Brush fg) { return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, Foreground = fg, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 1) }; }
         public void Update(SysMon.Sample s) {
             if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
+            string cn = CleanName(s.CpuName), gn = CleanName(s.GpuName);
+            int w = System.Math.Max(System.Math.Max(cn.Length, gn.Length), 4) + 1;   // shared name-column width => the % column lines up no matter the name lengths
             cpu.Foreground = BrandColor(s.CpuName);
-            cpu.Text = Row(CleanName(s.CpuName), (int)(s.CpuTotal + 0.5), -1, -1, s.CpuMhz);   // CPU temp/watts not readable without a driver -> blank columns (kept aligned)
-            ram.Text = "RAM".PadRight(19) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
+            cpu.Text = Row(cn, w, (int)(s.CpuTotal + 0.5), -1, -1, s.CpuMhz);   // CPU temp/watts not readable without a driver -> blank columns (kept aligned)
+            ram.Text = "RAM".PadRight(w) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
             if (s.GpuOk) {
                 gpu.Foreground = BrandColor(s.GpuName);
-                gpu.Text = Row(CleanName(s.GpuName), s.GpuPct, s.GpuTempC, s.GpuPowerW, s.GpuCoreMhz);
-                vram.Text = "VRAM".PadRight(19) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
+                gpu.Text = Row(gn, w, s.GpuPct, s.GpuTempC, s.GpuPowerW, s.GpuCoreMhz);
+                vram.Text = "VRAM".PadRight(w) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
                 vram.Visibility = Visibility.Visible;
-            } else { gpu.Text = "GPU".PadRight(19) + "n/a"; vram.Visibility = Visibility.Collapsed; }
+            } else { gpu.Text = "GPU".PadRight(w) + "n/a"; vram.Visibility = Visibility.Collapsed; }
         }
-        // one aligned row: NAME(18) PCT% TEMP°C WATTW MHz - missing fields (-1) become equal-width blanks so columns line up
-        static string Row(string name, int pct, int temp, int watt, int mhz) {
-            string r = PadName(name) + Pad(pct) + "% ";
+        // one aligned row: NAME(w) PCT% TEMP°C WATTW MHz - missing fields (-1) become equal-width blanks so columns line up
+        static string Row(string name, int w, int pct, int temp, int watt, int mhz) {
+            string r = name.PadRight(w) + Pad(pct) + "% ";
             r += (temp >= 0 ? Pad(temp) + "°C " : "      ");
             r += (watt >= 0 ? watt.ToString().PadLeft(4) + "W " : "      ");
             r += (mhz > 0 ? mhz + "MHz" : "");
@@ -1147,7 +1149,6 @@ namespace StarMaster {
             s = s.Replace(" Processor", "").Replace(" CPU", "");
             return System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ").Trim();
         }
-        static string PadName(string s) { return (s.Length < 18 ? s.PadRight(18) : s) + " "; }   // align without ever truncating
         static Brush BrandColor(string n) {
             if (n == null) return Ui.Text;
             if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#5bbcff");   // Intel = blue

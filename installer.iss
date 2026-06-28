@@ -8,7 +8,7 @@
 ;   3. Out pops StarMaster-Setup.exe in this folder - that's the installer you can run/share.
 
 #define MyAppName "StarMaster"
-#define MyAppVersion "35"
+#define MyAppVersion "36"
 #define MyAppExe "StarMaster.exe"
 #define MyAppPublisher "Elliot Borst"
 

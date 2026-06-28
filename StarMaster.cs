@@ -17,6 +17,15 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using Path = System.IO.Path;
 
+// embedded version info -> Task Manager shows the name (FileDescription/Product) + Publisher (Company). Bump AssemblyFileVersion with the release.
+[assembly: System.Reflection.AssemblyTitle("StarMaster")]
+[assembly: System.Reflection.AssemblyProduct("StarMaster")]
+[assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
+[assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
+[assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
+[assembly: System.Reflection.AssemblyFileVersion("30.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("30.0.0.0")]
+
 namespace StarMaster {
 
     // ===== reused logic (UI-agnostic) =====
@@ -347,7 +356,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "29";
+        public const string Version = "30";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1097,6 +1106,7 @@ namespace StarMaster {
     public class MonWindow : Window {
         TextBlock fpsLine, cpu, ram, gpu, vram; bool locked; Border box;
         public MonWindow() {
+            Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
@@ -1112,14 +1122,22 @@ namespace StarMaster {
         public void Update(SysMon.Sample s) {
             if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
             cpu.Foreground = BrandColor(s.CpuName);
-            cpu.Text = PadName(CleanName(s.CpuName)) + Pad((int)(s.CpuTotal + 0.5)) + "%" + (s.CpuMhz > 0 ? "  " + s.CpuMhz + "MHz" : "");
+            cpu.Text = Row(CleanName(s.CpuName), (int)(s.CpuTotal + 0.5), -1, -1, s.CpuMhz);   // CPU temp/watts not readable without a driver -> blank columns (kept aligned)
             ram.Text = "RAM".PadRight(19) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
             if (s.GpuOk) {
                 gpu.Foreground = BrandColor(s.GpuName);
-                gpu.Text = PadName(CleanName(s.GpuName)) + Pad(s.GpuPct) + "%  " + s.GpuTempC + "°C  " + s.GpuPowerW + "W  " + s.GpuCoreMhz + "MHz";
+                gpu.Text = Row(CleanName(s.GpuName), s.GpuPct, s.GpuTempC, s.GpuPowerW, s.GpuCoreMhz);
                 vram.Text = "VRAM".PadRight(19) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
                 vram.Visibility = Visibility.Visible;
             } else { gpu.Text = "GPU".PadRight(19) + "n/a"; vram.Visibility = Visibility.Collapsed; }
+        }
+        // one aligned row: NAME(18) PCT% TEMP°C WATTW MHz - missing fields (-1) become equal-width blanks so columns line up
+        static string Row(string name, int pct, int temp, int watt, int mhz) {
+            string r = PadName(name) + Pad(pct) + "% ";
+            r += (temp >= 0 ? Pad(temp) + "°C " : "      ");
+            r += (watt >= 0 ? watt.ToString().PadLeft(4) + "W " : "      ");
+            r += (mhz > 0 ? mhz + "MHz" : "");
+            return r;
         }
         // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"
         static string CleanName(string s) {

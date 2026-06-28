@@ -269,7 +269,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "25";
+        public const string Version = "26";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -463,15 +463,16 @@ namespace StarMaster {
         // ---------- system monitor card (full-width; it's the control panel - the live numbers live in the over-the-game OSD overlay) ----------
         FrameworkElement SystemMonitorCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "▦", "System Monitor", "live overlay over the game - CPU / RAM / GPU (no injection)");
-            // header right: the overlay + click-through toggles
-            StackPanel hr = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            hr.Children.Add(new TextBlock { Text = "Show overlay", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-            hr.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }));
-            hr.Children.Add(new TextBlock { Text = "Lock", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 8, 0) });
-            hr.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
-            DockPanel.SetDock(hr, Dock.Right); head.Children.Add(hr);
-
-            body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock to click through it into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 14) });
+            body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock to click through it into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
+            // overlay controls (in the body - the narrow column header has no room for them)
+            StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }));
+            ov.Children.Add(new TextBlock { Text = "  Show overlay over the game", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(ov);
+            StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+            lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
+            lk.Children.Add(new TextBlock { Text = "  Lock (click through into the game)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(lk);
 
             int n = Environment.ProcessorCount;
             body.Children.Add(MetricRow("CPU", out monCpuBar, out monCpuTxt));
@@ -627,12 +628,13 @@ namespace StarMaster {
             bkChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, "LIVE", 120); r1.Children.Add(bkChannel); r1.Children.Add(Sp(9));
             Border bk = Btn("Back up now", Ui.AccentGrad(), Ui.Ink, true, delegate { DoBackup(); }); bk.Padding = new Thickness(15, 8, 15, 8); r1.Children.Add(bk);
             body.Children.Add(r1);
-            StackPanel r2 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+            StackPanel r2 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             cpFrom = new Dropdown(new string[] { "LIVE (current)" }, "LIVE (current)", 150); r2.Children.Add(cpFrom);
             r2.Children.Add(new TextBlock { Text = "  →  ", Foreground = Ui.Accent, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
-            cpTo = new Dropdown(new string[] { "HOTFIX" }, "HOTFIX", 110); r2.Children.Add(cpTo); r2.Children.Add(Sp(9));
-            Border cp = Btn("Copy / Restore", Ui.Card2, Ui.Text, false, delegate { DoCopy(); }); cp.Padding = new Thickness(15, 8, 15, 8); r2.Children.Add(cp);
+            cpTo = new Dropdown(new string[] { "HOTFIX" }, "HOTFIX", 110); r2.Children.Add(cpTo);
             body.Children.Add(r2);
+            // button on its own line so it never overflows the (now narrower) card
+            Border cp = Btn("Copy / Restore", Ui.Card2, Ui.Text, false, delegate { DoCopy(); }); cp.Padding = new Thickness(15, 8, 15, 8); cp.HorizontalAlignment = HorizontalAlignment.Left; cp.Margin = new Thickness(0, 0, 0, 12); body.Children.Add(cp);
             bkStatus = new TextBlock { Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) }; body.Children.Add(bkStatus);
             DockPanel rb = new DockPanel { LastChildFill = false }; TextBlock rc = Caps("Recent backups"); DockPanel.SetDock(rc, Dock.Left); rb.Children.Add(rc);
             Border openFld = new Border { Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Right, Child = new TextBlock { Text = "Open folder ↗", Foreground = Ui.Accent2, FontSize = 11 } };
@@ -988,17 +990,25 @@ namespace StarMaster {
         }
         static TextBlock Line(Brush fg) { return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, Foreground = fg, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 1) }; }
         public void Update(SysMon.Sample s) {
-            cpu.Text = Fit(s.CpuName, 16) + "  " + Pad((int)(s.CpuTotal + 0.5)) + "%";
+            cpu.Text = Fit(Short(s.CpuName), 16) + "  " + Pad((int)(s.CpuTotal + 0.5)) + "%";
             StringBuilder c = new StringBuilder(); for (int i = 0; i < s.Cores.Length; i++) { if (i > 0) c.Append(' '); c.Append(Pad((int)(s.Cores[i] + 0.5))); }
             cores.Text = c.ToString();
             ram.Text = "RAM" + new string(' ', 14) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
             if (s.GpuOk) {
-                gpu.Text = Fit(s.GpuName, 16) + "  " + Pad(s.GpuPct) + "%  " + s.GpuTempC + "°C  " + s.GpuPowerW + "W  " + s.GpuCoreMhz + "MHz";
+                gpu.Text = Fit(Short(s.GpuName), 16) + "  " + Pad(s.GpuPct) + "%  " + s.GpuTempC + "°C  " + s.GpuPowerW + "W  " + s.GpuCoreMhz + "MHz";
                 vram.Text = "VRAM" + new string(' ', 13) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
                 vram.Visibility = Visibility.Visible;
             } else { gpu.Text = "GPU              n/a"; vram.Visibility = Visibility.Collapsed; }
         }
         static string Fit(string s, int w) { if (s == null) s = ""; if (s.Length > w) return s.Substring(0, w); return s.PadRight(w); }
+        // drop the vendor prefix so the model name fits the OSD (e.g. "NVIDIA GeForce RTX 5090" -> "RTX 5090", "AMD Ryzen 7 9800X3D" -> "Ryzen 7 9800X3D")
+        static string Short(string s) {
+            if (s == null) return "";
+            if (s.StartsWith("NVIDIA GeForce ")) return s.Substring(15);
+            if (s.StartsWith("NVIDIA ")) return s.Substring(7);
+            if (s.StartsWith("AMD ")) return s.Substring(4);
+            return s;
+        }
         static string Pad(int v) { return (v < 10 ? "  " : (v < 100 ? " " : "")) + v; }
         public void SetLocked(bool v) { locked = v; Apply(); }
         void Apply() {

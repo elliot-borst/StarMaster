@@ -269,7 +269,7 @@ namespace StarMaster {
     public static class FpsMon {
         const string PmUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe";
         const string MsCol = "msBetweenPresents";
-        static System.Threading.Thread reader; static volatile bool running; static volatile int fps; static string csvPath;
+        static System.Threading.Thread reader; static volatile bool running; static volatile int fps; static System.Diagnostics.Process proc;
         public static volatile string Status = "";
         public static int Fps { get { return fps; } }
         public static bool Running { get { return running; } }
@@ -287,49 +287,49 @@ namespace StarMaster {
             } catch (Exception ex) { Status = "PresentMon download failed: " + ex.Message; return false; }
         }
 
-        // call on a background thread (download + ShellExecute can block)
+        // call on a background thread (download can block). PresentMon runs hidden (CreateNoWindow) and writes frame data to STDOUT,
+        // which we read directly - avoids PresentMon's exclusive lock on --output_file. No elevation needed for a normal game process.
         public static void Start(string processName) {
-            running = false; fps = 0;
+            Stop();
             if (!EnsurePm()) return;
             try {
-                csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath());
-                psi.Arguments = "--restart_as_admin --session_name StarMasterFPS --stop_existing_session --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + processName + " --output_file \"" + csvPath + "\"";
-                psi.UseShellExecute = true; psi.CreateNoWindow = true; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-                System.Diagnostics.Process.Start(psi);   // PresentMon shows the UAC prompt itself (restart_as_admin)
+                psi.Arguments = "--stop_existing_session --session_name StarMasterFPS --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + processName + " --output_stdout";
+                psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
+                proc = new System.Diagnostics.Process(); proc.StartInfo = psi;
+                proc.Start();
                 Status = "Waiting for frames (is Star Citizen running?)...";
-                running = true;
+                running = true; fps = 0;
                 reader = new System.Threading.Thread(ReadLoop); reader.IsBackground = true; reader.Start();
             } catch (Exception ex) { Status = "FPS start failed: " + ex.Message; running = false; }
         }
-        public static void Stop() { running = false; fps = 0; Status = ""; }   // the elevated PresentMon self-terminates when the game exits
+        public static void Stop() {
+            running = false; fps = 0; Status = "";
+            try { if (proc != null && !proc.HasExited) proc.Kill(); } catch { }
+            try { if (proc != null) proc.Dispose(); } catch { }
+            proc = null;
+        }
 
         static void ReadLoop() {
-            long pos = 0; int msCol = -1; string leftover = ""; List<double> win = new List<double>(); int idle = 0;
-            while (running) {
-                try {
-                    if (csvPath != null && File.Exists(csvPath)) {
-                        bool got = false;
-                        using (FileStream fs = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-                            if (fs.Length > pos) {
-                                fs.Seek(pos, SeekOrigin.Begin);
-                                byte[] buf = new byte[fs.Length - pos]; int read = fs.Read(buf, 0, buf.Length); pos += read;
-                                string[] lines = (leftover + System.Text.Encoding.ASCII.GetString(buf, 0, read)).Split('\n');
-                                for (int i = 0; i < lines.Length - 1; i++) {
-                                    string line = lines[i].TrimEnd('\r'); if (line.Length == 0) continue;
-                                    if (msCol < 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } continue; }
-                                    string[] f = line.Split(','); double ms;
-                                    if (msCol >= 0 && msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) { win.Add(ms); while (win.Count > 40) win.RemoveAt(0); got = true; }
-                                }
-                                leftover = lines[lines.Length - 1];
-                            }
-                        }
-                        if (got) { double sum = 0; for (int i = 0; i < win.Count; i++) sum += win[i]; if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5); Status = "running"; idle = 0; }
-                        else if (++idle > 6) { fps = 0; }   // no new frames for ~2s -> game not presenting
+            int msCol = -1; List<double> win = new List<double>();
+            try {
+                System.IO.StreamReader sr = proc.StandardOutput;
+                string line;
+                while (running && (line = sr.ReadLine()) != null) {
+                    if (line.Length == 0) continue;
+                    if (msCol < 0) {
+                        if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } }
+                        continue;
                     }
-                } catch { }
-                System.Threading.Thread.Sleep(350);
-            }
+                    string[] f = line.Split(','); double ms;
+                    if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
+                        win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
+                        double sum = 0; for (int i = 0; i < win.Count; i++) sum += win[i];
+                        if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
+                        Status = "running";
+                    }
+                }
+            } catch { }
         }
     }
 
@@ -347,7 +347,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "28";
+        public const string Version = "29";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;

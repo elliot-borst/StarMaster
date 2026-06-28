@@ -24,8 +24,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("34.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("34.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("35.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("35.0.0.0")]
 
 namespace StarMaster {
 
@@ -282,6 +282,9 @@ namespace StarMaster {
         static System.Threading.Thread reader; static volatile bool running; static volatile int fps; static System.Diagnostics.Process proc;
         public static volatile string Status = "";
         public static int Fps { get { return fps; } }
+        static readonly double[] hist = new double[160]; static int histHead; static readonly object histLock = new object();   // rolling frametimes (ms) for the graph
+        static void PushFrame(double ms) { lock (histLock) { hist[histHead] = ms; histHead = (histHead + 1) % hist.Length; } }
+        public static double[] FrameTimes() { double[] r = new double[hist.Length]; lock (histLock) { for (int i = 0; i < hist.Length; i++) r[i] = hist[(histHead + i) % hist.Length]; } return r; }   // oldest..newest
         public static bool Running { get { return running; } }
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
 
@@ -301,6 +304,7 @@ namespace StarMaster {
         // which we read directly - avoids PresentMon's exclusive lock on --output_file. No elevation needed for a normal game process.
         public static void Start(string processName) {
             Stop();
+            lock (histLock) { Array.Clear(hist, 0, hist.Length); histHead = 0; }
             if (!EnsurePm()) return;
             try {
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath());
@@ -333,6 +337,7 @@ namespace StarMaster {
                     }
                     string[] f = line.Split(','); double ms;
                     if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
+                        PushFrame(ms);
                         win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
                         double sum = 0; for (int i = 0; i < win.Count; i++) sum += win[i];
                         if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
@@ -441,7 +446,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "34";
+        public const string Version = "35";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -461,6 +466,9 @@ namespace StarMaster {
         TextBlock monCpuTxt, monRamTxt, monGpuTxt, monVramTxt, monGpuDetail;
         MonWindow monWin; bool monOverlayOn = false, monLocked = false; double monOvX = 60, monOvY = 60;
         int monOvAlpha = 85; string monOvColor = "0a0e18";   // overlay background opacity (0-100, 10% steps) + colour
+        bool monColors = true;   // overlay colours: brand names + load tiers; off = all white
+        bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
+        TextBox monCpuNameBox, monGpuNameBox;
         bool monFpsOn = false; TextBlock monFpsTxt;
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
@@ -647,6 +655,17 @@ namespace StarMaster {
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
             lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(lk);
+            StackPanel cl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            cl.Children.Add(Toggle(monColors, delegate (bool v) { monColors = v; if (monWin != null) monWin.SetColors(v); }));
+            cl.Children.Add(new TextBlock { Text = "  Show Colours", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(cl);
+            // custom CPU/GPU display names
+            StackPanel no = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            no.Children.Add(Toggle(monNameOvr, delegate (bool v) { monNameOvr = v; if (monCpuNameBox != null) monCpuNameBox.IsEnabled = v; if (monGpuNameBox != null) monGpuNameBox.IsEnabled = v; }));
+            no.Children.Add(new TextBlock { Text = "  Override names (blank = detected)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(no);
+            monCpuNameBox = TextField(monCpuName); monCpuNameBox.IsEnabled = monNameOvr; monCpuNameBox.TextChanged += delegate { monCpuName = monCpuNameBox.Text; }; body.Children.Add(LabeledField("CPU name", monCpuNameBox));
+            monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; }; body.Children.Add(LabeledField("GPU name", monGpuNameBox));
             // FPS via PresentMon (self-elevates -> one UAC prompt). Off by default; not persisted (so no surprise UAC on launch).
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
@@ -707,7 +726,7 @@ namespace StarMaster {
         void SetOverlay(bool on) {
             if (on) {
                 if (monWin == null) { monWin = new MonWindow(); monWin.Left = monOvX; monWin.Top = monOvY; monWin.Closed += delegate { if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; } monWin = null; }; }
-                monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor);
+                monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor); monWin.SetColors(monColors);
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
         }
         void SetOverlayStyle() { if (monWin != null) monWin.SetStyle(monOvAlpha, monOvColor); }
@@ -745,6 +764,7 @@ namespace StarMaster {
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
+            if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; }
             bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
             if (++hwTick >= 5) { hwTick = 0; HwInfo.RefreshState(sm); }   // heavier state check every ~5s
             if (IsVisible) {
@@ -1106,7 +1126,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -1142,6 +1162,10 @@ namespace StarMaster {
                 sb.AppendLine("mon_ovy=" + (int)monOvY);
                 sb.AppendLine("mon_ovalpha=" + monOvAlpha);
                 sb.AppendLine("mon_ovcolor=" + monOvColor);
+                sb.AppendLine("mon_colors=" + (monColors ? "1" : "0"));
+                sb.AppendLine("mon_nameovr=" + (monNameOvr ? "1" : "0"));
+                sb.AppendLine("mon_cpuname=" + (monCpuNameBox != null ? monCpuNameBox.Text : monCpuName));
+                sb.AppendLine("mon_gpuname=" + (monGpuNameBox != null ? monGpuNameBox.Text : monGpuName));
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
                 File.WriteAllText(cfgPath, sb.ToString());
@@ -1226,15 +1250,24 @@ namespace StarMaster {
 
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
-        TextBlock fpsLine; TextBlock[] cpuC, gpuC; bool locked; Border box;
+        TextBlock fpsLine; TextBlock[] cpuC, gpuC; bool locked, colors = true; Border box;
+        Grid topRow; Canvas ftBox; System.Windows.Shapes.Polyline ftLine;   // FPS + frametime graph
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
-            box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
+            box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
             StackPanel s = new StackPanel();
-            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.B("#ff5bd6"), Margin = new Thickness(0, 0, 0, 3), Visibility = Visibility.Collapsed };
-            s.Children.Add(fpsLine);
+            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, VerticalAlignment = VerticalAlignment.Center };
+            // top row: FPS on the left, frametime graph filling the space to its right
+            Grid top = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); top.ColumnDefinitions.Add(new ColumnDefinition());
+            Grid.SetColumn(fpsLine, 0); top.Children.Add(fpsLine);
+            ftBox = new Canvas { Height = 30, Margin = new Thickness(20, 2, 0, 0), ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
+            ftLine = new System.Windows.Shapes.Polyline { StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round };
+            ftBox.Children.Add(ftLine); Grid.SetColumn(ftBox, 1); top.Children.Add(ftBox);
+            topRow = top; topRow.Visibility = Visibility.Collapsed;   // shown only when FPS is on
+            s.Children.Add(top);
             // 2 rows (CPU+RAM, GPU+VRAM) x 6 columns: Name | % | C | MEM | W | MHz. Auto columns => CPU and GPU line up; each cell coloured independently.
             Grid g = new Grid();
             for (int c = 0; c < 6; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1254,20 +1287,39 @@ namespace StarMaster {
                 TextAlignment = name ? TextAlignment.Left : TextAlignment.Right, HorizontalAlignment = name ? HorizontalAlignment.Left : HorizontalAlignment.Right,
                 Margin = new Thickness(name ? 0 : 16, 1, 0, 1) };
         }
-        public void Update(SysMon.Sample s) {
-            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
-            Set(cpuC, CleanName(s.CpuName), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, s.CpuMhz);
-            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, s.GpuCoreMhz);
-            else Set(gpuC, CleanName(s.GpuName), -1, -1, 0, 0, -1, -1, 0);
+        public void SetColors(bool v) { colors = v; }
+        // frametime sparkline from PresentMon's per-frame data; spikes (high ms) go up. Auto-scaled within [16.7, 50] ms.
+        void DrawFrametime() {
+            double w = ftBox.ActualWidth, h = ftBox.ActualHeight; if (w < 8 || h < 4) return;
+            double[] ft = FpsMon.FrameTimes();
+            double max = 16.7; for (int i = 0; i < ft.Length; i++) if (ft[i] > max) max = ft[i]; if (max > 50) max = 50; if (max < 16.7) max = 16.7;
+            PointCollection pts = new PointCollection();
+            int n = ft.Length;
+            for (int i = 0; i < n; i++) { double v = ft[i]; if (v > max) v = max; double x = (double)i / (n - 1) * w; double y = h - (v / max) * h; pts.Add(new Point(x, y)); }
+            ftLine.Points = pts;
+            ftLine.Stroke = colors ? Ui.Accent : Ui.Faint;
         }
-        // fill one row. Only %, temp and MEM change colour (load tiers); name/W/MHz stay white.
-        static void Set(TextBlock[] c, string name, int pct, int temp, double memUsed, double memTot, int memPct, int watt, int mhz) {
-            c[0].Text = name;
-            c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = pct >= 0 ? Ui.Load(pct) : Ui.Text;
-            c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = Ui.LoadT(temp);
-            c[3].Text = memTot > 0 ? memUsed.ToString("0.0") + "/" + memTot.ToString("0") + "GB" : ""; c[3].Foreground = memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
+        public void Update(SysMon.Sample s) {
+            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); topRow.Visibility = Visibility.Visible; DrawFrametime(); } else topRow.Visibility = Visibility.Collapsed;
+            Set(cpuC, CleanName(s.CpuName), colors ? BrandColor(s.CpuName) : Ui.Text, (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, s.CpuMhz, colors);
+            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), colors ? BrandColor(s.GpuName) : Ui.Text, s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, s.GpuCoreMhz, colors);
+            else Set(gpuC, CleanName(s.GpuName), Ui.Text, -1, -1, 0, 0, -1, -1, 0, colors);
+        }
+        // fill one row. With colour on: name=brand, %/temp/MEM=load tiers, W/MHz=white. Colour off: everything white.
+        static void Set(TextBlock[] c, string name, Brush nameBrush, int pct, int temp, double memUsed, double memTot, int memPct, int watt, int mhz, bool color) {
+            c[0].Text = name; c[0].Foreground = nameBrush;
+            c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = color && pct >= 0 ? Ui.Load(pct) : Ui.Text;
+            c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = color ? Ui.LoadT(temp) : Ui.Text;
+            c[3].Text = memTot > 0 ? memUsed.ToString("0.0") + "/" + memTot.ToString("0") + "GB" : ""; c[3].Foreground = color && memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
             c[4].Text = watt >= 0 ? watt + "W" : "";
             c[5].Text = mhz > 0 ? mhz + "MHz" : "";
+        }
+        static Brush BrandColor(string n) {
+            if (n == null) return Ui.Text;
+            if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#5bbcff");   // Intel = blue
+            if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#76e0a1");   // NVIDIA = green
+            if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff6b7d");   // AMD = red
+            return Ui.Text;
         }
         // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"
         static string CleanName(string s) {
@@ -1283,8 +1335,6 @@ namespace StarMaster {
                 byte a = (byte)(alphaPct * 255 / 100);
                 byte hit = a < 1 ? (byte)1 : a;   // keep the background just barely opaque so it stays draggable at 0%
                 box.Background = Ui.B2(hit.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "0a0e18" : rgb.TrimStart('#')));
-                Color lc = ((SolidColorBrush)Ui.Line2).Color;   // fade the outline with the same opacity
-                box.BorderBrush = new SolidColorBrush(Color.FromArgb(a, lc.R, lc.G, lc.B));
             } catch { }
         }
         public void SetLocked(bool v) { locked = v; Apply(); }

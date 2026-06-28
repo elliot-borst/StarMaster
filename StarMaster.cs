@@ -176,7 +176,7 @@ namespace StarMaster {
         [DllImport("nvml.dll", EntryPoint = "nvmlDeviceGetName")] static extern int NvName(IntPtr dev, StringBuilder name, uint len);
 
         public class Sample {
-            public double CpuTotal; public double[] Cores = new double[0]; public string CpuName = "CPU";
+            public double CpuTotal; public double[] Cores = new double[0]; public string CpuName = "CPU"; public int CpuMhz;
             public double RamUsedGB, RamTotalGB; public int RamPct;
             public bool GpuOk; public string GpuName = "GPU";
             public int GpuPct, GpuTempC, GpuPowerW, GpuCoreMhz, GpuMemMhz, VramPct;
@@ -187,11 +187,18 @@ namespace StarMaster {
         static long[] pIdle, pKernel, pUser;   // previous raw tick counts, for per-tick deltas
         static bool gpuReady; static IntPtr gpuDev = IntPtr.Zero; static string gpuName = "GPU";
         static string cpuName = "CPU";
+        // live CPU frequency = base MHz x (% Processor Performance / 100) - captures turbo, driver-free
+        static System.Diagnostics.PerformanceCounter perfFreq, perfPerf; static int cpuBaseMhz;
 
         public static void Init() {
             cores = Environment.ProcessorCount;
             pIdle = new long[cores]; pKernel = new long[cores]; pUser = new long[cores];
             try { object n = Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString", null); if (n != null) cpuName = n.ToString().Trim(); } catch { }
+            try {
+                perfFreq = new System.Diagnostics.PerformanceCounter("Processor Information", "Processor Frequency", "_Total");
+                perfPerf = new System.Diagnostics.PerformanceCounter("Processor Information", "% Processor Performance", "_Total");
+                cpuBaseMhz = (int)perfFreq.NextValue(); perfPerf.NextValue();   // prime (first read is 0)
+            } catch { perfPerf = null; }
             try {
                 if (NvInit() == 0 && NvHandle(0, out gpuDev) == 0) {
                     gpuReady = true;
@@ -203,6 +210,7 @@ namespace StarMaster {
         public static Sample Read() {
             Sample s = new Sample(); s.CpuName = cpuName;
             if (pIdle != null) ReadCpu(s);
+            if (perfPerf != null) { try { if (cpuBaseMhz <= 0 && perfFreq != null) cpuBaseMhz = (int)perfFreq.NextValue(); s.CpuMhz = (int)(cpuBaseMhz * perfPerf.NextValue() / 100.0); } catch { } }
             ReadRam(s);
             if (gpuReady) ReadGpu(s);
             return s;
@@ -269,7 +277,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "26";
+        public const string Version = "27";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -289,6 +297,7 @@ namespace StarMaster {
         TextBlock monCpuTxt, monRamTxt, monGpuTxt, monVramTxt, monGpuDetail;
         UniformGrid monCores; CoreBar[] monCoreBars = new CoreBar[0];
         MonWindow monWin; bool monOverlayOn = false, monLocked = false; double monOvX = 60, monOvY = 60;
+        int monOvAlpha = 85; string monOvColor = "0a0e18";   // overlay background opacity (0-100, 10% steps) + colour
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
@@ -473,6 +482,26 @@ namespace StarMaster {
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
             lk.Children.Add(new TextBlock { Text = "  Lock (click through into the game)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(lk);
+            // overlay background opacity (slider, 10% steps)
+            StackPanel opR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            opR.Children.Add(new TextBlock { Text = "Opacity", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            TextBlock opVal = new TextBlock { Text = monOvAlpha + "%", Width = 44, Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
+            MonSlider sl = new MonSlider(monOvAlpha, 10, delegate (int v) { monOvAlpha = v; opVal.Text = v + "%"; SetOverlayStyle(); }); sl.VerticalAlignment = VerticalAlignment.Center;
+            opR.Children.Add(sl); opR.Children.Add(Sp(10)); opR.Children.Add(opVal);
+            body.Children.Add(opR);
+            // overlay background colour (swatches)
+            StackPanel coR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+            coR.Children.Add(new TextBlock { Text = "Colour", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            string[] swatches = { "0a0e18", "000000", "10131c", "141a2b", "0a1a14", "1a0e12", "140a1e", "20242e" };
+            List<Border> swBorders = new List<Border>();
+            foreach (string hx in swatches) {
+                string h = hx; bool selNow = string.Equals(h, monOvColor, StringComparison.OrdinalIgnoreCase);
+                Border sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(6), Background = Ui.B(h), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand, BorderBrush = selNow ? Ui.Accent : Ui.Line2, BorderThickness = new Thickness(selNow ? 2 : 1) };
+                swBorders.Add(sw);
+                sw.MouseLeftButtonUp += delegate { monOvColor = h; SetOverlayStyle(); foreach (Border b in swBorders) { b.BorderBrush = Ui.Line2; b.BorderThickness = new Thickness(1); } sw.BorderBrush = Ui.Accent; sw.BorderThickness = new Thickness(2); };
+                coR.Children.Add(sw);
+            }
+            body.Children.Add(coR);
 
             int n = Environment.ProcessorCount;
             body.Children.Add(MetricRow("CPU", out monCpuBar, out monCpuTxt));
@@ -501,16 +530,17 @@ namespace StarMaster {
         void SetOverlay(bool on) {
             if (on) {
                 if (monWin == null) { monWin = new MonWindow(); monWin.Left = monOvX; monWin.Top = monOvY; monWin.Closed += delegate { if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; } monWin = null; }; }
-                monWin.Show(); monWin.SetLocked(monLocked);
+                monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor);
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
         }
+        void SetOverlayStyle() { if (monWin != null) monWin.SetStyle(monOvAlpha, monOvColor); }
         void MonTick(object s, EventArgs e) {
             bool overlay = monWin != null && monOverlayOn;
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             if (IsVisible) {
                 int cpu = (int)(smp.CpuTotal + 0.5);
-                monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = cpu + " %";
+                monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = cpu + " %" + (smp.CpuMhz > 0 ? "   " + smp.CpuMhz + " MHz" : "");
                 for (int i = 0; i < monCoreBars.Length && i < smp.Cores.Length; i++) monCoreBars[i].Set(smp.Cores[i]);
                 monRamBar.Set(smp.RamPct); monRamTxt.Text = smp.RamUsedGB.ToString("0.0") + " / " + smp.RamTotalGB.ToString("0") + " GB (" + smp.RamPct + "%)";
                 if (smp.GpuOk) {
@@ -866,7 +896,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -900,6 +930,8 @@ namespace StarMaster {
                 sb.AppendLine("mon_lock=" + (monLocked ? "1" : "0"));
                 sb.AppendLine("mon_ovx=" + (int)monOvX);
                 sb.AppendLine("mon_ovy=" + (int)monOvY);
+                sb.AppendLine("mon_ovalpha=" + monOvAlpha);
+                sb.AppendLine("mon_ovcolor=" + monOvColor);
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
                 File.WriteAllText(cfgPath, sb.ToString());
@@ -954,6 +986,34 @@ namespace StarMaster {
         public void Set(double pct) { if (pct < 0) pct = 0; if (pct > 100) pct = 100; fillCol.Width = new GridLength(pct, GridUnitType.Star); restCol.Width = new GridLength(100 - pct, GridUnitType.Star); fill.Background = Ui.Load(pct); }
     }
 
+    // a small dark slider that snaps to `step`-sized increments (used for overlay opacity 0-100 in 10% steps)
+    public class MonSlider : Canvas {
+        Border fill, knob; double w = 170, h = 22; int step; Action<int> cb; bool drag; int val;
+        public MonSlider(int initial, int step, Action<int> cb) {
+            this.step = step; this.cb = cb; Width = w; Height = h; Background = Brushes.Transparent; Cursor = Cursors.Hand;
+            Border track = new Border { Width = w, Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            Canvas.SetTop(track, (h - 6) / 2); Canvas.SetLeft(track, 0); Children.Add(track);
+            fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Accent };
+            Canvas.SetTop(fill, (h - 6) / 2); Canvas.SetLeft(fill, 0); Children.Add(fill);
+            knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Ui.B("#cdd6de"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
+            Canvas.SetTop(knob, (h - 16) / 2); Children.Add(knob);
+            MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { drag = true; CaptureMouse(); ApplyX(e.GetPosition(this).X); };
+            MouseMove += delegate (object o, MouseEventArgs e) { if (drag) ApplyX(e.GetPosition(this).X); };
+            MouseLeftButtonUp += delegate (object o, MouseButtonEventArgs e) { drag = false; ReleaseMouseCapture(); };
+            Apply(initial, false);
+        }
+        void ApplyX(double x) { Apply((int)System.Math.Round(x / w * 100), true); }
+        void Apply(int pct, bool fire) {
+            if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+            val = (int)System.Math.Round(pct / (double)step) * step;
+            double fw = w * val / 100.0;
+            fill.Width = fw < 0.5 ? 0.5 : fw;
+            double kx = fw - 8; if (kx < 0) kx = 0; if (kx > w - 16) kx = w - 16; Canvas.SetLeft(knob, kx);
+            if (fire && cb != null) cb(val);
+        }
+        public int Val { get { return val; } }
+    }
+
     // a single CPU core: a vertical bar that fills from the bottom, with the % beneath it
     public class CoreBar : StackPanel {
         RowDefinition restRow, fillRow; Border fill; TextBlock num;
@@ -975,11 +1035,11 @@ namespace StarMaster {
 
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
-        TextBlock cpu, cores, ram, gpu, vram; bool locked;
+        TextBlock cpu, cores, ram, gpu, vram; bool locked; Border box;
         public MonWindow() {
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
-            Border box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
+            box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
             StackPanel s = new StackPanel();
             cpu = Line(Ui.B("#ff6b7d")); cores = Line(Ui.Dim); ram = Line(Ui.Text); gpu = Line(Ui.Good); vram = Line(Ui.Text);
             cores.FontSize = 12.5;
@@ -990,7 +1050,7 @@ namespace StarMaster {
         }
         static TextBlock Line(Brush fg) { return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, Foreground = fg, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 1) }; }
         public void Update(SysMon.Sample s) {
-            cpu.Text = Fit(Short(s.CpuName), 16) + "  " + Pad((int)(s.CpuTotal + 0.5)) + "%";
+            cpu.Text = Fit(Short(s.CpuName), 16) + "  " + Pad((int)(s.CpuTotal + 0.5)) + "%" + (s.CpuMhz > 0 ? "  " + s.CpuMhz + "MHz" : "");
             StringBuilder c = new StringBuilder(); for (int i = 0; i < s.Cores.Length; i++) { if (i > 0) c.Append(' '); c.Append(Pad((int)(s.Cores[i] + 0.5))); }
             cores.Text = c.ToString();
             ram.Text = "RAM" + new string(' ', 14) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
@@ -1010,6 +1070,13 @@ namespace StarMaster {
             return s;
         }
         static string Pad(int v) { return (v < 10 ? "  " : (v < 100 ? " " : "")) + v; }
+        public void SetStyle(int alphaPct, string rgb) {
+            try {
+                if (alphaPct < 0) alphaPct = 0; if (alphaPct > 100) alphaPct = 100;
+                byte a = (byte)(alphaPct * 255 / 100);
+                box.Background = Ui.B2(a.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "0a0e18" : rgb.TrimStart('#')));
+            } catch { }
+        }
         public void SetLocked(bool v) { locked = v; Apply(); }
         void Apply() {
             try {

@@ -165,7 +165,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "22";
+        public const string Version = "23";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -187,7 +187,7 @@ namespace StarMaster {
         // single-instance: a second launch signals this handle to surface the existing window
         System.Threading.EventWaitHandle singleInstanceEvent;
         // header update button (its own label doubles as the status)
-        Border updBtn; TextBlock updBtnLbl;
+        Border updBtn; TextBlock updBtnLbl; DispatcherTimer updRevertTimer;
         DateTime lastUpdateCheck = DateTime.MinValue;   // throttles the automatic launch check (persisted in config)
         // in-app "update available" notice that lives in the header top row (replaces the popup)
         StackPanel updateNotice; TextBlock updateNoticeText;
@@ -574,9 +574,17 @@ namespace StarMaster {
 
         // ---------- self-update ----------
         void SetUpdBtn(string text, Brush fg) { if (updBtnLbl != null) { updBtnLbl.Text = text; updBtnLbl.Foreground = fg; } }
+        // after a successful "up to date" check, revert the label to the default prompt after 30 s
+        void RevertUpdBtnAfter(int seconds) {
+            if (updRevertTimer != null) updRevertTimer.Stop();
+            updRevertTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            updRevertTimer.Tick += delegate { updRevertTimer.Stop(); SetUpdBtn("↻  Check for updates", Ui.Text); };
+            updRevertTimer.Start();
+        }
         void CheckUpdate(bool auto) {
             // auto (launch) checks back off if one ran in the last 5 minutes - avoids hammering GitHub's anon rate limit
             if (auto && (DateTime.Now - lastUpdateCheck).TotalMinutes < 5) return;
+            if (updRevertTimer != null) updRevertTimer.Stop();
             SetUpdBtn("↻  Checking...", Ui.Dim);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 Updater.Info info = Updater.CheckLatest();
@@ -584,7 +592,7 @@ namespace StarMaster {
                 Dispatcher.BeginInvoke(new Action(delegate {
                     if (info == null) SetUpdBtn("⚠  " + (Updater.LastError.Length > 0 ? Updater.LastError : "Check failed"), Ui.DangerFg);
                     else if (Updater.Compare(info.Version, CurrentVer) > 0) { SetUpdBtn("↑  Update available", Ui.Accent); ShowUpdateBanner(info); }
-                    else SetUpdBtn("✓  Up to date", Ui.Good);
+                    else { SetUpdBtn("✓  Up to date", Ui.Good); RevertUpdBtnAfter(30); }
                     SaveConfig();   // persist lastUpdateCheck so rapid relaunches stay throttled too
                 }));
             });

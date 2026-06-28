@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 22.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Three tools + a GitHub self-updater. **Current version: 23.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -67,6 +67,7 @@
 - 2026-06-20: **v19** — eliminated ALL OS popups: new in-app modal overlay (`BuildOverlay`/`ShowConfirm`/`ShowAlert`/`ShowKeyForm`) replaces every `MessageBox` and the `AddKeyDialog` window. Project rule: no OS popups, ever.
 - 2026-06-20: **v20** — single left-click on the tray icon opens/restores the window (was double-click); right-click still shows the menu.
 - 2026-06-20: **v21** — StarStrings credit line: "Source: <link>" moved to its own line (LineBreak) so the URL no longer wraps.
+- 2026-06-28: **v23** — after a successful "✓ Up to date" check, the header button label reverts to "↻ Check for updates" after 30 s (`RevertUpdBtnAfter`, a one-shot `DispatcherTimer` stopped/restarted on each check). Only the up-to-date case reverts; "Update available" / failure states stick.
 - 2026-06-28: **v22** — Wipe Visor + Auto Accept are now **locked built-in defaults** for all users: `LoadConfig` back-fills any missing default on every launch (matched by label via `DefaultCmds()`) instead of only seeding when the config was empty, so users upgrading from a pre-v4 config (Wipe Visor only) now get Auto Accept. Locked rows have no ✕ delete button (lock glyph + tooltip) and a read-only label; key/interval/modifiers/enabled remain editable. `Cmd.Locked` flag is derived at load (not persisted).
 
 ## Backlog / ideas

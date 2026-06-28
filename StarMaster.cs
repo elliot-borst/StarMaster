@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("42.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("42.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("43.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("43.0.0.0")]
 
 namespace StarMaster {
 
@@ -282,7 +282,7 @@ namespace StarMaster {
         const string PmUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe";
         const string MsCol = "msBetweenPresents";
         static System.Threading.Thread reader; static volatile bool running; static volatile int fps;
-        static volatile bool gotFrames; static System.Diagnostics.Process proc;
+        static volatile bool gotFrames; static volatile string csvPath;
         public static volatile string Status = "";
         public static int Fps { get { return fps; } }
         public static bool Running { get { return running; } }
@@ -316,51 +316,74 @@ namespace StarMaster {
             } catch (Exception ex) { Status = "PresentMon download failed: " + ex.Message; return false; }
         }
 
-        // Always non-elevated (Performance Log Users grants the ETW privilege). PresentMon is our hidden child; we read its
-        // STDOUT pipe directly - a clean UTF-8 stream (the cmd-redirect-to-file route produced UTF-16, which broke parsing).
+        // PresentMon produces NO stdout when our process has no console (a GUI app), so we run it via `cmd ... > file`
+        // (cmd gives it a console) and tail the file. That file is UTF-16LE, so the reader decodes accordingly.
+        // Always non-elevated - the Performance Log Users group (one-time GrantPerfAccess) grants the ETW privilege.
         public static void Start(string pn) {
-            KillProc();   // kill any orphaned PresentMon (e.g. from a previous force-kill) so only ours runs
+            KillProc();        // kill any orphaned PresentMon so only ours runs
+            CleanOldCsvs();    // drop stale capture files
             if (!EnsurePm()) return;
             gotFrames = false; fps = 0;
             Status = "Waiting for frames...";
             try {
-                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath());
-                psi.Arguments = "--stop_existing_session --session_name StarMasterFPS --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + pn + " --output_stdout";
-                psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
-                proc = new System.Diagnostics.Process(); proc.StartInfo = psi; proc.Start();
+                csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
+                string pmArgs = "--stop_existing_session --session_name StarMasterFPS --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + pn + " --output_stdout";
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd.exe");
+                psi.Arguments = "/c \"\"" + PmPath() + "\" " + pmArgs + " > \"" + csvPath + "\"\"";
+                psi.UseShellExecute = true; psi.CreateNoWindow = true; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+                System.Diagnostics.Process.Start(psi);
                 running = true;
-                reader = new System.Threading.Thread(ReadLoop); reader.IsBackground = true; reader.Start();
+                if (reader == null || !reader.IsAlive) { reader = new System.Threading.Thread(ReadLoop); reader.IsBackground = true; reader.Start(); }
             } catch (Exception ex) { Status = "FPS start failed: " + ex.Message; running = false; }
         }
 
-        public static void Stop() {
-            running = false; fps = 0; gotFrames = false; Status = "";
-            try { if (proc != null && !proc.HasExited) proc.Kill(); } catch { }
-            try { if (proc != null) proc.Dispose(); } catch { }
-            proc = null; KillProc();
-        }
+        public static void Stop() { running = false; fps = 0; gotFrames = false; Status = ""; csvPath = null; KillProc(); }
         static void KillProc() {
             try { foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName("PresentMon")) { try { if (!p.HasExited) { p.Kill(); p.WaitForExit(1500); } } catch { } } } catch { }
         }
+        static void CleanOldCsvs() {
+            try { foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-fps-*.csv")) { try { File.Delete(f); } catch { } } } catch { }
+        }
 
+        // single reader: follows csvPath (resets on switch) and tails the file, decoding UTF-16LE (PresentMon/cmd's encoding) or UTF-8
         static void ReadLoop() {
-            int msCol = -1; List<double> win = new List<double>();
-            try {
-                System.Diagnostics.Process p = proc; if (p == null) return;
-                System.IO.StreamReader sr = p.StandardOutput;   // UTF-8 pipe; StreamReader decodes correctly
-                string line;
-                while (running && (line = sr.ReadLine()) != null) {
-                    if (line.Length == 0) continue;
-                    if (msCol < 0) { if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } } continue; }
-                    string[] f = line.Split(','); double ms;
-                    if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
-                        win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
-                        double sum = 0; for (int k = 0; k < win.Count; k++) sum += win[k];
-                        if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
-                        gotFrames = true; Status = "running";
+            string cur = null; long pos = 0; int msCol = -1; string lineLeft = ""; List<double> win = new List<double>();
+            bool utf16 = false, encChecked = false; byte[] carry = new byte[0];
+            while (running) {
+                try {
+                    string pth = csvPath;
+                    if (pth != cur) { cur = pth; pos = 0; msCol = -1; lineLeft = ""; win.Clear(); carry = new byte[0]; utf16 = false; encChecked = false; }
+                    if (cur != null && File.Exists(cur)) {
+                        using (FileStream fs = new FileStream(cur, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                            if (fs.Length > pos) {
+                                fs.Seek(pos, SeekOrigin.Begin);
+                                byte[] nb = new byte[fs.Length - pos]; int read = fs.Read(nb, 0, nb.Length); pos += read;
+                                byte[] all = new byte[carry.Length + read];
+                                Array.Copy(carry, 0, all, 0, carry.Length); Array.Copy(nb, 0, all, carry.Length, read);
+                                if (!encChecked) { encChecked = true; utf16 = all.Length >= 2 && all[0] == 0xFF && all[1] == 0xFE; }
+                                string chunk;
+                                if (utf16) { int usable = all.Length - (all.Length % 2); chunk = System.Text.Encoding.Unicode.GetString(all, 0, usable); int rem = all.Length - usable; carry = new byte[rem]; if (rem > 0) Array.Copy(all, usable, carry, 0, rem); }
+                                else { chunk = System.Text.Encoding.UTF8.GetString(all); carry = new byte[0]; }
+                                if (chunk.Length > 0 && chunk[0] == '﻿') chunk = chunk.Substring(1);   // drop BOM
+                                string[] lines = (lineLeft + chunk).Split('\n');
+                                for (int i = 0; i < lines.Length - 1; i++) {
+                                    string line = lines[i].TrimEnd('\r'); if (line.Length == 0) continue;
+                                    if (msCol < 0) { if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } } continue; }
+                                    string[] f = line.Split(','); double ms;
+                                    if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
+                                        win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
+                                        double sum = 0; for (int k = 0; k < win.Count; k++) sum += win[k];
+                                        if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
+                                        gotFrames = true; Status = "running";
+                                    }
+                                }
+                                lineLeft = lines[lines.Length - 1];
+                            }
+                        }
                     }
-                }
-            } catch { }
+                } catch { }
+                System.Threading.Thread.Sleep(250);
+            }
         }
     }
 
@@ -462,7 +485,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "42";
+        public const string Version = "43";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;

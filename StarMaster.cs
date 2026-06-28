@@ -24,8 +24,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("36.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("36.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("37.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("37.0.0.0")]
 
 namespace StarMaster {
 
@@ -283,9 +283,6 @@ namespace StarMaster {
         static System.Threading.Thread reader; static volatile bool running; static volatile int fps; static System.Diagnostics.Process proc;
         public static volatile string Status = "";
         public static int Fps { get { return fps; } }
-        static readonly double[] hist = new double[160]; static int histHead; static readonly object histLock = new object();   // rolling frametimes (ms) for the graph
-        static void PushFrame(double ms) { lock (histLock) { hist[histHead] = ms; histHead = (histHead + 1) % hist.Length; } }
-        public static double[] FrameTimes() { double[] r = new double[hist.Length]; lock (histLock) { for (int i = 0; i < hist.Length; i++) r[i] = hist[(histHead + i) % hist.Length]; } return r; }   // oldest..newest
         public static bool Running { get { return running; } }
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
 
@@ -305,7 +302,6 @@ namespace StarMaster {
         // which we read directly - avoids PresentMon's exclusive lock on --output_file. No elevation needed for a normal game process.
         public static void Start(string processName) {
             Stop();
-            lock (histLock) { Array.Clear(hist, 0, hist.Length); histHead = 0; }
             if (!EnsurePm()) return;
             try {
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath());
@@ -338,7 +334,6 @@ namespace StarMaster {
                     }
                     string[] f = line.Split(','); double ms;
                     if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
-                        PushFrame(ms);
                         win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
                         double sum = 0; for (int i = 0; i < win.Count; i++) sum += win[i];
                         if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
@@ -447,7 +442,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "36";
+        public const string Version = "37";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -737,7 +732,7 @@ namespace StarMaster {
         UIElement NameColorRow(string current, Action<string> set) {
             StackPanel r = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(72, 0, 0, 10) };
             r.Children.Add(new TextBlock { Text = "Colour ", Foreground = Ui.Dim, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-            string[] hex = { "e6ecfb", "76e0a1", "ff6b7d", "5bbcff" };   // white, green, red, blue
+            string[] hex = { "e6ecfb", "76e0a1", "2fe06a", "ff6b7d", "ff4040", "5bbcff", "3b82ff" };   // white, green, vivid green, red, vivid red, blue, vivid blue
             List<Border> bs = new List<Border>();
             foreach (string hx in hex) {
                 string h = hx; bool sel = string.Equals(h, current, StringComparison.OrdinalIgnoreCase);
@@ -1272,23 +1267,14 @@ namespace StarMaster {
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
         TextBlock fpsLine; TextBlock[] cpuC, gpuC; bool locked, colors = true; Border box;
-        Grid topRow; Canvas ftBox; System.Windows.Shapes.Polyline ftLine;   // FPS + frametime graph
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
             StackPanel s = new StackPanel();
-            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, VerticalAlignment = VerticalAlignment.Center };
-            // top row: FPS on the left, frametime graph filling the space to its right
-            Grid top = new Grid { Margin = new Thickness(0, 0, 0, 3) };
-            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); top.ColumnDefinitions.Add(new ColumnDefinition());
-            Grid.SetColumn(fpsLine, 0); top.Children.Add(fpsLine);
-            ftBox = new Canvas { Height = 30, Margin = new Thickness(20, 2, 0, 0), ClipToBounds = true, VerticalAlignment = VerticalAlignment.Center };
-            ftLine = new System.Windows.Shapes.Polyline { StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, Stroke = Ui.Text };
-            ftBox.Children.Add(ftLine); Grid.SetColumn(ftBox, 1); top.Children.Add(ftBox);
-            topRow = top; topRow.Visibility = Visibility.Collapsed;   // shown only when FPS is on
-            s.Children.Add(top);
+            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 3), Visibility = Visibility.Collapsed };
+            s.Children.Add(fpsLine);   // FPS centred above the rows; shown only when FPS is on
             // 2 rows (CPU+RAM, GPU+VRAM) x 6 columns: Name | % | C | MEM | W | MHz. Auto columns => CPU and GPU line up; each cell coloured independently.
             Grid g = new Grid();
             for (int c = 0; c < 6; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1302,31 +1288,15 @@ namespace StarMaster {
             box.Child = s; Content = box;
             MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { if (!locked && e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } } };
             SourceInitialized += delegate { Apply(); };
-            ftTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };   // realtime-ish frametime graph (PresentMon feeds it per frame)
-            ftTimer.Tick += delegate { if (topRow != null && topRow.Visibility == Visibility.Visible) DrawFrametime(); };
-            ftTimer.Start();
         }
-        DispatcherTimer ftTimer;
         static TextBlock Cell(bool name) {
             return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text,
                 TextAlignment = name ? TextAlignment.Left : TextAlignment.Right, HorizontalAlignment = name ? HorizontalAlignment.Left : HorizontalAlignment.Right,
                 Margin = new Thickness(name ? 0 : 16, 1, 0, 1) };
         }
         public void SetColors(bool v) { colors = v; }
-        // frametime sparkline from PresentMon's per-frame data; spikes (high ms) go up. Auto-scales to the window's own
-        // min..max, so it fills the graph at any framerate (30 or 300 fps) and just shows the variation/hitches.
-        void DrawFrametime() {
-            double w = ftBox.ActualWidth, h = ftBox.ActualHeight; if (w < 8 || h < 4) return;
-            double[] ft = FpsMon.FrameTimes(); int n = ft.Length;
-            double mn = 1e9, mx = 0; for (int i = 0; i < n; i++) { double v = ft[i]; if (v > 0) { if (v < mn) mn = v; if (v > mx) mx = v; } }
-            if (mx <= 0) { ftLine.Points = null; return; }
-            double range = mx - mn;
-            PointCollection pts = new PointCollection();
-            for (int i = 0; i < n; i++) { double v = ft[i]; if (v <= 0) v = mn; double x = (double)i / (n - 1) * w; double y = range < 0.2 ? h * 0.5 : h * 0.95 - ((v - mn) / range) * h * 0.9; pts.Add(new Point(x, y)); }
-            ftLine.Points = pts;
-        }
         public void Update(SysMon.Sample s) {
-            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); topRow.Visibility = Visibility.Visible; DrawFrametime(); } else topRow.Visibility = Visibility.Collapsed;
+            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
             Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, s.CpuMhz, colors);
             if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, s.GpuCoreMhz, colors);
             else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, 0, colors);

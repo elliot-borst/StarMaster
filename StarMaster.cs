@@ -181,6 +181,7 @@ namespace StarMaster {
             public bool GpuOk; public string GpuName = "GPU";
             public int GpuPct, GpuTempC, GpuPowerW, GpuCoreMhz, GpuMemMhz, VramPct;
             public double VramUsedGB, VramTotalGB;
+            public int Fps = -1;   // -1 = FPS overlay off / hidden
         }
 
         static int cores;
@@ -263,6 +264,75 @@ namespace StarMaster {
         }
     }
 
+    // ===== FPS via Intel PresentMon (MIT, open-source). Injection-free (ETW) so it's anti-cheat-safe. =====
+    // PresentMon self-elevates (--restart_as_admin = one UAC prompt); StarMaster stays non-elevated and tails the CSV it writes.
+    public static class FpsMon {
+        const string PmUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe";
+        const string MsCol = "msBetweenPresents";
+        static System.Threading.Thread reader; static volatile bool running; static volatile int fps; static string csvPath;
+        public static volatile string Status = "";
+        public static int Fps { get { return fps; } }
+        public static bool Running { get { return running; } }
+        public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
+
+        static bool EnsurePm() {
+            string p = PmPath();
+            if (File.Exists(p)) return true;
+            try {
+                Status = "Downloading PresentMon...";
+                Directory.CreateDirectory(Path.GetDirectoryName(p));
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (WebClient wc = new TimedWebClient()) { wc.Headers.Add("User-Agent", "StarMaster"); wc.DownloadFile(PmUrl, p); }
+                return File.Exists(p);
+            } catch (Exception ex) { Status = "PresentMon download failed: " + ex.Message; return false; }
+        }
+
+        // call on a background thread (download + ShellExecute can block)
+        public static void Start(string processName) {
+            running = false; fps = 0;
+            if (!EnsurePm()) return;
+            try {
+                csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath());
+                psi.Arguments = "--restart_as_admin --session_name StarMasterFPS --stop_existing_session --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + processName + " --output_file \"" + csvPath + "\"";
+                psi.UseShellExecute = true; psi.CreateNoWindow = true; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+                System.Diagnostics.Process.Start(psi);   // PresentMon shows the UAC prompt itself (restart_as_admin)
+                Status = "Waiting for frames (is Star Citizen running?)...";
+                running = true;
+                reader = new System.Threading.Thread(ReadLoop); reader.IsBackground = true; reader.Start();
+            } catch (Exception ex) { Status = "FPS start failed: " + ex.Message; running = false; }
+        }
+        public static void Stop() { running = false; fps = 0; Status = ""; }   // the elevated PresentMon self-terminates when the game exits
+
+        static void ReadLoop() {
+            long pos = 0; int msCol = -1; string leftover = ""; List<double> win = new List<double>(); int idle = 0;
+            while (running) {
+                try {
+                    if (csvPath != null && File.Exists(csvPath)) {
+                        bool got = false;
+                        using (FileStream fs = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                            if (fs.Length > pos) {
+                                fs.Seek(pos, SeekOrigin.Begin);
+                                byte[] buf = new byte[fs.Length - pos]; int read = fs.Read(buf, 0, buf.Length); pos += read;
+                                string[] lines = (leftover + System.Text.Encoding.ASCII.GetString(buf, 0, read)).Split('\n');
+                                for (int i = 0; i < lines.Length - 1; i++) {
+                                    string line = lines[i].TrimEnd('\r'); if (line.Length == 0) continue;
+                                    if (msCol < 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } continue; }
+                                    string[] f = line.Split(','); double ms;
+                                    if (msCol >= 0 && msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) { win.Add(ms); while (win.Count > 40) win.RemoveAt(0); got = true; }
+                                }
+                                leftover = lines[lines.Length - 1];
+                            }
+                        }
+                        if (got) { double sum = 0; for (int i = 0; i < win.Count; i++) sum += win[i]; if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5); Status = "running"; idle = 0; }
+                        else if (++idle > 6) { fps = 0; }   // no new frames for ~2s -> game not presenting
+                    }
+                } catch { }
+                System.Threading.Thread.Sleep(350);
+            }
+        }
+    }
+
     // ===== Aurora theme + widgets =====
     static class Ui {
         public static SolidColorBrush B(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16))); b.Freeze(); return b; }
@@ -277,7 +347,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "27";
+        public const string Version = "28";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -295,9 +365,9 @@ namespace StarMaster {
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
         TextBlock monCpuTxt, monRamTxt, monGpuTxt, monVramTxt, monGpuDetail;
-        UniformGrid monCores; CoreBar[] monCoreBars = new CoreBar[0];
         MonWindow monWin; bool monOverlayOn = false, monLocked = false; double monOvX = 60, monOvY = 60;
         int monOvAlpha = 85; string monOvColor = "0a0e18";   // overlay background opacity (0-100, 10% steps) + colour
+        bool monFpsOn = false; TextBlock monFpsTxt;
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
@@ -472,16 +542,23 @@ namespace StarMaster {
         // ---------- system monitor card (full-width; it's the control panel - the live numbers live in the over-the-game OSD overlay) ----------
         FrameworkElement SystemMonitorCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "▦", "System Monitor", "live overlay over the game - CPU / RAM / GPU (no injection)");
-            body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock to click through it into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
+            body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock Position so clicks pass through into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
             // overlay controls (in the body - the narrow column header has no room for them)
             StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }));
-            ov.Children.Add(new TextBlock { Text = "  Show overlay over the game", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            ov.Children.Add(new TextBlock { Text = "  Show Overlay", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ov);
-            StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+            StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
-            lk.Children.Add(new TextBlock { Text = "  Lock (click through into the game)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(lk);
+            // FPS via PresentMon (self-elevates -> one UAC prompt). Off by default; not persisted (so no surprise UAC on launch).
+            StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+            fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
+            fp.Children.Add(new TextBlock { Text = "  Frame rate (FPS)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(fp);
+            monFpsTxt = new TextBlock { Text = "uses PresentMon - asks for admin once when turned on", Foreground = Ui.Faint, FontSize = 11, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
+            body.Children.Add(monFpsTxt);
             // overlay background opacity (slider, 10% steps)
             StackPanel opR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             opR.Children.Add(new TextBlock { Text = "Opacity", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
@@ -503,12 +580,7 @@ namespace StarMaster {
             }
             body.Children.Add(coR);
 
-            int n = Environment.ProcessorCount;
             body.Children.Add(MetricRow("CPU", out monCpuBar, out monCpuTxt));
-            monCores = new UniformGrid { Columns = n, Margin = new Thickness(46, 2, 0, 12) };
-            monCoreBars = new CoreBar[n];
-            for (int i = 0; i < n; i++) { monCoreBars[i] = new CoreBar(i); monCores.Children.Add(monCoreBars[i]); }
-            body.Children.Add(monCores);
             body.Children.Add(MetricRow("RAM", out monRamBar, out monRamTxt));
             body.Children.Add(MetricRow("GPU", out monGpuBar, out monGpuTxt));
             body.Children.Add(MetricRow("VRAM", out monVramBar, out monVramTxt));
@@ -534,14 +606,21 @@ namespace StarMaster {
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
         }
         void SetOverlayStyle() { if (monWin != null) monWin.SetStyle(monOvAlpha, monOvColor); }
+        // turn FPS on/off (PresentMon, off the UI thread - download + UAC can block)
+        void ToggleFps(bool on) {
+            monFpsOn = on;
+            if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); }
+            else { FpsMon.Stop(); if (monFpsTxt != null) monFpsTxt.Text = "uses PresentMon - asks for admin once when turned on"; }
+        }
         void MonTick(object s, EventArgs e) {
             bool overlay = monWin != null && monOverlayOn;
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
+            smp.Fps = monFpsOn ? FpsMon.Fps : -1;
             if (IsVisible) {
                 int cpu = (int)(smp.CpuTotal + 0.5);
                 monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = cpu + " %" + (smp.CpuMhz > 0 ? "   " + smp.CpuMhz + " MHz" : "");
-                for (int i = 0; i < monCoreBars.Length && i < smp.Cores.Length; i++) monCoreBars[i].Set(smp.Cores[i]);
+                if (monFpsOn && FpsMon.Status.Length > 0) monFpsTxt.Text = FpsMon.Status + (FpsMon.Fps > 0 ? "  -  " + FpsMon.Fps + " FPS" : "");
                 monRamBar.Set(smp.RamPct); monRamTxt.Text = smp.RamUsedGB.ToString("0.0") + " / " + smp.RamTotalGB.ToString("0") + " GB (" + smp.RamPct + "%)";
                 if (smp.GpuOk) {
                     monGpuBar.Set(smp.GpuPct); monGpuTxt.Text = smp.GpuPct + " %";
@@ -885,7 +964,7 @@ namespace StarMaster {
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {
             SaveConfig();
             if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray
-            timer.Stop(); if (monTimer != null) monTimer.Stop(); if (monWin != null) { monWin.Close(); monWin = null; }
+            timer.Stop(); if (monTimer != null) monTimer.Stop(); FpsMon.Stop(); if (monWin != null) { monWin.Close(); monWin = null; }
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
         }
 
@@ -1014,67 +1093,59 @@ namespace StarMaster {
         public int Val { get { return val; } }
     }
 
-    // a single CPU core: a vertical bar that fills from the bottom, with the % beneath it
-    public class CoreBar : StackPanel {
-        RowDefinition restRow, fillRow; Border fill; TextBlock num;
-        public CoreBar(int index) {
-            Margin = new Thickness(2, 0, 2, 0);
-            Grid g = new Grid { Height = 34 };
-            restRow = new RowDefinition { Height = new GridLength(100, GridUnitType.Star) };
-            fillRow = new RowDefinition { Height = new GridLength(0, GridUnitType.Star) };
-            g.RowDefinitions.Add(restRow); g.RowDefinitions.Add(fillRow);
-            Border track = new Border { Background = Ui.Inset, CornerRadius = new CornerRadius(2) }; Grid.SetRowSpan(track, 2); g.Children.Add(track);
-            fill = new Border { Background = Ui.Good, CornerRadius = new CornerRadius(2) }; Grid.SetRow(fill, 1); g.Children.Add(fill);
-            Children.Add(g);
-            num = new TextBlock { Text = "0", Foreground = Ui.Faint, FontSize = 8.5, FontFamily = Ui.Mono, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 1, 0, 0) };
-            Children.Add(num);
-            ToolTip = "CPU thread " + (index + 1);
-        }
-        public void Set(double pct) { if (pct < 0) pct = 0; if (pct > 100) pct = 100; restRow.Height = new GridLength(100 - pct, GridUnitType.Star); fillRow.Height = new GridLength(pct, GridUnitType.Star); fill.Background = Ui.Load(pct); num.Text = ((int)(pct + 0.5)).ToString(); }
-    }
-
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
-        TextBlock cpu, cores, ram, gpu, vram; bool locked; Border box;
+        TextBlock fpsLine, cpu, ram, gpu, vram; bool locked; Border box;
         public MonWindow() {
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
             StackPanel s = new StackPanel();
-            cpu = Line(Ui.B("#ff6b7d")); cores = Line(Ui.Dim); ram = Line(Ui.Text); gpu = Line(Ui.Good); vram = Line(Ui.Text);
-            cores.FontSize = 12.5;
-            s.Children.Add(cpu); s.Children.Add(cores); s.Children.Add(ram); s.Children.Add(gpu); s.Children.Add(vram);
+            fpsLine = Line(Ui.B("#ff5bd6")); fpsLine.FontSize = 19; fpsLine.Margin = new Thickness(0, 0, 0, 3); fpsLine.Visibility = Visibility.Collapsed;
+            cpu = Line(Ui.B("#ff6b7d")); ram = Line(Ui.Text); gpu = Line(Ui.Good); vram = Line(Ui.Text);
+            s.Children.Add(fpsLine); s.Children.Add(cpu); s.Children.Add(ram); s.Children.Add(gpu); s.Children.Add(vram);
             box.Child = s; Content = box;
             MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { if (!locked && e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } } };
             SourceInitialized += delegate { Apply(); };
         }
         static TextBlock Line(Brush fg) { return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, Foreground = fg, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 1) }; }
         public void Update(SysMon.Sample s) {
-            cpu.Text = Fit(Short(s.CpuName), 16) + "  " + Pad((int)(s.CpuTotal + 0.5)) + "%" + (s.CpuMhz > 0 ? "  " + s.CpuMhz + "MHz" : "");
-            StringBuilder c = new StringBuilder(); for (int i = 0; i < s.Cores.Length; i++) { if (i > 0) c.Append(' '); c.Append(Pad((int)(s.Cores[i] + 0.5))); }
-            cores.Text = c.ToString();
-            ram.Text = "RAM" + new string(' ', 14) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
+            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
+            cpu.Foreground = BrandColor(s.CpuName);
+            cpu.Text = PadName(CleanName(s.CpuName)) + Pad((int)(s.CpuTotal + 0.5)) + "%" + (s.CpuMhz > 0 ? "  " + s.CpuMhz + "MHz" : "");
+            ram.Text = "RAM".PadRight(19) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
             if (s.GpuOk) {
-                gpu.Text = Fit(Short(s.GpuName), 16) + "  " + Pad(s.GpuPct) + "%  " + s.GpuTempC + "°C  " + s.GpuPowerW + "W  " + s.GpuCoreMhz + "MHz";
-                vram.Text = "VRAM" + new string(' ', 13) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
+                gpu.Foreground = BrandColor(s.GpuName);
+                gpu.Text = PadName(CleanName(s.GpuName)) + Pad(s.GpuPct) + "%  " + s.GpuTempC + "°C  " + s.GpuPowerW + "W  " + s.GpuCoreMhz + "MHz";
+                vram.Text = "VRAM".PadRight(19) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
                 vram.Visibility = Visibility.Visible;
-            } else { gpu.Text = "GPU              n/a"; vram.Visibility = Visibility.Collapsed; }
+            } else { gpu.Text = "GPU".PadRight(19) + "n/a"; vram.Visibility = Visibility.Collapsed; }
         }
-        static string Fit(string s, int w) { if (s == null) s = ""; if (s.Length > w) return s.Substring(0, w); return s.PadRight(w); }
-        // drop the vendor prefix so the model name fits the OSD (e.g. "NVIDIA GeForce RTX 5090" -> "RTX 5090", "AMD Ryzen 7 9800X3D" -> "Ryzen 7 9800X3D")
-        static string Short(string s) {
+        // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"
+        static string CleanName(string s) {
             if (s == null) return "";
-            if (s.StartsWith("NVIDIA GeForce ")) return s.Substring(15);
-            if (s.StartsWith("NVIDIA ")) return s.Substring(7);
-            if (s.StartsWith("AMD ")) return s.Substring(4);
-            return s;
+            s = s.Replace("(R)", "").Replace("(TM)", "").Replace("(r)", "").Replace("(tm)", "").Replace("GeForce ", "");
+            s = System.Text.RegularExpressions.Regex.Replace(s, "\\s*\\d+-Core Processor", "");
+            s = s.Replace(" Processor", "").Replace(" CPU", "");
+            return System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ").Trim();
+        }
+        static string PadName(string s) { return (s.Length < 18 ? s.PadRight(18) : s) + " "; }   // align without ever truncating
+        static Brush BrandColor(string n) {
+            if (n == null) return Ui.Text;
+            if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#5bbcff");   // Intel = blue
+            if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#76e0a1");   // NVIDIA = green
+            if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff6b7d");   // AMD = red
+            return Ui.Text;
         }
         static string Pad(int v) { return (v < 10 ? "  " : (v < 100 ? " " : "")) + v; }
         public void SetStyle(int alphaPct, string rgb) {
             try {
                 if (alphaPct < 0) alphaPct = 0; if (alphaPct > 100) alphaPct = 100;
                 byte a = (byte)(alphaPct * 255 / 100);
-                box.Background = Ui.B2(a.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "0a0e18" : rgb.TrimStart('#')));
+                byte hit = a < 1 ? (byte)1 : a;   // keep the background just barely opaque so it stays draggable at 0%
+                box.Background = Ui.B2(hit.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "0a0e18" : rgb.TrimStart('#')));
+                Color lc = ((SolidColorBrush)Ui.Line2).Color;   // fade the outline with the same opacity
+                box.BorderBrush = new SolidColorBrush(Color.FromArgb(a, lc.R, lc.G, lc.B));
             } catch { }
         }
         public void SetLocked(bool v) { locked = v; Apply(); }

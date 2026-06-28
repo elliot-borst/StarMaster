@@ -24,8 +24,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("33.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("33.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("34.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("34.0.0.0")]
 
 namespace StarMaster {
 
@@ -429,7 +429,9 @@ namespace StarMaster {
     static class Ui {
         public static SolidColorBrush B(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16))); b.Freeze(); return b; }
         public static SolidColorBrush B2(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromArgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16), Convert.ToByte(hex.Substring(6, 2), 16))); b.Freeze(); return b; }
-        public static Brush Load(double p) { if (p >= 85) return DangerFg; if (p >= 60) return Accent; return Good; }   // load-tiered colour for monitor bars
+        public static readonly Brush Warn = B("#ffd34d"), HotO = B("#ff9a3d"), Crit = B("#ff5d5d");   // load tiers
+        public static Brush Load(double p) { if (p >= 90) return Crit; if (p >= 80) return HotO; if (p >= 60) return Warn; return Text; }   // usage/mem %: white -> yellow -> orange -> red
+        public static Brush LoadT(double t) { if (t >= 85) return Crit; if (t >= 75) return HotO; if (t >= 65) return Warn; return Text; }   // temperature tiers
         public static readonly Brush Bg = B("#0b0e16"), Card = B("#141a2b"), Card2 = B("#171d33"), Line = B("#232a45"), Line2 = B("#323c5e"),
             Text = B("#e6ecfb"), Dim = B("#94a0c2"), Faint = B("#646f93"), Accent = B("#79b0ff"), Accent2 = B("#a9c8ff"),
             Good = B("#5fe0c0"), Ink = B("#0a1228"), Inset = B("#0f1322"), Danger = B("#2a1722"), DangerFg = B("#ff9bb8");
@@ -439,7 +441,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "33";
+        public const string Version = "34";
         public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1224,42 +1226,48 @@ namespace StarMaster {
 
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
-        TextBlock fpsLine, cpu, ram, gpu, vram; bool locked; Border box;
+        TextBlock fpsLine; TextBlock[] cpuC, gpuC; bool locked; Border box;
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
             StackPanel s = new StackPanel();
-            fpsLine = Line(Ui.B("#ff5bd6")); fpsLine.FontSize = 19; fpsLine.Margin = new Thickness(0, 0, 0, 3); fpsLine.Visibility = Visibility.Collapsed;
-            cpu = Line(Ui.B("#ff6b7d")); ram = Line(Ui.Text); gpu = Line(Ui.Good); vram = Line(Ui.Text);
-            s.Children.Add(fpsLine); s.Children.Add(cpu); s.Children.Add(ram); s.Children.Add(gpu); s.Children.Add(vram);
+            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.B("#ff5bd6"), Margin = new Thickness(0, 0, 0, 3), Visibility = Visibility.Collapsed };
+            s.Children.Add(fpsLine);
+            // 2 rows (CPU+RAM, GPU+VRAM) x 6 columns: Name | % | C | MEM | W | MHz. Auto columns => CPU and GPU line up; each cell coloured independently.
+            Grid g = new Grid();
+            for (int c = 0; c < 6; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
+            cpuC = new TextBlock[6]; gpuC = new TextBlock[6];
+            for (int c = 0; c < 6; c++) {
+                cpuC[c] = Cell(c == 0); Grid.SetRow(cpuC[c], 0); Grid.SetColumn(cpuC[c], c); g.Children.Add(cpuC[c]);
+                gpuC[c] = Cell(c == 0); Grid.SetRow(gpuC[c], 1); Grid.SetColumn(gpuC[c], c); g.Children.Add(gpuC[c]);
+            }
+            s.Children.Add(g);
             box.Child = s; Content = box;
             MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { if (!locked && e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } } };
             SourceInitialized += delegate { Apply(); };
         }
-        static TextBlock Line(Brush fg) { return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, Foreground = fg, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 1) }; }
+        static TextBlock Cell(bool name) {
+            return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text,
+                TextAlignment = name ? TextAlignment.Left : TextAlignment.Right, HorizontalAlignment = name ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+                Margin = new Thickness(name ? 0 : 16, 1, 0, 1) };
+        }
         public void Update(SysMon.Sample s) {
             if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
-            string cn = CleanName(s.CpuName), gn = CleanName(s.GpuName);
-            int w = System.Math.Max(System.Math.Max(cn.Length, gn.Length), 4) + 1;   // shared name-column width => the % column lines up no matter the name lengths
-            cpu.Foreground = BrandColor(s.CpuName);
-            cpu.Text = Row(cn, w, (int)(s.CpuTotal + 0.5), s.CpuTempC, s.CpuPowerW, s.CpuMhz);   // temp/watts present only when HWiNFO is running; else -1 -> blank (aligned)
-            ram.Text = "RAM".PadRight(w) + s.RamUsedGB.ToString("0.0") + "/" + s.RamTotalGB.ToString("0") + "GB";
-            if (s.GpuOk) {
-                gpu.Foreground = BrandColor(s.GpuName);
-                gpu.Text = Row(gn, w, s.GpuPct, s.GpuTempC, s.GpuPowerW, s.GpuCoreMhz);
-                vram.Text = "VRAM".PadRight(w) + s.VramUsedGB.ToString("0.0") + "/" + s.VramTotalGB.ToString("0") + "GB";
-                vram.Visibility = Visibility.Visible;
-            } else { gpu.Text = "GPU".PadRight(w) + "n/a"; vram.Visibility = Visibility.Collapsed; }
+            Set(cpuC, CleanName(s.CpuName), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, s.CpuMhz);
+            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, s.GpuCoreMhz);
+            else Set(gpuC, CleanName(s.GpuName), -1, -1, 0, 0, -1, -1, 0);
         }
-        // one aligned row: NAME(w) PCT% TEMP°C WATTW MHz - missing fields (-1) become equal-width blanks so columns line up
-        static string Row(string name, int w, int pct, int temp, int watt, int mhz) {
-            string r = name.PadRight(w) + Pad(pct) + "% ";
-            r += (temp >= 0 ? Pad(temp) + "°C " : "      ");
-            r += (watt >= 0 ? watt.ToString().PadLeft(4) + "W " : "      ");
-            r += (mhz > 0 ? mhz + "MHz" : "");
-            return r;
+        // fill one row. Only %, temp and MEM change colour (load tiers); name/W/MHz stay white.
+        static void Set(TextBlock[] c, string name, int pct, int temp, double memUsed, double memTot, int memPct, int watt, int mhz) {
+            c[0].Text = name;
+            c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = pct >= 0 ? Ui.Load(pct) : Ui.Text;
+            c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = Ui.LoadT(temp);
+            c[3].Text = memTot > 0 ? memUsed.ToString("0.0") + "/" + memTot.ToString("0") + "GB" : ""; c[3].Foreground = memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
+            c[4].Text = watt >= 0 ? watt + "W" : "";
+            c[5].Text = mhz > 0 ? mhz + "MHz" : "";
         }
         // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"
         static string CleanName(string s) {
@@ -1269,14 +1277,6 @@ namespace StarMaster {
             s = s.Replace(" Processor", "").Replace(" CPU", "");
             return System.Text.RegularExpressions.Regex.Replace(s, "\\s+", " ").Trim();
         }
-        static Brush BrandColor(string n) {
-            if (n == null) return Ui.Text;
-            if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#5bbcff");   // Intel = blue
-            if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#76e0a1");   // NVIDIA = green
-            if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff6b7d");   // AMD = red
-            return Ui.Text;
-        }
-        static string Pad(int v) { return (v < 10 ? "  " : (v < 100 ? " " : "")) + v; }
         public void SetStyle(int alphaPct, string rgb) {
             try {
                 if (alphaPct < 0) alphaPct = 0; if (alphaPct > 100) alphaPct = 100;

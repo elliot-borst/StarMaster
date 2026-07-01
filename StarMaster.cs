@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("47.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("47.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("48.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("48.0.0.0")]
 
 namespace StarMaster {
 
@@ -393,6 +393,7 @@ namespace StarMaster {
         public const int NotInstalled = 0, NotRunning = 1, NoSharedMem = 2, Connected = 3;
         public static int CpuTempC = -1, CpuPowerW = -1;
         public static int State = NotInstalled;
+        public static bool AccessDenied;   // MMF exists but we couldn't open it (usually an elevation mismatch)
         public static bool Autorun, StartMin, SmEnabled;   // from HWiNFO64.INI
         static string exe; static bool located;
 
@@ -433,7 +434,7 @@ namespace StarMaster {
 
         // fast (call every tick): read CPU temp/watts from shared memory. Returns true if shared memory is live.
         public static bool ReadSensors() {
-            CpuTempC = -1; CpuPowerW = -1;
+            CpuTempC = -1; CpuPowerW = -1; AccessDenied = false;
             try {
                 using (MemoryMappedFile mmf = MemoryMappedFile.OpenExisting("Global\\HWiNFO_SENS_SM2", MemoryMappedFileRights.Read))
                 using (MemoryMappedViewAccessor a = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read)) {
@@ -455,7 +456,9 @@ namespace StarMaster {
                     }
                     return true;
                 }
-            } catch { return false; }   // shared memory not present => HWiNFO not running (or SM off)
+            }
+            catch (UnauthorizedAccessException) { AccessDenied = true; return false; }   // MMF exists but we lack rights (elevation mismatch)
+            catch { return false; }   // shared memory not present => HWiNFO not running (or SM off / 12-hour limit expired)
         }
 
         // heavier (call occasionally): classify overall state for the status line + button
@@ -485,7 +488,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "47";
+        public const string Version = "48";
         public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -870,7 +873,8 @@ namespace StarMaster {
                 monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Collapsed;
                 if (HwInfo.State == HwInfo.NotInstalled) { monHwTxt.Text = "Not installed (needed for CPU temp / watts)."; lbl.Text = "Get HWiNFO"; }
                 else if (HwInfo.State == HwInfo.NotRunning) { monHwTxt.Text = "Installed but not running."; lbl.Text = "Start HWiNFO"; monHwTip.Text = (!HwInfo.Autorun || !HwInfo.StartMin) ? "Tip: enable Auto Start + Minimize on startup in HWiNFO." : ""; monHwTip.Visibility = monHwTip.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
-                else { monHwTxt.Text = "Running, but Shared Memory is off."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings, then it'll connect."; monHwTip.Visibility = Visibility.Visible; }
+                else if (HwInfo.AccessDenied) { monHwTxt.Text = "Running, but StarMaster can't read its Shared Memory."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "This is usually an admin mismatch - run HWiNFO and StarMaster the same way (both normal, or both as administrator)."; monHwTip.Visibility = Visibility.Visible; }
+                else { monHwTxt.Text = "Running, but Shared Memory isn't active."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings. If it's already ticked, the free version's 12-hour limit has expired - untick and re-tick it (or restart HWiNFO)."; monHwTip.Visibility = Visibility.Visible; }
             }
         }
         void MonTick(object s, EventArgs e) {

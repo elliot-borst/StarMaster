@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("46.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("46.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("47.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("47.0.0.0")]
 
 namespace StarMaster {
 
@@ -485,7 +485,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "46";
+        public const string Version = "47";
         public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -739,7 +739,7 @@ namespace StarMaster {
             // HWiNFO status (CPU temp/watts come from it). Shows install/run state + an action button.
             Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
-            hwIn.Children.Add(new TextBlock { Text = "CPU temp / watts - HWiNFO", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            hwIn.Children.Add(new TextBlock { Text = "HWiNFO", Foreground = Ui.Text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
             DockPanel hwTop = new DockPanel { LastChildFill = false };
             monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
             monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
@@ -750,7 +750,7 @@ namespace StarMaster {
             // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
             Border fpsBox = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(new TextBlock { Text = "Frame rate - PresentMon", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            fpsIn.Children.Add(new TextBlock { Text = "PresentMon", Foreground = Ui.Text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
             DockPanel fpsTop = new DockPanel { LastChildFill = false };
             monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
             monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);

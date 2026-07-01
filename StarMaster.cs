@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("45.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("45.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("46.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("46.0.0.0")]
 
 namespace StarMaster {
 
@@ -485,7 +485,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "45";
+        public const string Version = "46";
         public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -739,6 +739,7 @@ namespace StarMaster {
             // HWiNFO status (CPU temp/watts come from it). Shows install/run state + an action button.
             Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
+            hwIn.Children.Add(new TextBlock { Text = "CPU temp / watts - HWiNFO", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
             DockPanel hwTop = new DockPanel { LastChildFill = false };
             monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
             monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
@@ -860,16 +861,16 @@ namespace StarMaster {
             if (monHwTxt == null) return;
             TextBlock lbl = (TextBlock)monHwBtn.Child;
             if (HwInfo.State == HwInfo.Connected) {
-                monHwTxt.Text = "HWiNFO connected" + (HwInfo.CpuTempC >= 0 ? "  -  CPU " + HwInfo.CpuTempC + " °C" + (HwInfo.CpuPowerW >= 0 ? " · " + HwInfo.CpuPowerW + " W" : "") : "");
+                monHwTxt.Text = "Connected" + (HwInfo.CpuTempC >= 0 ? " - CPU " + HwInfo.CpuTempC + " °C" + (HwInfo.CpuPowerW >= 0 ? " · " + HwInfo.CpuPowerW + " W" : "") : "");
                 monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
                 bool tipNeeded = !HwInfo.Autorun || !HwInfo.StartMin;
                 monHwTip.Text = tipNeeded ? "Tip: in HWiNFO enable Auto Start + Minimize on startup so it's always ready." : "";
                 monHwTip.Visibility = tipNeeded ? Visibility.Visible : Visibility.Collapsed;
             } else {
-                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Dim; monHwTip.Visibility = Visibility.Collapsed;
-                if (HwInfo.State == HwInfo.NotInstalled) { monHwTxt.Text = "HWiNFO not installed (needed for CPU temp / watts)."; lbl.Text = "Get HWiNFO"; }
-                else if (HwInfo.State == HwInfo.NotRunning) { monHwTxt.Text = "HWiNFO is installed but not running."; lbl.Text = "Start HWiNFO"; monHwTip.Text = (!HwInfo.Autorun || !HwInfo.StartMin) ? "Tip: enable Auto Start + Minimize on startup in HWiNFO." : ""; monHwTip.Visibility = monHwTip.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
-                else { monHwTxt.Text = "HWiNFO running, but Shared Memory is off."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings, then it'll connect."; monHwTip.Visibility = Visibility.Visible; }
+                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Collapsed;
+                if (HwInfo.State == HwInfo.NotInstalled) { monHwTxt.Text = "Not installed (needed for CPU temp / watts)."; lbl.Text = "Get HWiNFO"; }
+                else if (HwInfo.State == HwInfo.NotRunning) { monHwTxt.Text = "Installed but not running."; lbl.Text = "Start HWiNFO"; monHwTip.Text = (!HwInfo.Autorun || !HwInfo.StartMin) ? "Tip: enable Auto Start + Minimize on startup in HWiNFO." : ""; monHwTip.Visibility = monHwTip.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
+                else { monHwTxt.Text = "Running, but Shared Memory is off."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings, then it'll connect."; monHwTip.Visibility = Visibility.Visible; }
             }
         }
         void MonTick(object s, EventArgs e) {

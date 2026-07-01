@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("44.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("44.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("45.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("45.0.0.0")]
 
 namespace StarMaster {
 
@@ -485,7 +485,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "44";
+        public const string Version = "45";
         public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -509,7 +509,7 @@ namespace StarMaster {
         bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
         TextBox monCpuNameBox, monGpuNameBox;
-        bool monFpsOn = true; TextBlock monFpsTxt; Border monFpsBtn;
+        bool monFpsOn = true; TextBlock monFpsTxt, monFpsTip; Border monFpsBtn;
         bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
@@ -710,14 +710,11 @@ namespace StarMaster {
             body.Children.Add(NameColorRow(monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
             monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; }; body.Children.Add(LabeledField("GPU name", monGpuNameBox));
             body.Children.Add(NameColorRow(monGpuNameCol, delegate (string h) { monGpuNameCol = h; }));
-            // FPS via PresentMon (reads frames via ETW). Needs the user in "Performance Log Users" - a one-time setup the button does.
-            StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+            // FPS via PresentMon (reads frames via ETW). The Show-FPS toggle; PresentMon's health/status lives in its own box at the bottom (mirrors the HWiNFO box).
+            StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
             fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
-            monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Margin = new Thickness(16, 0, 0, 0); monFpsBtn.VerticalAlignment = VerticalAlignment.Center; monFpsBtn.Visibility = Visibility.Collapsed; fp.Children.Add(monFpsBtn);
             body.Children.Add(fp);
-            monFpsTxt = new TextBlock { Text = "uses PresentMon (downloaded on first use); shows while Star Citizen is running", Foreground = Ui.Faint, FontSize = 11, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
-            body.Children.Add(monFpsTxt);
             // box + text opacity sliders (10% steps)
             body.Children.Add(OpacityRow("Box Opacity", monOvAlpha, delegate (int v) { monOvAlpha = v; SetOverlayStyle(); }));
             body.Children.Add(OpacityRow("Text Opacity", monTextAlpha, delegate (int v) { monTextAlpha = v; SetOverlayStyle(); }));
@@ -749,6 +746,17 @@ namespace StarMaster {
             monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
             hwIn.Children.Add(monHwTip);
             hwBox.Child = hwIn; body.Children.Add(hwBox);
+            // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
+            Border fpsBox = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            StackPanel fpsIn = new StackPanel();
+            fpsIn.Children.Add(new TextBlock { Text = "Frame rate - PresentMon", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            DockPanel fpsTop = new DockPanel { LastChildFill = false };
+            monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
+            monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
+            fpsIn.Children.Add(fpsTop);
+            monFpsTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+            fpsIn.Children.Add(monFpsTip);
+            fpsBox.Child = fpsIn; body.Children.Add(fpsBox);
             return card;
         }
         FrameworkElement MetricRow(string label, out MonBar bar, out TextBlock val) {
@@ -802,17 +810,19 @@ namespace StarMaster {
         }
         void UpdateFpsUi() {
             if (monFpsTxt == null) return;
-            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "frame rate overlay - off"; return; }
+            SetFpsTip("");
+            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Overlay FPS is off - turn on \"Show FPS\" above to use it."; return; }
             bool access = FpsMon.PerfAccess();
             if (access && fpsPendingRelogin) { fpsPendingRelogin = false; SaveConfig(); }   // the sign-out/in took effect - clear the pending flag
             if (!access) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
                 monFpsTxt.Foreground = Ui.Warn;
                 if (fpsPendingRelogin) {   // already granted, just not applied yet
                     monFpsBtn.Visibility = Visibility.Collapsed;
-                    monFpsTxt.Text = "Almost there - sign out of Windows and back in (or restart the PC) once, then FPS will work automatically.";
+                    monFpsTxt.Text = "Almost there - sign out of Windows and back in (or restart the PC) once, then FPS works automatically.";
                 } else {
                     monFpsBtn.Visibility = Visibility.Visible;
-                    monFpsTxt.Text = "FPS needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
+                    monFpsTxt.Text = "Needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
+                    SetFpsTip("This grants FPS-capture access; it's separate from HWiNFO. After you approve it, sign out of Windows and back in once.");
                 }
                 return;
             }
@@ -820,12 +830,13 @@ namespace StarMaster {
             if (FpsMon.Status.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0) {   // download / start error
                 monFpsTxt.Foreground = Ui.Crit; monFpsTxt.Text = FpsMon.Status; return;
             }
-            if (FpsMon.GotFrames) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "running  -  " + FpsMon.Fps + " FPS"; return; }
+            if (FpsMon.GotFrames) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS"; return; }
             bool scRunning = false;
             try { scRunning = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
-            if (!scRunning) { monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "ready - waiting for Star Citizen to launch..."; }
-            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds. If it stays here, another FPS/overlay tool may be holding the capture."; }
+            if (!scRunning) { monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Ready - waiting for Star Citizen to launch..."; }
+            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds."; SetFpsTip("If it stays here, another FPS/overlay tool (RTSS, MSI Afterburner, etc.) may be holding the capture - close it and toggle Show FPS off/on."); }
         }
+        void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
         // one-time: add the user to Performance Log Users so PresentMon can capture without elevation thereafter
         void EnableFpsAccess() {
             if (monFpsTxt != null) monFpsTxt.Text = "requesting admin (one time)...";

@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("43.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("43.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("44.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("44.0.0.0")]
 
 namespace StarMaster {
 
@@ -485,8 +485,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "43";
-        public const string VersionDate = "2026-06-28";   // bump alongside Version at release time
+        public const string Version = "44";
+        public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -510,6 +510,7 @@ namespace StarMaster {
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
         TextBox monCpuNameBox, monGpuNameBox;
         bool monFpsOn = true; TextBlock monFpsTxt; Border monFpsBtn;
+        bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
         TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
@@ -801,14 +802,29 @@ namespace StarMaster {
         }
         void UpdateFpsUi() {
             if (monFpsTxt == null) return;
-            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Text = "frame rate overlay - off"; return; }
-            if (!FpsMon.PerfAccess()) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
-                monFpsBtn.Visibility = Visibility.Visible;
-                monFpsTxt.Text = "FPS needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
-            } else {
-                monFpsBtn.Visibility = Visibility.Collapsed;
-                monFpsTxt.Text = FpsMon.GotFrames ? ("running  -  " + FpsMon.Fps + " FPS") : (FpsMon.Status.Length > 0 ? FpsMon.Status : "waiting for Star Citizen...");
+            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "frame rate overlay - off"; return; }
+            bool access = FpsMon.PerfAccess();
+            if (access && fpsPendingRelogin) { fpsPendingRelogin = false; SaveConfig(); }   // the sign-out/in took effect - clear the pending flag
+            if (!access) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
+                monFpsTxt.Foreground = Ui.Warn;
+                if (fpsPendingRelogin) {   // already granted, just not applied yet
+                    monFpsBtn.Visibility = Visibility.Collapsed;
+                    monFpsTxt.Text = "Almost there - sign out of Windows and back in (or restart the PC) once, then FPS will work automatically.";
+                } else {
+                    monFpsBtn.Visibility = Visibility.Visible;
+                    monFpsTxt.Text = "FPS needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
+                }
+                return;
             }
+            monFpsBtn.Visibility = Visibility.Collapsed;
+            if (FpsMon.Status.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0) {   // download / start error
+                monFpsTxt.Foreground = Ui.Crit; monFpsTxt.Text = FpsMon.Status; return;
+            }
+            if (FpsMon.GotFrames) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "running  -  " + FpsMon.Fps + " FPS"; return; }
+            bool scRunning = false;
+            try { scRunning = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
+            if (!scRunning) { monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "ready - waiting for Star Citizen to launch..."; }
+            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds. If it stays here, another FPS/overlay tool may be holding the capture."; }
         }
         // one-time: add the user to Performance Log Users so PresentMon can capture without elevation thereafter
         void EnableFpsAccess() {
@@ -816,7 +832,7 @@ namespace StarMaster {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 int r = FpsMon.GrantPerfAccess();
                 Dispatcher.BeginInvoke(new Action(delegate {
-                    if (r == 0 || r == 2) ShowAlert("FPS enabled", "Done! Sign out and back in (or restart the PC) once, and the frame-rate overlay will work every session automatically - no more prompts.");
+                    if (r == 0 || r == 2) { fpsPendingRelogin = true; SaveConfig(); ShowAlert("FPS enabled", "Done! Sign out and back in (or restart the PC) once, and the frame-rate overlay will work every session automatically - no more prompts."); }
                     else ShowAlert("Setup not completed", "Couldn't enable FPS access (the admin prompt may have been declined). Click \"Enable FPS\" and choose Yes to try again.");
                     UpdateFpsUi();
                 }));
@@ -1210,7 +1226,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -1253,6 +1269,7 @@ namespace StarMaster {
                 sb.AppendLine("mon_cpunamecol=" + monCpuNameCol);
                 sb.AppendLine("mon_gpunamecol=" + monGpuNameCol);
                 sb.AppendLine("mon_fps=" + (monFpsOn ? "1" : "0"));
+                sb.AppendLine("fps_relogin=" + (fpsPendingRelogin ? "1" : "0"));
                 sb.AppendLine("mon_textalpha=" + monTextAlpha);
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));

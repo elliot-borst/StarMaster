@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("51.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("51.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("52.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("52.0.0.0")]
 
 namespace StarMaster {
 
@@ -488,7 +488,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "51";
+        public const string Version = "52";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -499,7 +499,7 @@ namespace StarMaster {
         bool running = false, focusGuard = true, autostart = false, startMinimized = false; TextBox winTitleBox;
         DispatcherTimer timer;
         // backup
-        TextBox bkRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;
+        TextBox scRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;   // scRoot: shared SC-folder field, lives in the top bar
         // shader cache
         TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false; int shaderTick = 100;
         // system monitor (control card + the over-the-game OSD overlay)
@@ -516,7 +516,7 @@ namespace StarMaster {
         bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // starstrings
-        TextBox ssRoot; Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus; Border ssDot, ssUpdateBtn; TextBlock ssUpdateLbl;
+        Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus, ssRunNote; Border ssDot, ssUpdateBtn, ssBadgePill; TextBlock ssUpdateLbl; bool ssBtnEnabled = true;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
         // tray
         System.Windows.Forms.NotifyIcon trayIcon; bool exiting = false;
@@ -590,6 +590,14 @@ namespace StarMaster {
             secRow.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
             secRow.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
+            // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
+            Border scSec = new Border { Margin = new Thickness(14, 0, 0, 0), Padding = new Thickness(14, 8, 14, 8), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+            StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center;
+            scRoot.LostFocus += delegate { RefreshChannels(); };
+            scRow.Children.Add(scRoot);
+            scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
             updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
             // inline "update available" notice in the top row; shown instead of the Check button while an update is pending
             updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
@@ -688,14 +696,19 @@ namespace StarMaster {
             shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) }; body.Children.Add(shaderStatus);
             return card;
         }
-        // called each visible tick: disable Clear while SC is running (deleting its cache mid-run fails) and refresh the size readout (throttled, off-thread)
+        // called each visible tick: disable the SC-writing actions (Clear shader cache, StarStrings install) while the game is running, and refresh the cache-size readout (throttled, off-thread)
         void UpdateShaderCard() {
-            if (shaderClrBtn == null) return;
             bool running = false;
             try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
-            SetShaderBtnEnabled(!running);
-            shaderRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-            if (++shaderTick >= 5) { shaderTick = 0; RefreshShaderSize(); }   // recompute the folder size every ~5s
+            if (shaderClrBtn != null) {
+                SetShaderBtnEnabled(!running);
+                shaderRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+                if (++shaderTick >= 5) { shaderTick = 0; RefreshShaderSize(); }   // recompute the folder size every ~5s
+            }
+            if (ssUpdateBtn != null) {
+                SetSsBtnEnabled(!running);
+                ssRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
         void SetShaderBtnEnabled(bool on) {
             if (shaderClrBtn == null || shaderBtnEnabled == on) return;
@@ -1046,8 +1059,6 @@ namespace StarMaster {
         // ---------- backup card ----------
         FrameworkElement BackupCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "▤", "Backup / Restore", "settings · bindings · StarStrings");
-            bkRoot = TextField(DefaultScRoot); body.Children.Add(LabeledField("SC folder", bkRoot));
-            bkRoot.LostFocus += delegate { RefreshChannels(); };
             StackPanel checks = new StackPanel { Margin = new Thickness(0, 4, 0, 10) };
             checks.Children.Add(Check("User settings & bindings (user\\)", wUser, delegate (bool v) { wUser = v; }));
             checks.Children.Add(Check("StarStrings text mod (data\\Localization\\)", wLoc, delegate (bool v) { wLoc = v; }));
@@ -1074,7 +1085,8 @@ namespace StarMaster {
             return card;
         }
         void RefreshChannels() {
-            string root = bkRoot.Text.Trim();
+            if (scRoot == null) return;
+            string root = scRoot.Text.Trim();
             string[] chans = BackupOps.DetectChannels(root); if (chans.Length == 0) chans = new string[] { "LIVE", "HOTFIX" };
             bkChannel.SetItems(chans, Pick(chans, "LIVE")); cpTo.SetItems(chans, Pick(chans, "HOTFIX"));
             List<string> from = new List<string>(); foreach (string c in chans) from.Add(c + " (current)"); foreach (string s in BackupOps.Snapshots()) from.Add(s);
@@ -1087,14 +1099,14 @@ namespace StarMaster {
         }
         string Pick(string[] arr, string want) { foreach (string a in arr) if (a == want) return want; return arr.Length > 0 ? arr[0] : ""; }
         void DoBackup() {
-            string root = bkRoot.Text.Trim(); string ch = bkChannel.Value;
+            string root = scRoot.Text.Trim(); string ch = bkChannel.Value;
             string src = Path.Combine(root, ch); if (!Directory.Exists(src)) { bkStatus.Text = "channel not found: " + src; return; }
             string dst = Path.Combine(BackupOps.BackupsRoot, ch + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
             bkStatus.Text = "backing up " + ch + " ...";
             RunBg(delegate { int n = BackupOps.CopyItems(src, dst, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("backup complete (" + n + " files) → " + Path.GetFileName(dst)) : "nothing copied - check the tickboxes/channel"; }, delegate { RefreshChannels(); });
         }
         void DoCopy() {
-            string root = bkRoot.Text.Trim(); string from = cpFrom.Value, to = cpTo.Value;
+            string root = scRoot.Text.Trim(); string from = cpFrom.Value, to = cpTo.Value;
             if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to)) { bkStatus.Text = "pick From and To"; return; }
             string srcBase = from.EndsWith(" (current)") ? Path.Combine(root, from.Substring(0, from.Length - 10)) : Path.Combine(BackupOps.BackupsRoot, from);
             string dstBase = Path.Combine(root, to);
@@ -1132,15 +1144,17 @@ namespace StarMaster {
         // ---------- starstrings card (half-width tile: stacked vertically) ----------
         FrameworkElement StarStringsCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization");
-            StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint; ssBadge.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(ssBadge, Dock.Right); head.Children.Add(ssBadge);
-            ssRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); body.Children.Add(LabeledField("SC folder", ssRoot));
+            StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint;
+            ssBadgePill = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(0), Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Top, Child = ssBadge };
+            DockPanel.SetDock(ssBadgePill, Dock.Right); head.Children.Add(ssBadgePill);
             body.Children.Add(BuildRow("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text));
             body.Children.Add(BuildRow("Latest", out ssLatest, "(check)", Ui.Accent));
             StackPanel ctl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
             ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 100); ctl.Children.Add(ssChannel); ctl.Children.Add(Sp(9));
             Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 9, 14, 9); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
-            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 9, 14, 9); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
+            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { if (ssBtnEnabled) SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 9, 14, 9); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
             body.Children.Add(ctl);
+            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
             // full credit to MrKraken, the creator of StarStrings
             TextBlock credit = new TextBlock { Margin = new Thickness(0, 14, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 16 };
             credit.Inlines.Add(new Run("Created and maintained by MrKraken — all credit to him."));
@@ -1162,25 +1176,42 @@ namespace StarMaster {
                 StarStrings.Info info = StarStrings.CheckLatest();
                 Dispatcher.BeginInvoke(new Action(delegate {
                     ssLatestInfo = info;
-                    if (info == null) { ssLatest.Text = "(offline)"; ssStatus.Text = "offline"; ssStatus.Foreground = Ui.Dim; ssDot.Background = Ui.Faint; return; }
+                    if (info == null) { ssLatest.Text = "(offline)"; SetSsBadge("offline", Ui.Dim, Ui.Faint, false); return; }
                     ssLatest.Text = info.Build;
                     bool cur = ssInstalledBuild.Length > 0 && ssInstalledBuild == info.Build;
-                    if (ssInstalledBuild.Length == 0) { ssUpdateLbl.Text = "↓ Install"; ssStatus.Text = "not installed"; ssStatus.Foreground = Ui.Accent2; ssDot.Background = Ui.Accent; }
-                    else if (cur) { ssUpdateLbl.Text = "✓ Re-install"; ssStatus.Text = "up to date"; ssStatus.Foreground = Ui.Good; ssDot.Background = Ui.Good; }
-                    else { ssUpdateLbl.Text = "↓ Update"; ssStatus.Text = "update available"; ssStatus.Foreground = Ui.Accent2; ssDot.Background = Ui.Accent; }
+                    if (ssInstalledBuild.Length == 0) { ssUpdateLbl.Text = "↓ Install"; SetSsBadge("Not installed", Ui.Ink, Ui.Ink, true); }
+                    else if (cur) { ssUpdateLbl.Text = "✓ Re-install"; SetSsBadge("Up to date", Ui.Good, Ui.Good, false); }
+                    else { ssUpdateLbl.Text = "↓ Update"; SetSsBadge("Update available", Ui.Ink, Ui.Ink, true); }
                 }));
             });
         }
+        // StarStrings status pill: 'highlight' turns it into a bold filled accent chip so "update available" / "not installed" really stand out
+        void SetSsBadge(string text, Brush fg, Brush dot, bool highlight) {
+            if (ssStatus == null) return;
+            ssStatus.Text = text; ssStatus.Foreground = fg; ssDot.Background = dot;
+            ssBadgePill.Background = highlight ? (Brush)Ui.AccentGrad() : Brushes.Transparent;
+            ssBadgePill.Padding = highlight ? new Thickness(11, 5, 11, 5) : new Thickness(0);
+            ssStatus.FontSize = highlight ? 13 : 12;
+            ssStatus.FontWeight = highlight ? FontWeights.Bold : FontWeights.SemiBold;
+        }
+        void SetSsBtnEnabled(bool on) {
+            if (ssUpdateBtn == null || ssBtnEnabled == on) return;
+            ssBtnEnabled = on;
+            ssUpdateBtn.Opacity = on ? 1.0 : 0.4;
+            ssUpdateBtn.Cursor = on ? Cursors.Hand : Cursors.Arrow;
+        }
         void SSInstall() {
+            bool running = false; try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
+            if (running) { ssStatus.Text = "close Star Citizen first"; ssStatus.Foreground = Ui.Warn; return; }
             if (ssLatestInfo == null || string.IsNullOrEmpty(ssLatestInfo.ZipUrl)) { SSCheck(true); return; }
-            string root = ssRoot.Text.Trim(); string ch = ssChannel.Value; string channelRoot = Path.Combine(root, ch);
+            string root = scRoot.Text.Trim(); string ch = ssChannel.Value; string channelRoot = Path.Combine(root, ch);
             ShowConfirm("Install StarStrings", "Install StarStrings into:\n\n" + channelRoot + "\n\nCopies the data\\ folder and ensures user.cfg has 'g_language = english'. Close Star Citizen first.", "Install", delegate {
                 ssStatus.Text = "installing..."; ssStatus.Foreground = Ui.Dim; string zip = ssLatestInfo.ZipUrl; string build = ssLatestInfo.Build;
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                     string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
                     Dispatcher.BeginInvoke(new Action(delegate {
-                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; ssStatus.Text = "installed - restart SC"; ssStatus.Foreground = Ui.Good; ssDot.Background = Ui.Good; ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); }
-                        else { ssStatus.Text = "failed: " + msg; ssStatus.Foreground = Ui.DangerFg; }
+                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; SetSsBadge("Installed - restart SC", Ui.Good, Ui.Good, false); ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); }
+                        else { SetSsBadge("failed: " + msg, Ui.DangerFg, Ui.Crit, false); }
                     }));
                 });
             });
@@ -1323,7 +1354,7 @@ namespace StarMaster {
                 sb.AppendLine("startminimized=" + (startMinimized ? "1" : "0"));
                 sb.AppendLine("wintitle=" + (winTitleBox != null ? winTitleBox.Text : winTitleField));
                 sb.AppendLine("starstrings_build=" + ssInstalledBuild);
-                sb.AppendLine("starstrings_root=" + (ssRoot != null ? ssRoot.Text : ssRootCfg));
+                sb.AppendLine("starstrings_root=" + (scRoot != null ? scRoot.Text : ssRootCfg));
                 sb.AppendLine("starstrings_channel=" + (ssChannel != null ? ssChannel.Value : ssChannelCfg));
                 sb.AppendLine("lastcheck=" + lastUpdateCheck.Ticks);
                 if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; }

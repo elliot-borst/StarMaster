@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("49.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("49.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("50.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("50.0.0.0")]
 
 namespace StarMaster {
 
@@ -488,7 +488,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "49";
+        public const string Version = "50";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -501,7 +501,7 @@ namespace StarMaster {
         // backup
         TextBox bkRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;
         // shader cache
-        TextBlock shaderStatus;
+        TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false; int shaderTick = 100;
         // system monitor (control card + the over-the-game OSD overlay)
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
@@ -681,10 +681,49 @@ namespace StarMaster {
         // ---------- shader cache card (half-width tile) ----------
         FrameworkElement ShaderCacheCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "fixes graphical glitches - rebuilt on next launch");
-            body.Children.Add(new TextBlock { Text = "Deletes the Star Citizen shader cache at %LOCALAPPDATA%\\Star Citizen. Safe to do - the game rebuilds it automatically on next launch (the first load afterwards is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 14) });
-            Border clr = Btn("♻  Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { ClearShaderCache(); }); clr.Padding = new Thickness(18, 10, 18, 10); clr.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(clr);
+            body.Children.Add(new TextBlock { Text = "Deletes the Star Citizen shader cache at %LOCALAPPDATA%\\Star Citizen. Safe to do - the game rebuilds it automatically on next launch (the first load afterwards is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
+            shaderSizeTxt = new TextBlock { Text = "Cache size: checking...", Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 0, 0, 12) }; body.Children.Add(shaderSizeTxt);
+            shaderClrBtn = Btn("♻  Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { if (shaderBtnEnabled) ClearShaderCache(); }); shaderClrBtn.Padding = new Thickness(18, 10, 18, 10); shaderClrBtn.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(shaderClrBtn);
+            shaderRunNote = new TextBlock { Text = "Star Citizen is running - close it to clear the cache.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(shaderRunNote);
             shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) }; body.Children.Add(shaderStatus);
             return card;
+        }
+        // called each visible tick: disable Clear while SC is running (deleting its cache mid-run fails) and refresh the size readout (throttled, off-thread)
+        void UpdateShaderCard() {
+            if (shaderClrBtn == null) return;
+            bool running = false;
+            try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
+            SetShaderBtnEnabled(!running);
+            shaderRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+            if (++shaderTick >= 5) { shaderTick = 0; RefreshShaderSize(); }   // recompute the folder size every ~5s
+        }
+        void SetShaderBtnEnabled(bool on) {
+            if (shaderClrBtn == null || shaderBtnEnabled == on) return;
+            shaderBtnEnabled = on;
+            shaderClrBtn.Opacity = on ? 1.0 : 0.4;
+            shaderClrBtn.Cursor = on ? Cursors.Hand : Cursors.Arrow;
+        }
+        // walk %LOCALAPPDATA%\Star Citizen off the UI thread (can be GBs / thousands of files) and show the total
+        void RefreshShaderSize() {
+            if (shaderSizing) return;
+            shaderSizing = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Star Citizen");
+                string txt; try { txt = Directory.Exists(dir) ? "Cache size: " + FmtSize(DirSize(dir)) : "Cache size: no cache folder yet"; }
+                catch { txt = "Cache size: n/a"; }
+                Dispatcher.BeginInvoke(new Action(delegate { if (shaderSizeTxt != null) shaderSizeTxt.Text = txt; shaderSizing = false; }));
+            });
+        }
+        static long DirSize(string dir) {
+            long total = 0;
+            try { foreach (string f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)) { try { total += new FileInfo(f).Length; } catch { } } } catch { }
+            return total;
+        }
+        static string FmtSize(long b) {
+            if (b < 1024) return b + " B";
+            double kb = b / 1024.0; if (kb < 1024) return kb.ToString("0") + " KB";
+            double mb = kb / 1024.0; if (mb < 1024) return mb.ToString("0.0") + " MB";
+            return (mb / 1024.0).ToString("0.00") + " GB";
         }
 
         // ---------- system monitor card (full-width; it's the control panel - the live numbers live in the over-the-game OSD overlay) ----------
@@ -899,6 +938,7 @@ namespace StarMaster {
             bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
             if (++hwTick >= 5) { hwTick = 0; HwInfo.RefreshState(sm); }   // heavier state check every ~5s
             if (IsVisible) {
+                UpdateShaderCard();
                 if (hwTick == 0) UpdateHwUi();
                 // clean preview: 4 equal bars, each with just its primary value (full detail is in the overlay)
                 monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = (int)(smp.CpuTotal + 0.5) + " %";
@@ -1067,6 +1107,8 @@ namespace StarMaster {
         }
         // delete the SC shader cache (%LOCALAPPDATA%\Star Citizen) - it regenerates on next launch; fixes most graphical glitches
         void ClearShaderCache() {
+            bool running = false; try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
+            if (running) { shaderStatus.Text = "close Star Citizen first - it's holding the cache open"; shaderStatus.Foreground = Ui.Warn; return; }
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Star Citizen");
             if (!Directory.Exists(dir)) { shaderStatus.Text = "no shader cache found at " + dir; shaderStatus.Foreground = Ui.Dim; return; }
             ShowConfirm("Clear shader cache", "Delete the Star Citizen shader cache?\n\n" + dir + "\n\nSafe to do - the game rebuilds it on next launch (the first load will be a bit slower). Close Star Citizen first.", "Clear cache", delegate {
@@ -1075,7 +1117,7 @@ namespace StarMaster {
                     string res; Brush fg;
                     try { Directory.Delete(dir, true); res = "shader cache cleared - it rebuilds on next launch"; fg = Ui.Good; }
                     catch (Exception ex) { res = "could not fully clear (files in use? close Star Citizen and retry): " + ex.Message; fg = Ui.DangerFg; }
-                    Dispatcher.BeginInvoke(new Action(delegate { shaderStatus.Text = res; shaderStatus.Foreground = fg; }));
+                    Dispatcher.BeginInvoke(new Action(delegate { shaderStatus.Text = res; shaderStatus.Foreground = fg; RefreshShaderSize(); }));
                 });
             });
         }

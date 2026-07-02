@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("53.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("53.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("54.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("54.0.0.0")]
 
 namespace StarMaster {
 
@@ -494,7 +494,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "53";
+        public const string Version = "54";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1471,6 +1471,7 @@ namespace StarMaster {
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
+            ShowActivated = false;   // never steal foreground when Show()n - else "Only show over SC" would show->activate->(SC no longer foreground)->hide in a 1s flicker loop, fighting Discord's overlay
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
             StackPanel s = new StackPanel();
@@ -1546,8 +1547,9 @@ namespace StarMaster {
         void Apply() {
             try {
                 IntPtr h = new System.Windows.Interop.WindowInteropHelper(this).Handle; if (h == IntPtr.Zero) return;
-                int ex = GetWindowLong(h, -20);                       // GWL_EXSTYLE; toggle WS_EX_TRANSPARENT only (WPF manages WS_EX_LAYERED)
-                if (locked) ex |= 0x20; else ex &= ~0x20;
+                int ex = GetWindowLong(h, -20);                       // GWL_EXSTYLE (WPF manages WS_EX_LAYERED)
+                ex |= 0x08000000;                                     // WS_EX_NOACTIVATE: never take foreground (a click on the overlay must not steal focus from the game)
+                if (locked) ex |= 0x20; else ex &= ~0x20;             // WS_EX_TRANSPARENT: click-through when locked
                 SetWindowLong(h, -20, ex);
             } catch { }
         }

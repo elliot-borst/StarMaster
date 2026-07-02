@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("54.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("54.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("55.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("55.0.0.0")]
 
 namespace StarMaster {
 
@@ -494,7 +494,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "54";
+        public const string Version = "55";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1057,7 +1057,11 @@ namespace StarMaster {
             foreach (Cmd c in commands) {
                 if (!c.Enabled) continue;
                 if ((DateTime.Now - c.LastFire).TotalSeconds < c.Interval) continue;
-                if (focusGuard) { string t = winTitleBox.Text.Trim().ToLower(); if (t.Length == 0 || !Native.ActiveTitle().ToLower().Contains(t)) continue; }
+                if (focusGuard) {
+                    // Gate on the actual foreground PROCESS being the game - a window whose TITLE merely contains the text (e.g. a terminal titled "...Star Citizen...") must not receive keystrokes.
+                    if (!string.Equals(Native.ActiveProcessName(), "StarCitizen", StringComparison.OrdinalIgnoreCase)) continue;
+                    string t = winTitleBox.Text.Trim().ToLower(); if (t.Length == 0 || !Native.ActiveTitle().ToLower().Contains(t)) continue;
+                }
                 c.LastFire = DateTime.Now;
                 List<byte> mods = new List<byte>(); if (c.Shift) mods.Add(0xA0); if (c.Ctrl) mods.Add(0xA2); if (c.Alt) mods.Add(0xA4);
                 byte vk = Vk.Map(c.Key); if (vk == 0) continue;

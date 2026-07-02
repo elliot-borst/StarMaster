@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("52.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("52.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("53.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("53.0.0.0")]
 
 namespace StarMaster {
 
@@ -36,8 +36,14 @@ namespace StarMaster {
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
         [DllImport("user32.dll")] static extern uint MapVirtualKey(uint uCode, uint uMapType);
+        [DllImport("user32.dll")] static extern int GetWindowThreadProcessId(IntPtr hWnd, out int pid);
         const uint KEYUP = 0x2, SCANCODE = 0x8, EXTENDED = 0x1;
         public static string ActiveTitle() { StringBuilder sb = new StringBuilder(256); GetWindowText(GetForegroundWindow(), sb, 256); return sb.ToString(); }
+        // process name (no extension) of the foreground window's owner - precise SC detection (title text can contain "Star Citizen" by coincidence, e.g. a terminal editing this app)
+        public static string ActiveProcessName() {
+            try { int pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); if (pid <= 0) return ""; return System.Diagnostics.Process.GetProcessById(pid).ProcessName; }
+            catch { return ""; }
+        }
         static void Key(byte vk, bool up) {
             uint sc = MapVirtualKey(vk, 0);
             uint flags = SCANCODE | (up ? KEYUP : 0);
@@ -488,7 +494,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "52";
+        public const string Version = "53";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -501,7 +507,7 @@ namespace StarMaster {
         // backup
         TextBox scRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;   // scRoot: shared SC-folder field, lives in the top bar
         // shader cache
-        TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false; int shaderTick = 100;
+        TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false, shaderSized = false; int shaderTick = 100;
         // system monitor (control card + the over-the-game OSD overlay)
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
@@ -703,7 +709,10 @@ namespace StarMaster {
             if (shaderClrBtn != null) {
                 SetShaderBtnEnabled(!running);
                 shaderRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-                if (++shaderTick >= 5) { shaderTick = 0; RefreshShaderSize(); }   // recompute the folder size every ~5s
+                // The cache-size walk is a recursive scan of thousands of files - it caused a periodic CPU blip while the window was open.
+                // Do it once when the card first appears, then only every ~30s and NEVER while the game is running (the size barely changes and Clear is disabled anyway).
+                bool due = ++shaderTick >= 30;
+                if (!shaderSized || (due && !running)) { shaderTick = 0; shaderSized = true; RefreshShaderSize(); }
             }
             if (ssUpdateBtn != null) {
                 SetSsBtnEnabled(!running);
@@ -837,10 +846,10 @@ namespace StarMaster {
                 monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); monWin.SetColors(monColors);
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
         }
-        // when "Only show over Star Citizen" is on, hide the overlay window unless SC is the foreground window (same focus check as keep-alive; fails closed on a blank title). No-op unless the overlay is enabled.
+        // when "Only show over Star Citizen" is on, hide the overlay unless the FOREGROUND process is StarCitizen.exe. Matches on the process name (not window title) so a terminal/editor whose title merely contains "Star Citizen" doesn't trigger it. Fails closed. No-op unless the overlay is enabled.
         void ApplyActiveOnly() {
             if (monWin == null || !monOverlayOn) return;
-            bool show = !monActiveOnly || Native.ActiveTitle().IndexOf("Star Citizen", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool show = !monActiveOnly || string.Equals(Native.ActiveProcessName(), "StarCitizen", StringComparison.OrdinalIgnoreCase);
             if (show) { if (monWin.Visibility != Visibility.Visible) monWin.Show(); }
             else if (monWin.Visibility == Visibility.Visible) monWin.Hide();
         }

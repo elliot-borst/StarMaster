@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("50.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("50.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("51.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("51.0.0.0")]
 
 namespace StarMaster {
 
@@ -477,8 +477,8 @@ namespace StarMaster {
         public static SolidColorBrush B(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16))); b.Freeze(); return b; }
         public static SolidColorBrush B2(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromArgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16), Convert.ToByte(hex.Substring(6, 2), 16))); b.Freeze(); return b; }
         public static readonly Brush Warn = B("#ffd34d"), HotO = B("#ff9a3d"), Crit = B("#ff5d5d");   // load tiers
-        public static Brush Load(double p) { if (p >= 90) return Crit; if (p >= 80) return HotO; if (p >= 60) return Warn; return Text; }   // usage/mem %: white -> yellow -> orange -> red
-        public static Brush LoadT(double t) { if (t >= 85) return Crit; if (t >= 75) return HotO; if (t >= 65) return Warn; return Text; }   // temperature tiers
+        public static Brush Load(double p) { if (p >= 95) return Crit; if (p >= 90) return HotO; if (p >= 85) return Warn; return Text; }   // usage/mem %: white <85 -> yellow 85 -> orange 90 -> red 95
+        public static Brush LoadT(double t) { if (t >= 95) return Crit; if (t >= 88) return HotO; if (t >= 80) return Warn; return Text; }   // temperature: white <80 -> yellow 80 -> orange 88 -> red 95
         public static readonly Brush Bg = B("#0b0e16"), Card = B("#141a2b"), Card2 = B("#171d33"), Line = B("#232a45"), Line2 = B("#323c5e"),
             Text = B("#e6ecfb"), Dim = B("#94a0c2"), Faint = B("#646f93"), Accent = B("#79b0ff"), Accent2 = B("#a9c8ff"),
             Good = B("#5fe0c0"), Ink = B("#0a1228"), Inset = B("#0f1322"), Danger = B("#2a1722"), DangerFg = B("#ff9bb8");
@@ -488,7 +488,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "50";
+        public const string Version = "51";
         public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;

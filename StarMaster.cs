@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("48.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("48.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("49.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("49.0.0.0")]
 
 namespace StarMaster {
 
@@ -488,8 +488,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "48";
-        public const string VersionDate = "2026-07-01";   // bump alongside Version at release time
+        public const string Version = "49";
+        public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -506,7 +506,7 @@ namespace StarMaster {
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
         TextBlock monCpuTxt, monRamTxt, monGpuTxt, monVramTxt;
-        MonWindow monWin; bool monOverlayOn = true, monLocked = false; double monOvX = 60, monOvY = 60;
+        MonWindow monWin; bool monOverlayOn = true, monLocked = false, monActiveOnly = false; double monOvX = 60, monOvY = 60;
         int monOvAlpha = 85, monTextAlpha = 100; string monOvColor = "0a0e18";   // box + text opacity (0-100) + box colour
         bool monColors = true;   // overlay colours: brand names + load tiers; off = all white
         bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
@@ -700,6 +700,11 @@ namespace StarMaster {
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
             lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(lk);
+            // only display the overlay while Star Citizen is the foreground window (hidden on the desktop / Alt-Tab / other apps)
+            StackPanel ao = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            ao.Children.Add(Toggle(monActiveOnly, delegate (bool v) { monActiveOnly = v; ApplyActiveOnly(); }));
+            ao.Children.Add(new TextBlock { Text = "  Only show over Star Citizen", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(ao);
             StackPanel cl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             cl.Children.Add(Toggle(monColors, delegate (bool v) { monColors = v; if (monWin != null) monWin.SetColors(v); }));
             cl.Children.Add(new TextBlock { Text = "  Show Colours", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
@@ -779,6 +784,13 @@ namespace StarMaster {
                 if (monWin == null) { monWin = new MonWindow(); monWin.Left = monOvX; monWin.Top = monOvY; monWin.Closed += delegate { if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; } monWin = null; }; }
                 monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); monWin.SetColors(monColors);
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
+        }
+        // when "Only show over Star Citizen" is on, hide the overlay window unless SC is the foreground window (same focus check as keep-alive; fails closed on a blank title). No-op unless the overlay is enabled.
+        void ApplyActiveOnly() {
+            if (monWin == null || !monOverlayOn) return;
+            bool show = !monActiveOnly || Native.ActiveTitle().IndexOf("Star Citizen", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (show) { if (monWin.Visibility != Visibility.Visible) monWin.Show(); }
+            else if (monWin.Visibility == Visibility.Visible) monWin.Hide();
         }
         // a labelled opacity slider (0-100, 10% steps) with a live % readout
         UIElement OpacityRow(string label, int initial, Action<int> set) {
@@ -878,7 +890,8 @@ namespace StarMaster {
             }
         }
         void MonTick(object s, EventArgs e) {
-            bool overlay = monWin != null && monOverlayOn;
+            ApplyActiveOnly();   // active-only: show/hide the overlay to track whether SC is the foreground window
+            bool overlay = monWin != null && monOverlayOn && monWin.Visibility == Visibility.Visible;
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
@@ -1242,7 +1255,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -1274,6 +1287,7 @@ namespace StarMaster {
                 if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; }
                 sb.AppendLine("mon_overlay=" + (monOverlayOn ? "1" : "0"));
                 sb.AppendLine("mon_lock=" + (monLocked ? "1" : "0"));
+                sb.AppendLine("mon_activeonly=" + (monActiveOnly ? "1" : "0"));
                 sb.AppendLine("mon_ovx=" + (int)monOvX);
                 sb.AppendLine("mon_ovy=" + (int)monOvY);
                 sb.AppendLine("mon_ovalpha=" + monOvAlpha);

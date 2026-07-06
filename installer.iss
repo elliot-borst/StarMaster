@@ -1,14 +1,17 @@
 ; StarMaster - Inno Setup installer script.
-; Produces StarMaster-Setup.exe (a real setup wizard with Start-menu shortcut,
-; optional "run on Windows startup", and an uninstaller).
+; Produces dist\StarMaster-Setup.exe. Built by build-installer.ps1, which reads the
+; whole-number version from MainWindow.Version in StarMaster.cs and passes it via
+; /DMyAppVersion (a manual IDE compile falls back to "0" - build via the script).
 ;
-; HOW TO BUILD THE INSTALLER:
-;   1. Install Inno Setup (free): https://jrsoftware.org/isdl.php
-;   2. Right-click this file -> "Compile" (or open in Inno Setup and press F9).
-;   3. Out pops StarMaster-Setup.exe in this folder - that's the installer you can run/share.
+; Zero-question wizard: no dir/group/ready/finished pages. NB an INTERACTIVE run still
+; shows at least one confirmation page no matter what - only the silent flags
+; (/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS, used by the
+; in-app auto-updater) remove all UI.
 
+#ifndef MyAppVersion
+  #define MyAppVersion "0"
+#endif
 #define MyAppName "StarMaster"
-#define MyAppVersion "55"
 #define MyAppExe "StarMaster.exe"
 #define MyAppPublisher "Elliot Borst"
 
@@ -20,9 +23,14 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL=https://github.com/elliot-borst/StarMaster
 DefaultDirName={localappdata}\StarMaster
 DefaultGroupName=StarMaster
+; Zero-question install. No desktop-shortcut or startup [Tasks] either - silent installs
+; never show task pages, so start-with-Windows is managed in-app (HKCU Run key toggle).
 DisableProgramGroupPage=yes
+DisableDirPage=yes
+DisableReadyPage=yes
+DisableFinishedPage=yes
 PrivilegesRequired=lowest
-OutputDir=.
+OutputDir=dist
 OutputBaseFilename=StarMaster-Setup
 Compression=lzma
 SolidCompression=yes
@@ -30,9 +38,9 @@ UninstallDisplayIcon={app}\{#MyAppExe}
 UninstallDisplayName={#MyAppName}
 WizardStyle=modern
 SetupIconFile=StarMaster.ico
-; In-app updater downloads this installer and runs it while StarMaster is open;
-; offer to close the running copy so files can be replaced (no forced reboot).
-CloseApplications=yes
+; The in-app updater runs this installer silently while StarMaster is open; force-close
+; the running copy so files can be replaced (no forced reboot).
+CloseApplications=force
 RestartApplications=no
 
 [Files]
@@ -40,15 +48,13 @@ Source: "StarMaster.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; config.txt is intentionally NOT bundled - the app creates it on first run,
 ; so your settings survive a reinstall/upgrade.
 
-[Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
-Name: "startupicon"; Description: "Run automatically when Windows starts (recommended for keep-alive)"; GroupDescription: "Startup:"
-
 [Icons]
 Name: "{group}\StarMaster"; Filename: "{app}\{#MyAppExe}"
 Name: "{group}\Uninstall StarMaster"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\StarMaster"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
-Name: "{userstartup}\StarMaster"; Filename: "{app}\{#MyAppExe}"; Tasks: startupicon
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Launch StarMaster now"; Flags: nowait postinstall skipifsilent
+; Always relaunch, ALSO on silent auto-updates - a plain nowait entry, NOT
+; postinstall/skipifsilent (those never fire on /VERYSILENT installs, so the app
+; would not come back after an update). --minimized keeps updates invisible in the
+; tray; the app shows its window anyway on a true first run (no config.txt yet).
+Filename: "{app}\{#MyAppExe}"; Parameters: "--minimized"; Flags: nowait

@@ -25,8 +25,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("55.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("55.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("56.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("56.0.0.0")]
 
 namespace StarMaster {
 
@@ -75,10 +75,13 @@ namespace StarMaster {
     public class Cmd { public string Label = "Command"; public bool Shift, Ctrl, Alt; public string Key = ""; public int Interval = 600; public bool Enabled = true; public DateTime LastFire = DateTime.MinValue; public bool Locked; }
 
     class TimedWebClient : WebClient {
+        readonly int timeoutMs;
+        public TimedWebClient() : this(30000) { }
+        public TimedWebClient(int ms) { timeoutMs = ms; }
         protected override WebRequest GetWebRequest(Uri address) {
             WebRequest r = base.GetWebRequest(address);
             HttpWebRequest h = r as HttpWebRequest;
-            if (h != null) { h.Timeout = 30000; h.ReadWriteTimeout = 30000; }
+            if (h != null) { h.Timeout = timeoutMs; h.ReadWriteTimeout = timeoutMs; }
             return r;
         }
     }
@@ -89,16 +92,6 @@ namespace StarMaster {
         public const string ReleasesPage = "https://github.com/" + Owner + "/" + Repo + "/releases/latest";
         public class Info { public int[] Version; public string Tag; public string SetupUrl; public string PageUrl; }
         public static string LastError = "";   // human-readable reason set when CheckLatest returns null
-        public static int[] ParseVer(string tag) {
-            List<int> parts = new List<int>();
-            if (!string.IsNullOrEmpty(tag)) foreach (Match m in Regex.Matches(tag, "[0-9]+")) { int v; if (int.TryParse(m.Value, out v)) parts.Add(v); }
-            return parts.ToArray();
-        }
-        public static int Compare(int[] a, int[] b) {
-            int n = Math.Max(a.Length, b.Length);
-            for (int i = 0; i < n; i++) { int ai = i < a.Length ? a[i] : 0; int bi = i < b.Length ? b[i] : 0; if (ai != bi) return ai < bi ? -1 : 1; }
-            return 0;
-        }
         public static Info CheckLatest() {
             LastError = "";
             try {
@@ -107,7 +100,7 @@ namespace StarMaster {
                 req.UserAgent = "StarMaster-Updater"; req.Accept = "application/vnd.github+json"; req.Timeout = 8000;
                 string json; using (WebResponse resp = req.GetResponse()) using (StreamReader sr = new StreamReader(resp.GetResponseStream())) json = sr.ReadToEnd();
                 Match tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\""); if (!tag.Success) { LastError = "Check failed"; return null; }
-                Info info = new Info(); info.Tag = tag.Groups[1].Value; info.Version = ParseVer(info.Tag);
+                Info info = new Info(); info.Tag = tag.Groups[1].Value; info.Version = WholeVersion.Parse(info.Tag);
                 Match page = Regex.Match(json, "\"html_url\"\\s*:\\s*\"([^\"]+)\""); info.PageUrl = page.Success ? page.Groups[1].Value : ReleasesPage;
                 foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"")) { string low = m.Groups[1].Value.ToLower(); if (low.EndsWith(".exe") && low.Contains("setup")) { info.SetupUrl = m.Groups[1].Value; break; } }
                 return info;
@@ -126,7 +119,7 @@ namespace StarMaster {
             try {
                 ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 string tmp = Path.Combine(Path.GetTempPath(), "StarMaster-Setup-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
-                using (WebClient wc = new TimedWebClient()) { wc.Headers.Add("User-Agent", "StarMaster-Updater"); wc.DownloadFile(url, tmp); }
+                using (WebClient wc = new TimedWebClient(600000)) { wc.Headers.Add("User-Agent", "StarMaster-Updater"); wc.DownloadFile(url, tmp); }   // 10-min timeout - installers are big on slow links
                 return tmp;
             } catch { return null; }
         }
@@ -494,8 +487,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "55";
-        public const string VersionDate = "2026-07-02";   // bump alongside Version at release time
+        public const string Version = "56";
+        public const string VersionDate = "2026-07-06";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -531,14 +524,17 @@ namespace StarMaster {
         // header update button (its own label doubles as the status)
         Border updBtn; TextBlock updBtnLbl; DispatcherTimer updRevertTimer;
         DateTime lastUpdateCheck = DateTime.MinValue;   // throttles the automatic launch check (persisted in config)
-        // in-app "update available" notice that lives in the header top row (replaces the popup)
+        // hands-off update status line in the header top row (updates install themselves - no prompt)
         StackPanel updateNotice; TextBlock updateNoticeText;
+        bool updating = false;            // a silent update is already in flight - don't start another
+        Updater.Info portableUpdate;      // set when a portable copy finds an update: the header button opens the Releases page instead
         // in-app modal overlay - the ONLY way to show dialogs/messages (no OS popups anywhere)
         Grid overlayHost; Border overlayCard;
 
         public MainWindow() {
             cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
-            CurrentVer = Updater.ParseVer(Version);
+            CurrentVer = WholeVersion.Parse(Version);
+            bool firstRun = !File.Exists(cfgPath);   // decided before anything can write it
             LoadConfig();
 
             Title = "StarMaster v" + Version;
@@ -568,7 +564,9 @@ namespace StarMaster {
             BuildTray();
             Closing += OnClosing;
             Loaded += delegate { CheckUpdate(true); SSCheck(false); };
-            if (startMinimized) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }   // launch straight to the tray
+            // launch straight to the tray: the user setting, or the installer's --minimized relaunch after a
+            // silent auto-update - but a TRUE first run (no config yet) always shows the window
+            if (startMinimized || (App.MinimizedArg && !firstRun)) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }
             if (autostart) ToggleRun();
             if (monOverlayOn) Loaded += delegate { SetOverlay(true); };   // restore the over-the-game overlay if it was on last session
             if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); };   // FPS defaults on
@@ -593,8 +591,12 @@ namespace StarMaster {
             ver.Children.Add(new TextBlock { Text = "Released " + VersionDate, Foreground = Ui.Faint, FontSize = 11 });
             secRow.Children.Add(ver);
             secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(16, 2, 16, 2) });
-            secRow.Children.Add(Toggle(startMinimized, delegate (bool v) { startMinimized = v; }));
-            secRow.Children.Add(new TextBlock { Text = "  Start minimised", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            // two stacked app-wide launch settings (vertical so the header still fits at MinWidth)
+            StackPanel launch = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            launch.Children.Add(LaunchToggleRow(startMinimized, "Start minimised", delegate (bool v) { startMinimized = v; }));
+            StackPanel sww = LaunchToggleRow(StartWithWindowsOn(), "Start with Windows", delegate (bool v) { SetStartWithWindows(v); });
+            sww.Margin = new Thickness(0, 5, 0, 0); launch.Children.Add(sww);
+            secRow.Children.Add(launch);
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
             // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
             Border scSec = new Border { Margin = new Thickness(14, 0, 0, 0), Padding = new Thickness(14, 8, 14, 8), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
@@ -604,18 +606,21 @@ namespace StarMaster {
             scRoot.LostFocus += delegate { RefreshChannels(); };
             scRow.Children.Add(scRoot);
             scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
-            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
-            // inline "update available" notice in the top row; shown instead of the Check button while an update is pending
+            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
+            // hands-off update status line in the top row; shown instead of the Check button while an
+            // update downloads + installs itself (no Download/Later buttons - it's a status, not a prompt)
             updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
             updateNotice.Children.Add(new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = Ui.Good, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
             updateNoticeText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
             updateNotice.Children.Add(updateNoticeText);
-            Border dl = Btn("↓  Download & install", Ui.AccentGrad(), Ui.Ink, true, delegate { StartUpdate(updateNotice != null ? (Updater.Info)updateNotice.Tag : null); });
-            dl.VerticalAlignment = VerticalAlignment.Center; dl.Margin = new Thickness(14, 0, 0, 0); updateNotice.Children.Add(dl);
-            Border later = Btn("Later", Ui.Card2, Ui.Dim, false, delegate { DismissUpdateNotice(); });
-            later.VerticalAlignment = VerticalAlignment.Center; later.Margin = new Thickness(8, 0, 0, 0); updateNotice.Children.Add(later);
             DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
             return d;
+        }
+        StackPanel LaunchToggleRow(bool on, string label, Action<bool> changed) {
+            StackPanel s = new StackPanel { Orientation = Orientation.Horizontal };
+            s.Children.Add(Toggle(on, changed));
+            s.Children.Add(new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            return s;
         }
 
         // ---------- in-app modal overlay (replaces every OS popup / MessageBox) ----------
@@ -1242,6 +1247,7 @@ namespace StarMaster {
         void CheckUpdate(bool auto) {
             // auto (launch) checks back off if one ran in the last 5 minutes - avoids hammering GitHub's anon rate limit
             if (auto && (DateTime.Now - lastUpdateCheck).TotalMinutes < 5) return;
+            if (updating) return;
             if (updRevertTimer != null) updRevertTimer.Stop();
             SetUpdBtn("↻  Checking...", Ui.Dim);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
@@ -1249,34 +1255,60 @@ namespace StarMaster {
                 lastUpdateCheck = DateTime.Now;
                 Dispatcher.BeginInvoke(new Action(delegate {
                     if (info == null) SetUpdBtn("⚠  " + (Updater.LastError.Length > 0 ? Updater.LastError : "Check failed"), Ui.DangerFg);
-                    else if (Updater.Compare(info.Version, CurrentVer) > 0) { SetUpdBtn("↑  Update available", Ui.Accent); ShowUpdateBanner(info); }
+                    else if (WholeVersion.Compare(info.Version, CurrentVer) > 0) StartAutoUpdate(info);
                     else { SetUpdBtn("✓  Up to date", Ui.Good); RevertUpdBtnAfter(30); }
                     SaveConfig();   // persist lastUpdateCheck so rapid relaunches stay throttled too
                 }));
             });
         }
-        void StartUpdate(Updater.Info info) {
-            if (info == null) return;
-            if (info.SetupUrl != null && RunningFromInstallDir()) {
-                if (updateNoticeText != null) updateNoticeText.Text = "Downloading " + info.Tag + "...";
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate { string p = Updater.DownloadInstaller(info.SetupUrl); Dispatcher.BeginInvoke(new Action(delegate { if (p != null) { try { System.Diagnostics.Process.Start(p); exiting = true; System.Windows.Application.Current.Shutdown(); return; } catch { } } OpenPage(info); })); });
-            } else OpenPage(info);
+        // Hands-off update: no button, no dialog. Show a status line, download the setup asset,
+        // run it fully silent and exit; the installer's [Run] entry relaunches the new version
+        // with --minimized. The tray icon is released first so no ghost icon lingers.
+        void StartAutoUpdate(Updater.Info info) {
+            if (info.SetupUrl == null || !RunningFromInstallDir()) {
+                // portable copy (or a release without a setup asset): a silent install would leave this
+                // exe stale and re-trigger every launch - flip the header button to the Releases page instead
+                portableUpdate = info;
+                SetUpdBtn("↑  " + info.Tag + " available - open Releases", Ui.Accent);
+                return;
+            }
+            updating = true;
+            ShowUpdateStatus("Updating to " + info.Tag + " - downloading...");
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string p = Updater.DownloadInstaller(info.SetupUrl);
+                Dispatcher.BeginInvoke(new Action(delegate {
+                    if (p == null) { updating = false; ShowUpdateStatus("Update download failed - opening the Releases page"); OpenPage(info); return; }
+                    ShowUpdateStatus("Updating to " + info.Tag + " - installing...");
+                    try {
+                        exiting = true;
+                        if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }   // release before the installer replaces us
+                        System.Diagnostics.Process.Start(p, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS");
+                        System.Windows.Application.Current.Shutdown();
+                    } catch { exiting = false; updating = false; ShowUpdateStatus("Update failed - opening the Releases page"); OpenPage(info); }
+                }));
+            });
         }
-        // show the notice in the top row, hiding the Check button to make room
-        void ShowUpdateBanner(Updater.Info info) {
-            if (updateNotice == null) return;
-            updateNotice.Tag = info;
-            if (updateNoticeText != null) updateNoticeText.Text = "StarMaster " + info.Tag + " available";
+        // the status line lives where the Check button was (which hides to make room)
+        void ShowUpdateStatus(string text) {
+            if (updateNotice == null || updateNoticeText == null) return;
+            updateNoticeText.Text = text;
             updateNotice.Visibility = Visibility.Visible;
             if (updBtn != null) updBtn.Visibility = Visibility.Collapsed;
         }
-        // dismiss the notice and bring the Check button back (still flagged that an update exists)
-        void DismissUpdateNotice() {
-            if (updateNotice != null) updateNotice.Visibility = Visibility.Collapsed;
-            if (updBtn != null) updBtn.Visibility = Visibility.Visible;
-            SetUpdBtn("↑  Update available", Ui.Accent);
-        }
         void OpenPage(Updater.Info info) { try { System.Diagnostics.Process.Start(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); } catch { } }
+        // start-with-Windows is managed in-app (per-user HKCU Run key - the silent installer can't ask)
+        const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        static bool StartWithWindowsOn() {
+            try { using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath)) return k != null && k.GetValue("StarMaster") != null; } catch { return false; }
+        }
+        static void SetStartWithWindows(bool on) {
+            try {
+                using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKeyPath)) {
+                    if (on) k.SetValue("StarMaster", "\"" + System.Reflection.Assembly.GetExecutingAssembly().Location + "\" --minimized");
+                    else k.DeleteValue("StarMaster", false);
+                }
+            } catch { }
+        }
         static bool RunningFromInstallDir() {
             try { string i = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster"); string e = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location); return string.Equals(Path.GetFullPath(e).TrimEnd('\\'), Path.GetFullPath(i).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } catch { return false; }
     }
@@ -1565,9 +1597,16 @@ namespace StarMaster {
         // single-instance plumbing (shared by the installed and portable builds, per-user)
         public const string MutexName = "StarMaster.SingleInstance.v1";
         public const string ActivateEvent = "StarMaster.Activate.v1";
+        // set by the installer's [Run] relaunch after a silent auto-update; MainWindow starts to the
+        // tray when it's present (unless it's a true first run - no config yet - which always shows)
+        public static bool MinimizedArg;
         static System.Threading.Mutex mtx;
         [STAThread]
-        static void Main() {
+        static void Main(string[] args) {
+            foreach (string a in args) if (string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)) MinimizedArg = true;
+            // sweep installers left in %TEMP% by earlier auto-updates (the one that just ran us may
+            // still be executing - its delete fails quietly and succeeds on the launch after)
+            try { foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-Setup-*.exe")) { try { File.Delete(f); } catch { } } } catch { }
             bool createdNew;
             mtx = new System.Threading.Mutex(true, MutexName, out createdNew);
             if (!createdNew) {                                  // already running: poke the live instance to surface, then bow out

@@ -6,6 +6,7 @@ Backups/
 # Build output — binaries are distributed via GitHub Releases, not tracked here
 StarMaster.exe
 StarMaster-Setup.exe
+dist/
 
 # Scratch / temp
 _test.ps1

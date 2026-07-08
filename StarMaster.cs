@@ -13,6 +13,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Navigation;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -25,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("56.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("56.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("57.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("57.0.0.0")]
 
 namespace StarMaster {
 
@@ -37,6 +38,8 @@ namespace StarMaster {
         [DllImport("user32.dll")] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
         [DllImport("user32.dll")] static extern uint MapVirtualKey(uint uCode, uint uMapType);
         [DllImport("user32.dll")] static extern int GetWindowThreadProcessId(IntPtr hWnd, out int pid);
+        [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         const uint KEYUP = 0x2, SCANCODE = 0x8, EXTENDED = 0x1;
         public static string ActiveTitle() { StringBuilder sb = new StringBuilder(256); GetWindowText(GetForegroundWindow(), sb, 256); return sb.ToString(); }
         // process name (no extension) of the foreground window's owner - precise SC detection (title text can contain "Star Citizen" by coincidence, e.g. a terminal editing this app)
@@ -67,6 +70,11 @@ namespace StarMaster {
                 case "F5": return 0x74; case "F6": return 0x75; case "F7": return 0x76; case "F8": return 0x77;
                 case "F9": return 0x78; case "F10": return 0x79; case "F11": return 0x7A; case "F12": return 0x7B;
                 case "[": return 0xDB; case "]": return 0xDD;
+                case "LEFT": return 0x25; case "UP": return 0x26; case "RIGHT": return 0x27; case "DOWN": return 0x28;
+                case "INSERT": case "INS": return 0x2D; case "DELETE": case "DEL": return 0x2E;
+                case "HOME": return 0x24; case "END": return 0x23;
+                case "PAGEUP": case "PGUP": return 0x21; case "PAGEDOWN": case "PGDN": return 0x22;
+                case "SCROLLLOCK": return 0x91; case "PAUSE": return 0x13;
             }
             return 0;
         }
@@ -487,8 +495,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "56";
-        public const string VersionDate = "2026-07-06";   // bump alongside Version at release time
+        public const string Version = "57";
+        public const string VersionDate = "2026-07-08";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -514,6 +522,12 @@ namespace StarMaster {
         bool monFpsOn = true; TextBlock monFpsTxt, monFpsTip; Border monFpsBtn;
         bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
+        // overlay show/hide global hotkey (RegisterHotKey - works while SC has focus; no injection, EAC-safe)
+        bool monHotkeyOn = true; string monHotkey = "Right";
+        Dropdown monHotkeyDrop; TextBlock monHotkeyNote; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
+        IntPtr hotkeyHwnd = IntPtr.Zero; bool hotkeyRegistered = false;
+        const int HotkeyId = 0xB001;
+        static readonly string[] HotkeyChoices = { "Right", "Left", "Up", "Down", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "ScrollLock", "Pause", "F6", "F7", "F8", "F9", "F10", "F11", "F12" };
         // starstrings
         Dropdown ssChannel; TextBlock ssInstalled, ssLatest, ssStatus, ssRunNote; Border ssDot, ssUpdateBtn, ssBadgePill; TextBlock ssUpdateLbl; bool ssBtnEnabled = true;
         StarStrings.Info ssLatestInfo; string ssInstalledBuild = "", ssRootCfg = "", ssChannelCfg = "";
@@ -759,9 +773,22 @@ namespace StarMaster {
             body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock Position so clicks pass through into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
             // overlay controls (in the body - the narrow column header has no room for them)
             StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-            ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }));
+            ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }, out setOverlayToggleVisual));
             ov.Children.Add(new TextBlock { Text = "  Show Overlay", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ov);
+            // global hotkey to show/hide the overlay - toggles it without alt-tabbing out of the game
+            StackPanel hk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            hk.Children.Add(Toggle(monHotkeyOn, delegate (bool v) { monHotkeyOn = v; if (monHotkeyDrop != null) { monHotkeyDrop.IsEnabled = v; monHotkeyDrop.Opacity = v ? 1.0 : 0.4; } ApplyHotkey(); }));
+            hk.Children.Add(new TextBlock { Text = "  Toggle overlay with a hotkey", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            body.Children.Add(hk);
+            StackPanel hkr = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+            hkr.Children.Add(new TextBlock { Text = "Hotkey", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            monHotkeyDrop = new Dropdown(HotkeyChoices, monHotkey, 130) { IsEnabled = monHotkeyOn, Opacity = monHotkeyOn ? 1.0 : 0.4 };
+            monHotkeyDrop.OnChange = delegate (string k) { monHotkey = k; ApplyHotkey(); };
+            hkr.Children.Add(monHotkeyDrop);
+            body.Children.Add(hkr);
+            monHotkeyNote = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, LineHeight = 15, Margin = new Thickness(0, 0, 0, 10), Visibility = Visibility.Collapsed };
+            body.Children.Add(monHotkeyNote);
             StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
             lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
@@ -850,6 +877,43 @@ namespace StarMaster {
                 if (monWin == null) { monWin = new MonWindow(); monWin.Left = monOvX; monWin.Top = monOvY; monWin.Closed += delegate { if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; } monWin = null; }; }
                 monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); monWin.SetColors(monColors);
             } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
+        }
+        // ----- overlay show/hide global hotkey (RegisterHotKey; delivered as WM_HOTKEY to our HWND even while the game has focus and we're in the tray) -----
+        protected override void OnSourceInitialized(EventArgs e) {
+            base.OnSourceInitialized(e);
+            hotkeyHwnd = new WindowInteropHelper(this).Handle;
+            HwndSource src = HwndSource.FromHwnd(hotkeyHwnd);
+            if (src != null) src.AddHook(HotkeyHook);
+            ApplyHotkey();
+        }
+        IntPtr HotkeyHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) {
+            if (msg == 0x0312 && wParam.ToInt32() == HotkeyId) { ToggleOverlayHotkey(); handled = true; }   // 0x0312 = WM_HOTKEY
+            return IntPtr.Zero;
+        }
+        // flip the overlay on/off from the hotkey (runs on the UI thread), keeping the card's "Show Overlay" switch in sync + persisting
+        void ToggleOverlayHotkey() {
+            monOverlayOn = !monOverlayOn;
+            SetOverlay(monOverlayOn);
+            if (setOverlayToggleVisual != null) setOverlayToggleVisual(monOverlayOn);
+            SaveConfig();
+        }
+        // (re)register the global hotkey to match the current settings; no-op until the HWND exists
+        void ApplyHotkey() {
+            if (hotkeyHwnd == IntPtr.Zero) return;
+            if (hotkeyRegistered) { Native.UnregisterHotKey(hotkeyHwnd, HotkeyId); hotkeyRegistered = false; }
+            if (!monHotkeyOn) { SetHotkeyNote("", false); return; }
+            byte vk = Vk.Map(monHotkey);
+            if (vk == 0) { SetHotkeyNote("Unknown key.", true); return; }
+            // fsModifiers = MOD_NOREPEAT (0x4000) only -> a bare key press toggles once (no auto-repeat while held)
+            hotkeyRegistered = Native.RegisterHotKey(hotkeyHwnd, HotkeyId, 0x4000, vk);
+            SetHotkeyNote(hotkeyRegistered
+                ? "Captured system-wide while StarMaster runs - press it in-game to show/hide the overlay."
+                : "That key is already in use by another app - pick a different one.", !hotkeyRegistered);
+        }
+        void SetHotkeyNote(string t, bool err) {
+            if (monHotkeyNote == null) return;
+            if (string.IsNullOrEmpty(t)) { monHotkeyNote.Visibility = Visibility.Collapsed; return; }
+            monHotkeyNote.Text = t; monHotkeyNote.Foreground = err ? Ui.Warn : Ui.Faint; monHotkeyNote.Visibility = Visibility.Visible;
         }
         // when "Only show over Star Citizen" is on, hide the overlay unless the FOREGROUND process is StarCitizen.exe. Matches on the process name (not window title) so a terminal/editor whose title merely contains "Star Citizen" doesn't trigger it. Fails closed. No-op unless the overlay is enabled.
         void ApplyActiveOnly() {
@@ -1324,11 +1388,15 @@ namespace StarMaster {
             if (onClick != null) b.MouseLeftButtonUp += delegate { onClick(); };
             return b;
         }
-        Border Toggle(bool on, Action<bool> changed) {
+        Border Toggle(bool on, Action<bool> changed) { Action<bool> ignore; return Toggle(on, changed, out ignore); }
+        // setState lets callers flip the switch's visuals programmatically (without firing `changed`) - used by the overlay show/hide hotkey to keep this switch in sync
+        Border Toggle(bool on, Action<bool> changed, out Action<bool> setState) {
             Border track = new Border { Width = 40, Height = 22, CornerRadius = new CornerRadius(11), Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Background = on ? (Brush)Ui.AccentGrad() : Ui.Line2 };
             Ellipse knob = new Ellipse { Width = 16, Height = 16, Fill = Ui.B("#cdd6de"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0), HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left };
             track.Child = knob; bool[] st = { on };
-            track.MouseLeftButtonUp += delegate { st[0] = !st[0]; track.Background = st[0] ? (Brush)Ui.AccentGrad() : Ui.Line2; knob.HorizontalAlignment = st[0] ? HorizontalAlignment.Right : HorizontalAlignment.Left; if (changed != null) changed(st[0]); };
+            Action<bool> apply = delegate (bool v) { st[0] = v; track.Background = v ? (Brush)Ui.AccentGrad() : Ui.Line2; knob.HorizontalAlignment = v ? HorizontalAlignment.Right : HorizontalAlignment.Left; };
+            track.MouseLeftButtonUp += delegate { apply(!st[0]); if (changed != null) changed(st[0]); };
+            setState = apply;
             return track;
         }
         UIElement Check(string text, bool on, Action<bool> changed) {
@@ -1363,6 +1431,7 @@ namespace StarMaster {
             SaveConfig();
             if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray
             timer.Stop(); if (monTimer != null) monTimer.Stop(); FpsMon.Stop(); if (monWin != null) { monWin.Close(); monWin = null; }
+            if (hotkeyRegistered && hotkeyHwnd != IntPtr.Zero) { Native.UnregisterHotKey(hotkeyHwnd, HotkeyId); hotkeyRegistered = false; }
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }
         }
 
@@ -1373,7 +1442,7 @@ namespace StarMaster {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -1419,6 +1488,8 @@ namespace StarMaster {
                 sb.AppendLine("mon_fps=" + (monFpsOn ? "1" : "0"));
                 sb.AppendLine("fps_relogin=" + (fpsPendingRelogin ? "1" : "0"));
                 sb.AppendLine("mon_textalpha=" + monTextAlpha);
+                sb.AppendLine("mon_hotkey_on=" + (monHotkeyOn ? "1" : "0"));
+                sb.AppendLine("mon_hotkey=" + monHotkey);
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
                 File.WriteAllText(cfgPath, sb.ToString());
@@ -1429,6 +1500,7 @@ namespace StarMaster {
     // custom dark dropdown
     public class Dropdown : Border {
         Popup popup; StackPanel list; TextBlock label; public string Value;
+        public Action<string> OnChange;   // fired when the user picks an item (optional; most call sites just read Value on demand)
         public Dropdown(string[] items, string initial, double minW) {
             Background = Ui.Bg; BorderBrush = Ui.Line2; BorderThickness = new Thickness(1); CornerRadius = new CornerRadius(8); Padding = new Thickness(11, 7, 9, 7); Cursor = Cursors.Hand; MinWidth = minW; VerticalAlignment = VerticalAlignment.Center;
             DockPanel dp = new DockPanel();
@@ -1451,7 +1523,7 @@ namespace StarMaster {
                 Border row = new Border { Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = cur, Foreground = Ui.Text, FontSize = 12.5 } };
                 row.MouseEnter += delegate { row.Background = Ui.B("#222c4a"); };
                 row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
-                row.MouseLeftButtonUp += delegate { Value = cur; label.Text = cur; popup.IsOpen = false; };
+                row.MouseLeftButtonUp += delegate { Value = cur; label.Text = cur; popup.IsOpen = false; if (OnChange != null) OnChange(cur); };
                 list.Children.Add(row);
             }
             label.Text = Value;

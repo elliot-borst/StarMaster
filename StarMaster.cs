@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("57.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("57.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("58.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("58.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,8 +495,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "57";
-        public const string VersionDate = "2026-07-08";   // bump alongside Version at release time
+        public const string Version = "58";
+        public const string VersionDate = "2026-07-11";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -557,6 +557,12 @@ namespace StarMaster {
             Width = 1580; Height = 1000; MinWidth = 1340; MinHeight = 940;
             MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
+            // Crisp text: WPF defaults to TextFormattingMode.Ideal (sub-pixel glyph positioning, looks soft for small
+            // static UI text). Display mode snaps glyphs to the pixel grid; ClearType + layout rounding keep everything
+            // on whole device pixels. These are inherited attached properties, so every child TextBlock picks them up.
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
+            UseLayoutRounding = true;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
             Grid root = new Grid { Margin = new Thickness(22) };
@@ -1579,6 +1585,11 @@ namespace StarMaster {
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
+            // crisp overlay text (own top-level window, so it doesn't inherit MainWindow's TextOptions). Pixel-snap the
+            // glyphs; ClearType auto-falls-back to grayscale AA on this transparent window, but Display mode is the win.
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
+            UseLayoutRounding = true;
             ShowActivated = false;   // never steal foreground when Show()n - else "Only show over SC" would show->activate->(SC no longer foreground)->hide in a 1s flicker loop, fighting Discord's overlay
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("60.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("60.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("61.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("61.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,7 +495,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "60";
+        public const string Version = "61";
         public const string VersionDate = "2026-07-13";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1572,7 +1572,7 @@ namespace StarMaster {
 
     // the over-the-game OSD: a borderless, always-on-top, transparent window. Draggable; "lock" makes it click-through (WS_EX_TRANSPARENT) so clicks pass to the game.
     public class MonWindow : Window {
-        TextBlock fpsLine; TextBlock[] cpuC, gpuC; bool locked, colors = true; Border box; StackPanel content;
+        TextBlock fpsCell; TextBlock[] cpuC, gpuC; bool locked, colors = true; Border box; StackPanel content;
         public MonWindow() {
             Title = "StarMaster Overlay";   // so Task Manager shows a name for this window
             WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
@@ -1585,16 +1585,17 @@ namespace StarMaster {
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
             box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
             StackPanel s = new StackPanel();
-            fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 3), Visibility = Visibility.Collapsed };
-            s.Children.Add(fpsLine);   // FPS centred above the rows; shown only when FPS is on
-            // 2 rows (CPU+RAM, GPU+VRAM) x 5 columns: Name | % | C | MEM | W. Auto columns => CPU and GPU line up; each cell coloured independently.
+            // 2 rows (CPU+RAM, GPU+VRAM). Col 0 = the FPS counter (spans both rows, vertically centred, no "FPS" label - keeps the overlay slim); cols 1-5 = Name | % | C | MEM | W. Auto columns => CPU and GPU line up; each cell coloured independently.
             Grid g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // col 0: FPS (collapses to 0 width when FPS is off)
             for (int c = 0; c < 5; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
+            fpsCell = new TextBlock { FontFamily = Ui.Mono, FontSize = 24, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 14, 0), Visibility = Visibility.Collapsed };
+            Grid.SetRow(fpsCell, 0); Grid.SetRowSpan(fpsCell, 2); Grid.SetColumn(fpsCell, 0); g.Children.Add(fpsCell);
             cpuC = new TextBlock[5]; gpuC = new TextBlock[5];
             for (int c = 0; c < 5; c++) {
-                cpuC[c] = Cell(c == 0); Grid.SetRow(cpuC[c], 0); Grid.SetColumn(cpuC[c], c); g.Children.Add(cpuC[c]);
-                gpuC[c] = Cell(c == 0); Grid.SetRow(gpuC[c], 1); Grid.SetColumn(gpuC[c], c); g.Children.Add(gpuC[c]);
+                cpuC[c] = Cell(c == 0); Grid.SetRow(cpuC[c], 0); Grid.SetColumn(cpuC[c], c + 1); g.Children.Add(cpuC[c]);
+                gpuC[c] = Cell(c == 0); Grid.SetRow(gpuC[c], 1); Grid.SetColumn(gpuC[c], c + 1); g.Children.Add(gpuC[c]);
             }
             s.Children.Add(g);
             content = s; box.Child = s; Content = box;
@@ -1608,7 +1609,7 @@ namespace StarMaster {
         }
         public void SetColors(bool v) { colors = v; }
         public void Update(SysMon.Sample s) {
-            if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
+            if (s.Fps >= 0) { fpsCell.Text = (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsCell.Visibility = Visibility.Visible; } else fpsCell.Visibility = Visibility.Collapsed;
             Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, colors);
             if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, colors);
             else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, colors);

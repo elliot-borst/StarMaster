@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("58.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("58.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("59.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("59.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,8 +495,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "58";
-        public const string VersionDate = "2026-07-11";   // bump alongside Version at release time
+        public const string Version = "59";
+        public const string VersionDate = "2026-07-13";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -556,6 +556,7 @@ namespace StarMaster {
             // WIDE not tall (3-column layout) + capped to the screen work area so the title bar can never end up off-screen.
             Width = 1580; Height = 1000; MinWidth = 1340; MinHeight = 940;
             MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
+            WindowState = WindowState.Maximized;   // open fullscreen (maximised) by default; the Width/Height above are the restore-down size
             WindowStartupLocation = WindowStartupLocation.CenterScreen; FontFamily = Ui.Font;
             // Crisp text: WPF defaults to TextFormattingMode.Ideal (sub-pixel glyph positioning, looks soft for small
             // static UI text). Display mode snaps glyphs to the pixel grid; ClearType + layout rounding keep everything
@@ -1432,7 +1433,7 @@ namespace StarMaster {
             trayIcon.ContextMenuStrip = m;
             trayIcon.MouseClick += delegate (object s, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) Restore(); };   // single left-click opens; right-click still shows the menu
         }
-        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); WindowState = WindowState.Normal; Activate(); })); }
+        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); })); }   // only un-minimise; preserve Maximised across the tray Hide()/Show() cycle
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {
             SaveConfig();
             if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray
@@ -1596,12 +1597,12 @@ namespace StarMaster {
             StackPanel s = new StackPanel();
             fpsLine = new TextBlock { FontFamily = Ui.Mono, FontSize = 19, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 3), Visibility = Visibility.Collapsed };
             s.Children.Add(fpsLine);   // FPS centred above the rows; shown only when FPS is on
-            // 2 rows (CPU+RAM, GPU+VRAM) x 6 columns: Name | % | C | MEM | W | MHz. Auto columns => CPU and GPU line up; each cell coloured independently.
+            // 2 rows (CPU+RAM, GPU+VRAM) x 5 columns: Name | % | C | MEM | W. Auto columns => CPU and GPU line up; each cell coloured independently.
             Grid g = new Grid();
-            for (int c = 0; c < 6; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            for (int c = 0; c < 5; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
-            cpuC = new TextBlock[6]; gpuC = new TextBlock[6];
-            for (int c = 0; c < 6; c++) {
+            cpuC = new TextBlock[5]; gpuC = new TextBlock[5];
+            for (int c = 0; c < 5; c++) {
                 cpuC[c] = Cell(c == 0); Grid.SetRow(cpuC[c], 0); Grid.SetColumn(cpuC[c], c); g.Children.Add(cpuC[c]);
                 gpuC[c] = Cell(c == 0); Grid.SetRow(gpuC[c], 1); Grid.SetColumn(gpuC[c], c); g.Children.Add(gpuC[c]);
             }
@@ -1618,9 +1619,9 @@ namespace StarMaster {
         public void SetColors(bool v) { colors = v; }
         public void Update(SysMon.Sample s) {
             if (s.Fps >= 0) { fpsLine.Text = "FPS  " + (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsLine.Visibility = Visibility.Visible; } else fpsLine.Visibility = Visibility.Collapsed;
-            Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, s.CpuMhz, colors);
-            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, s.GpuCoreMhz, colors);
-            else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, 0, colors);
+            Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, colors);
+            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, colors);
+            else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, colors);
         }
         // name colour: white if colours off; else the chosen override colour, else the brand colour
         Brush NameBrush(string name, string overrideHex) {
@@ -1628,14 +1629,13 @@ namespace StarMaster {
             if (!string.IsNullOrEmpty(overrideHex)) return Ui.B(overrideHex);
             return BrandColor(name);
         }
-        // fill one row. With colour on: name=brand, %/temp/MEM=load tiers, W/MHz=white. Colour off: everything white.
-        static void Set(TextBlock[] c, string name, Brush nameBrush, int pct, int temp, double memUsed, double memTot, int memPct, int watt, int mhz, bool color) {
+        // fill one row. With colour on: name=brand, %/temp/MEM=load tiers, W=white. Colour off: everything white.
+        static void Set(TextBlock[] c, string name, Brush nameBrush, int pct, int temp, double memUsed, double memTot, int memPct, int watt, bool color) {
             c[0].Text = name; c[0].Foreground = nameBrush;
             c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = color && pct >= 0 ? Ui.Load(pct) : Ui.Text;
             c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = color ? Ui.LoadT(temp) : Ui.Text;
-            c[3].Text = memTot > 0 ? memUsed.ToString("0.0") + "/" + memTot.ToString("0") + "GB" : ""; c[3].Foreground = color && memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
+            c[3].Text = memTot > 0 ? memUsed.ToString("0") + "GB" : ""; c[3].Foreground = color && memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
             c[4].Text = watt >= 0 ? watt + "W" : "";
-            c[5].Text = mhz > 0 ? mhz + "MHz" : "";
         }
         static Brush BrandColor(string n) {
             if (n == null) return Ui.Text;

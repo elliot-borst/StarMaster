@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("59.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("59.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("60.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("60.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,7 +495,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "59";
+        public const string Version = "60";
         public const string VersionDate = "2026-07-13";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -524,7 +524,7 @@ namespace StarMaster {
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
         // overlay show/hide global hotkey (RegisterHotKey - works while SC has focus; no injection, EAC-safe)
         bool monHotkeyOn = true; string monHotkey = "Right";
-        Dropdown monHotkeyDrop; TextBlock monHotkeyNote; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
+        Dropdown monHotkeyDrop; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
         IntPtr hotkeyHwnd = IntPtr.Zero; bool hotkeyRegistered = false;
         const int HotkeyId = 0xB001;
         static readonly string[] HotkeyChoices = { "Right", "Left", "Up", "Down", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "ScrollLock", "Pause", "F6", "F7", "F8", "F9", "F10", "F11", "F12" };
@@ -777,7 +777,6 @@ namespace StarMaster {
         // ---------- system monitor card (full-width; it's the control panel - the live numbers live in the over-the-game OSD overlay) ----------
         FrameworkElement SystemMonitorCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "▦", "System Monitor", "live overlay over the game - CPU / RAM / GPU (no injection)");
-            body.Children.Add(new TextBlock { Text = "The overlay sits on top of Star Citizen (borderless/windowed mode). Drag it where you want it, then turn on Lock Position so clicks pass through into the game. Below is a live preview.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
             // overlay controls (in the body - the narrow column header has no room for them)
             StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }, out setOverlayToggleVisual));
@@ -794,8 +793,6 @@ namespace StarMaster {
             monHotkeyDrop.OnChange = delegate (string k) { monHotkey = k; ApplyHotkey(); };
             hkr.Children.Add(monHotkeyDrop);
             body.Children.Add(hkr);
-            monHotkeyNote = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, LineHeight = 15, Margin = new Thickness(0, 0, 0, 10), Visibility = Visibility.Collapsed };
-            body.Children.Add(monHotkeyNote);
             StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
             lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
@@ -814,10 +811,10 @@ namespace StarMaster {
             no.Children.Add(Toggle(monNameOvr, delegate (bool v) { monNameOvr = v; if (monCpuNameBox != null) monCpuNameBox.IsEnabled = v; if (monGpuNameBox != null) monGpuNameBox.IsEnabled = v; }));
             no.Children.Add(new TextBlock { Text = "  Override names (blank = detected)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(no);
-            monCpuNameBox = TextField(monCpuName); monCpuNameBox.IsEnabled = monNameOvr; monCpuNameBox.TextChanged += delegate { monCpuName = monCpuNameBox.Text; }; body.Children.Add(LabeledField("CPU name", monCpuNameBox));
-            body.Children.Add(NameColorRow(monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
-            monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; }; body.Children.Add(LabeledField("GPU name", monGpuNameBox));
-            body.Children.Add(NameColorRow(monGpuNameCol, delegate (string h) { monGpuNameCol = h; }));
+            monCpuNameBox = TextField(monCpuName); monCpuNameBox.IsEnabled = monNameOvr; monCpuNameBox.TextChanged += delegate { monCpuName = monCpuNameBox.Text; };
+            body.Children.Add(NameOverrideRow("CPU name", monCpuNameBox, monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
+            monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; };
+            body.Children.Add(NameOverrideRow("GPU name", monGpuNameBox, monGpuNameCol, delegate (string h) { monGpuNameCol = h; }));
             // FPS via PresentMon (reads frames via ETW). The Show-FPS toggle; PresentMon's health/status lives in its own box at the bottom (mirrors the HWiNFO box).
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
@@ -908,19 +905,11 @@ namespace StarMaster {
         void ApplyHotkey() {
             if (hotkeyHwnd == IntPtr.Zero) return;
             if (hotkeyRegistered) { Native.UnregisterHotKey(hotkeyHwnd, HotkeyId); hotkeyRegistered = false; }
-            if (!monHotkeyOn) { SetHotkeyNote("", false); return; }
+            if (!monHotkeyOn) return;
             byte vk = Vk.Map(monHotkey);
-            if (vk == 0) { SetHotkeyNote("Unknown key.", true); return; }
+            if (vk == 0) return;
             // fsModifiers = MOD_NOREPEAT (0x4000) only -> a bare key press toggles once (no auto-repeat while held)
             hotkeyRegistered = Native.RegisterHotKey(hotkeyHwnd, HotkeyId, 0x4000, vk);
-            SetHotkeyNote(hotkeyRegistered
-                ? "Captured system-wide while StarMaster runs - press it in-game to show/hide the overlay."
-                : "That key is already in use by another app - pick a different one.", !hotkeyRegistered);
-        }
-        void SetHotkeyNote(string t, bool err) {
-            if (monHotkeyNote == null) return;
-            if (string.IsNullOrEmpty(t)) { monHotkeyNote.Visibility = Visibility.Collapsed; return; }
-            monHotkeyNote.Text = t; monHotkeyNote.Foreground = err ? Ui.Warn : Ui.Faint; monHotkeyNote.Visibility = Visibility.Visible;
         }
         // when "Only show over Star Citizen" is on, hide the overlay unless the FOREGROUND process is StarCitizen.exe. Matches on the process name (not window title) so a terminal/editor whose title merely contains "Star Citizen" doesn't trigger it. Fails closed. No-op unless the overlay is enabled.
         void ApplyActiveOnly() {
@@ -939,19 +928,25 @@ namespace StarMaster {
             return r;
         }
         // 4 fixed name-colour swatches (white / green / red / blue), aligned under the name field
-        UIElement NameColorRow(string current, Action<string> set) {
-            StackPanel r = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(72, 0, 0, 10) };
-            r.Children.Add(new TextBlock { Text = "Colour ", Foreground = Ui.Dim, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-            string[] hex = { "e6ecfb", "76e0a1", "2fe06a", "ff6b7d", "ff4040", "5bbcff", "3b82ff" };   // white, green, vivid green, red, vivid red, blue, vivid blue
-            List<Border> bs = new List<Border>();
-            foreach (string hx in hex) {
-                string h = hx; bool sel = string.Equals(h, current, StringComparison.OrdinalIgnoreCase);
-                Border sw = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Background = Ui.B(h), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand, BorderBrush = sel ? Ui.Accent : Ui.Line2, BorderThickness = new Thickness(sel ? 2 : 1) };
-                bs.Add(sw);
-                sw.MouseLeftButtonUp += delegate { set(h); foreach (Border b in bs) { b.BorderBrush = Ui.Line2; b.BorderThickness = new Thickness(1); } sw.BorderBrush = Ui.Accent; sw.BorderThickness = new Thickness(2); };
-                r.Children.Add(sw);
-            }
+        // one override-name row on a single line (keeps the card short): label + a short name field + a compact colour dropdown
+        static readonly string[] ClrNames = { "White", "Green", "Vivid green", "Red", "Vivid red", "Blue", "Vivid blue" };
+        static readonly string[] ClrHex = { "e6ecfb", "76e0a1", "2fe06a", "ff6b7d", "ff4040", "5bbcff", "3b82ff" };
+        UIElement NameOverrideRow(string k, TextBox box, string curColor, Action<string> setColor) {
+            box.Width = 160; box.VerticalAlignment = VerticalAlignment.Center;
+            StackPanel r = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            r.Children.Add(new TextBlock { Text = k, Foreground = Ui.Dim, FontSize = 12.5, Width = 72, VerticalAlignment = VerticalAlignment.Center });
+            r.Children.Add(box);
+            Dropdown cd = ColorDropdown(curColor, setColor); cd.Margin = new Thickness(8, 0, 0, 0);
+            r.Children.Add(cd);
             return r;
+        }
+        // colour picker as a dark dropdown; names map to the same 7 hex swatches used across the overlay
+        Dropdown ColorDropdown(string curHex, Action<string> setColor) {
+            string curName = ClrNames[0];
+            for (int i = 0; i < ClrHex.Length; i++) if (string.Equals(ClrHex[i], curHex, StringComparison.OrdinalIgnoreCase)) { curName = ClrNames[i]; break; }
+            Dropdown d = new Dropdown(ClrNames, curName, 118);
+            d.OnChange = delegate (string name) { for (int i = 0; i < ClrNames.Length; i++) if (ClrNames[i] == name) { setColor(ClrHex[i]); break; } };
+            return d;
         }
         void SetOverlayStyle() { if (monWin != null) monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); }
         // turn FPS on/off (PresentMon, off the UI thread - download + UAC can block)
@@ -1412,11 +1407,6 @@ namespace StarMaster {
             return s;
         }
         TextBox TextField(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(10, 7, 10, 7), FontSize = 12, FontFamily = Ui.Mono }; }
-        UIElement LabeledField(string k, TextBox box) {
-            DockPanel d = new DockPanel { Margin = new Thickness(0, 0, 0, 11) };
-            TextBlock kt = new TextBlock { Text = k, Foreground = Ui.Dim, FontSize = 12.5, Width = 72, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(kt, Dock.Left); d.Children.Add(kt);
-            d.Children.Add(box); return d;
-        }
         TextBlock Caps(string t) { return new TextBlock { Text = t.ToUpper(), Foreground = Ui.Faint, FontSize = 11 }; }
         FrameworkElement Sp(int w) { return new Border { Width = w }; }
 

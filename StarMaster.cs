@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("61.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("61.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("62.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("62.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,7 +495,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "61";
+        public const string Version = "62";
         public const string VersionDate = "2026-07-13";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -504,6 +504,8 @@ namespace StarMaster {
         List<Cmd> commands = new List<Cmd>();
         StackPanel cmdPanel; TextBlock statusText; Border statusDot; Border startBtn; TextBlock startLbl;
         bool running = false, focusGuard = true, autostart = false, startMinimized = false; TextBox winTitleBox;
+        // the state to show the window in when it's surfaced from the tray (Maximised by default, v59); tracks a user restore-down so it isn't lost across a tray cycle
+        WindowState shownState = WindowState.Maximized;
         DispatcherTimer timer;
         // backup
         TextBox scRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;   // scRoot: shared SC-folder field, lives in the top bar
@@ -586,8 +588,11 @@ namespace StarMaster {
             Closing += OnClosing;
             Loaded += delegate { CheckUpdate(true); SSCheck(false); };
             // launch straight to the tray: the user setting, or the installer's --minimized relaunch after a
-            // silent auto-update - but a TRUE first run (no config yet) always shows the window
-            if (startMinimized || (App.MinimizedArg && !firstRun)) { ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }
+            // silent auto-update - but a TRUE first run (no config yet) always shows the window.
+            // Open MINIMISED (not the Maximised set above): Application.Run() calls Show(), and a minimised +
+            // off-taskbar + Hidden window never paints, so there's no maximised flash before Loaded->Hide() runs
+            // (the flash could linger under post-update AV/disk load). Restore() puts it back in shownState (Maximised).
+            if (startMinimized || (App.MinimizedArg && !firstRun)) { WindowState = WindowState.Minimized; ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }
             if (autostart) ToggleRun();
             if (monOverlayOn) Loaded += delegate { SetOverlay(true); };   // restore the over-the-game overlay if it was on last session
             if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); };   // FPS defaults on
@@ -1423,10 +1428,10 @@ namespace StarMaster {
             trayIcon.ContextMenuStrip = m;
             trayIcon.MouseClick += delegate (object s, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) Restore(); };   // single left-click opens; right-click still shows the menu
         }
-        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); })); }   // only un-minimise; preserve Maximised across the tray Hide()/Show() cycle
+        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = shownState; Activate(); })); }   // surface in shownState (Maximised by default, or the size the user left it at); preserved across the tray Hide()/Show() cycle
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {
             SaveConfig();
-            if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray
+            if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { if (WindowState != WindowState.Minimized) shownState = WindowState; e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray; remember the visible state so it comes back the same
             timer.Stop(); if (monTimer != null) monTimer.Stop(); FpsMon.Stop(); if (monWin != null) { monWin.Close(); monWin = null; }
             if (hotkeyRegistered && hotkeyHwnd != IntPtr.Zero) { Native.UnregisterHotKey(hotkeyHwnd, HotkeyId); hotkeyRegistered = false; }
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("66.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("66.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("67.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("67.0.0.0")]
 
 namespace StarMaster {
 
@@ -401,7 +401,7 @@ namespace StarMaster {
         public static int CpuTempC = -1, CpuPowerW = -1;
         public static int State = NotInstalled;
         public static bool AccessDenied;   // MMF exists but we couldn't open it (usually an elevation mismatch)
-        public static bool Autorun, StartMin, SmEnabled;   // from HWiNFO64.INI
+        public static bool Autorun, StartMin, SmEnabled, MinMain, MinClose;   // from HWiNFO64.INI (StartMin = MinimalizeSensors)
         static string exe; static bool located;
 
         public static string Exe() { if (!located) Locate(); return exe; }
@@ -427,14 +427,16 @@ namespace StarMaster {
             try {
                 string ini = Path.Combine(Path.GetDirectoryName(exe), "HWiNFO64.INI");
                 if (!File.Exists(ini)) return;
-                bool sm = false, ar = false, mn = false;   // read into locals so an absent/removed key reads as off (not a stale true)
+                bool sm = false, ar = false, mn = false, mw = false, mc = false;   // read into locals so an absent/removed key reads as off (not a stale true)
                 foreach (string line in File.ReadAllLines(ini)) {
                     string l = line.Trim();
                     if (l.StartsWith("SensorsSM=")) sm = l.EndsWith("1");
                     else if (l.StartsWith("Autorun=")) ar = l.EndsWith("1");
+                    else if (l.StartsWith("MinimalizeMainWnd=")) mw = l.EndsWith("1");
+                    else if (l.StartsWith("MinimalizeSensorsClose=")) mc = l.EndsWith("1");
                     else if (l.StartsWith("MinimalizeSensors=")) mn = l.EndsWith("1");
                 }
-                SmEnabled = sm; Autorun = ar; StartMin = mn;
+                SmEnabled = sm; Autorun = ar; StartMin = mn; MinMain = mw; MinClose = mc;
             } catch { }
         }
         static bool ProcRunning() {
@@ -510,7 +512,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "66";
+        public const string Version = "67";
         public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -539,6 +541,7 @@ namespace StarMaster {
         bool monFpsOn = true; TextBlock monFpsTxt, monFpsTip; Border monFpsBtn;
         bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
         TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
+        Border hwPillInstall, hwPillSm, hwPillAuto, hwPillMinW, hwPillMinS, hwPillMinC;   // at-a-glance setup checklist (green=done / yellow=to do)
         // overlay show/hide global hotkey (RegisterHotKey - works while SC has focus; no injection, EAC-safe)
         bool monHotkeyOn = true; string monHotkey = "Right";
         Dropdown monHotkeyDrop; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
@@ -869,6 +872,15 @@ namespace StarMaster {
             monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
             monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
             hwIn.Children.Add(hwTop);
+            // setup checklist: one pill per requirement, green when done / yellow when still to do (status only - StarMaster can't tick HWiNFO's boxes without the shelved elevated helper)
+            WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 8, 0, 2) };
+            hwPills.Children.Add(hwPillInstall = HwPill("Installed", "HWiNFO is installed."));
+            hwPills.Children.Add(hwPillSm = HwPill("Shared memory", "Shared Memory Support is active - how StarMaster reads CPU temp/watts. HWiNFO -> Settings -> tick 'Shared Memory Support'."));
+            hwPills.Children.Add(hwPillAuto = HwPill("Auto-start", "HWiNFO starts with Windows. HWiNFO -> Settings -> tick 'Auto Start'."));
+            hwPills.Children.Add(hwPillMinW = HwPill("Min. window", "Main window starts minimized. HWiNFO -> Settings -> tick 'Minimize Main Window on Startup'."));
+            hwPills.Children.Add(hwPillMinS = HwPill("Min. sensors", "Sensors window starts minimized. HWiNFO -> Settings -> tick 'Minimize Sensors on Startup'."));
+            hwPills.Children.Add(hwPillMinC = HwPill("Min. on close", "Closing goes to the tray instead of quitting. HWiNFO -> Settings -> tick 'Minimize Sensors instead of closing'."));
+            hwIn.Children.Add(hwPills);
             monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
             hwIn.Children.Add(monHwTip);
             hwBox.Child = hwIn; body.Children.Add(hwBox);
@@ -1029,19 +1041,37 @@ namespace StarMaster {
                 else { string p = HwInfo.Exe(); if (p != null) System.Diagnostics.Process.Start(p); }   // start it (or bring it up to enable Shared Memory)
             } catch { }
         }
+        // a status pill: rounded label, coloured green when the requirement is met, yellow while it's still to do
+        Border HwPill(string label, string tip) {
+            TextBlock t = new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            return new Border { CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1), BorderBrush = Ui.Warn, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 6), Child = t, ToolTip = tip, Tag = label };
+        }
+        void SetPill(Border pill, bool done) {
+            if (pill == null) return;
+            Brush c = done ? Ui.Good : Ui.Warn;
+            pill.BorderBrush = c;
+            TextBlock t = (TextBlock)pill.Child; t.Foreground = c; t.Text = (done ? "✓ " : "") + (string)pill.Tag;   // tick prefix when done
+        }
         // Precise HWiNFO diagnosis + a clear fix for every distinct failure cause. AV-safe: the only actions are
         // opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
         void UpdateHwUi() {
             if (monHwTxt == null) return;
             TextBlock lbl = (TextBlock)monHwBtn.Child;
             bool haveTemp = HwInfo.CpuTempC >= 0, havePower = HwInfo.CpuPowerW >= 0;
+            // refresh the checklist pills (green=done / yellow=to do)
+            SetPill(hwPillInstall, HwInfo.State != HwInfo.NotInstalled);
+            SetPill(hwPillSm, HwInfo.State == HwInfo.Connected);   // shared memory is live
+            SetPill(hwPillAuto, HwInfo.Autorun);
+            SetPill(hwPillMinW, HwInfo.MinMain);
+            SetPill(hwPillMinS, HwInfo.StartMin);
+            SetPill(hwPillMinC, HwInfo.MinClose);
             if (HwInfo.State == HwInfo.Connected && haveTemp && havePower) {
                 // fully working
                 monHwTxt.Text = "Connected - CPU " + HwInfo.CpuTempC + " °C · " + HwInfo.CpuPowerW + " W";
                 monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
-                bool tipNeeded = !HwInfo.Autorun || !HwInfo.StartMin;
-                monHwTip.Text = tipNeeded ? "Tip: in HWiNFO enable Auto Start + Minimize on startup so it's always ready." : "";
-                monHwTip.Visibility = tipNeeded ? Visibility.Visible : Visibility.Collapsed;
+                bool optTodo = !HwInfo.Autorun || !HwInfo.MinMain || !HwInfo.StartMin || !HwInfo.MinClose;
+                monHwTip.Text = optTodo ? "The yellow items above are optional - tick them in HWiNFO -> Settings so it's always ready." : "";
+                monHwTip.Visibility = optTodo ? Visibility.Visible : Visibility.Collapsed;
                 return;
             }
             monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
@@ -1054,15 +1084,15 @@ namespace StarMaster {
             } else if (HwInfo.State == HwInfo.NotInstalled) {
                 monHwTxt.Text = "Not set up - optional, adds CPU temp + watts.";
                 lbl.Text = "Get HWiNFO";
-                monHwTip.Text = "1. Click Get HWiNFO (free), then install & run it.\n2. In HWiNFO: Settings (gear) -> tick 'Shared Memory Support' -> OK.\n3. Tick Auto Start + Minimize so it's always ready.";
+                monHwTip.Text = "Click Get HWiNFO, install & run it, then tick the yellow items in HWiNFO -> Settings.";
             } else if (HwInfo.State == HwInfo.NotRunning) {
                 monHwTxt.Text = "HWiNFO is installed but not running.";
                 lbl.Text = "Start HWiNFO";
-                monHwTip.Text = "1. Click Start HWiNFO (or turn on Auto Start in its settings).\n2. No readings once it's up? Enable 'Shared Memory Support' in HWiNFO Settings.";
+                monHwTip.Text = "Click Start HWiNFO. No readings once it's up? Tick the yellow items in HWiNFO -> Settings.";
             } else if (HwInfo.AccessDenied) {
                 monHwTxt.Text = "HWiNFO is running, but StarMaster can't read its data.";
                 lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "Admin mismatch: run HWiNFO and StarMaster the same way - both normal, or both as administrator. (If HWiNFO auto-starts elevated, either run StarMaster as admin too, or turn off HWiNFO's 'Run as administrator'.)";
+                monHwTip.Text = "Admin mismatch: run HWiNFO and StarMaster the same way - both normal, or both as administrator.";
             } else if (!HwInfo.SmEnabled) {
                 // running, shared memory switched off in settings
                 monHwTxt.Text = "HWiNFO is running, but Shared Memory is off.";

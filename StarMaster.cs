@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("65.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("65.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("66.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("66.0.0.0")]
 
 namespace StarMaster {
 
@@ -479,11 +479,13 @@ namespace StarMaster {
             catch { return false; }   // shared memory not present => HWiNFO not running (or SM off / 12-hour limit expired)
         }
 
-        // heavier (call occasionally): classify overall state + refresh the INI-derived flags for a precise diagnosis
+        // heavier (call occasionally): classify overall state + refresh the INI-derived flags for a precise diagnosis.
+        // Re-validates the cached path every call so an install/uninstall mid-session is detected without a restart.
         public static void RefreshState(bool smActive) {
-            if (!located) Locate();
-            if (exe == null) LocateFromProcess();   // portable install we didn't find via the registry
-            if (exe != null) ReadIni();              // keep SmEnabled/Autorun/StartMin current so the SM-off vs 12h-limit split is right
+            if (exe != null && !File.Exists(exe)) { exe = null; SmEnabled = false; Autorun = false; StartMin = false; }   // uninstalled since we looked
+            if (exe == null) { located = false; Locate(); }   // (re)try registry + Program Files while we have no exe (catches an install mid-session)
+            if (exe == null) LocateFromProcess();              // portable / non-registry install: learn it from a running process
+            if (exe != null) ReadIni();                        // keep SmEnabled/Autorun/StartMin current so the SM-off vs 12h-limit split is right
             if (smActive) { State = Connected; return; }
             bool running = ProcRunning();
             if (exe == null && !running) State = NotInstalled;
@@ -508,7 +510,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "65";
+        public const string Version = "66";
         public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;

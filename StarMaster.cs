@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("64.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("64.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("65.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("65.0.0.0")]
 
 namespace StarMaster {
 
@@ -427,16 +427,27 @@ namespace StarMaster {
             try {
                 string ini = Path.Combine(Path.GetDirectoryName(exe), "HWiNFO64.INI");
                 if (!File.Exists(ini)) return;
+                bool sm = false, ar = false, mn = false;   // read into locals so an absent/removed key reads as off (not a stale true)
                 foreach (string line in File.ReadAllLines(ini)) {
                     string l = line.Trim();
-                    if (l.StartsWith("SensorsSM=")) SmEnabled = l.EndsWith("1");
-                    else if (l.StartsWith("Autorun=")) Autorun = l.EndsWith("1");
-                    else if (l.StartsWith("MinimalizeSensors=")) StartMin = l.EndsWith("1");
+                    if (l.StartsWith("SensorsSM=")) sm = l.EndsWith("1");
+                    else if (l.StartsWith("Autorun=")) ar = l.EndsWith("1");
+                    else if (l.StartsWith("MinimalizeSensors=")) mn = l.EndsWith("1");
                 }
+                SmEnabled = sm; Autorun = ar; StartMin = mn;
             } catch { }
         }
         static bool ProcRunning() {
             try { return System.Diagnostics.Process.GetProcessesByName("HWiNFO64").Length > 0 || System.Diagnostics.Process.GetProcessesByName("HWiNFO32").Length > 0; } catch { return false; }
+        }
+        // learn the exe path from a running HWiNFO when the registry lookup missed it (portable / non-standard installs)
+        static void LocateFromProcess() {
+            try {
+                foreach (string n in new string[] { "HWiNFO64", "HWiNFO32" })
+                    foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName(n)) {
+                        try { string fn = p.MainModule.FileName; if (!string.IsNullOrEmpty(fn) && File.Exists(fn)) { exe = fn; return; } } catch { } finally { p.Dispose(); }
+                    }
+            } catch { }
         }
 
         // fast (call every tick): read CPU temp/watts from shared memory. Returns true if shared memory is live.
@@ -468,9 +479,11 @@ namespace StarMaster {
             catch { return false; }   // shared memory not present => HWiNFO not running (or SM off / 12-hour limit expired)
         }
 
-        // heavier (call occasionally): classify overall state for the status line + button
+        // heavier (call occasionally): classify overall state + refresh the INI-derived flags for a precise diagnosis
         public static void RefreshState(bool smActive) {
             if (!located) Locate();
+            if (exe == null) LocateFromProcess();   // portable install we didn't find via the registry
+            if (exe != null) ReadIni();              // keep SmEnabled/Autorun/StartMin current so the SM-off vs 12h-limit split is right
             if (smActive) { State = Connected; return; }
             bool running = ProcRunning();
             if (exe == null && !running) State = NotInstalled;
@@ -495,7 +508,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "64";
+        public const string Version = "65";
         public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1014,36 +1027,50 @@ namespace StarMaster {
                 else { string p = HwInfo.Exe(); if (p != null) System.Diagnostics.Process.Start(p); }   // start it (or bring it up to enable Shared Memory)
             } catch { }
         }
+        // Precise HWiNFO diagnosis + a clear fix for every distinct failure cause. AV-safe: the only actions are
+        // opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
         void UpdateHwUi() {
             if (monHwTxt == null) return;
             TextBlock lbl = (TextBlock)monHwBtn.Child;
-            if (HwInfo.State == HwInfo.Connected) {
-                monHwTxt.Text = "Connected" + (HwInfo.CpuTempC >= 0 ? " - CPU " + HwInfo.CpuTempC + " °C" + (HwInfo.CpuPowerW >= 0 ? " · " + HwInfo.CpuPowerW + " W" : "") : "");
+            bool haveTemp = HwInfo.CpuTempC >= 0, havePower = HwInfo.CpuPowerW >= 0;
+            if (HwInfo.State == HwInfo.Connected && haveTemp && havePower) {
+                // fully working
+                monHwTxt.Text = "Connected - CPU " + HwInfo.CpuTempC + " °C · " + HwInfo.CpuPowerW + " W";
                 monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
                 bool tipNeeded = !HwInfo.Autorun || !HwInfo.StartMin;
                 monHwTip.Text = tipNeeded ? "Tip: in HWiNFO enable Auto Start + Minimize on startup so it's always ready." : "";
                 monHwTip.Visibility = tipNeeded ? Visibility.Visible : Visibility.Collapsed;
+                return;
+            }
+            monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
+            if (HwInfo.State == HwInfo.Connected) {
+                // shared memory is live but a CPU sensor is missing (hidden/disabled in HWiNFO, or an unusual sensor name)
+                string missing = (!haveTemp && !havePower) ? "CPU temp + watts" : (!haveTemp ? "CPU temperature" : "CPU watts");
+                monHwTxt.Text = "CPU " + (haveTemp ? HwInfo.CpuTempC + " °C" : "temp n/a") + " · " + (havePower ? HwInfo.CpuPowerW + " W" : "watts n/a") + " - " + missing + " sensor not found.";
+                lbl.Text = "Open HWiNFO";
+                monHwTip.Text = "In HWiNFO, make sure the " + missing + " sensor isn't hidden or disabled (right-click a sensor to show it), and you're on a recent version.";
+            } else if (HwInfo.State == HwInfo.NotInstalled) {
+                monHwTxt.Text = "Not set up - optional, adds CPU temp + watts.";
+                lbl.Text = "Get HWiNFO";
+                monHwTip.Text = "1. Click Get HWiNFO (free), then install & run it.\n2. In HWiNFO: Settings (gear) -> tick 'Shared Memory Support' -> OK.\n3. Tick Auto Start + Minimize so it's always ready.";
+            } else if (HwInfo.State == HwInfo.NotRunning) {
+                monHwTxt.Text = "HWiNFO is installed but not running.";
+                lbl.Text = "Start HWiNFO";
+                monHwTip.Text = "1. Click Start HWiNFO (or turn on Auto Start in its settings).\n2. No readings once it's up? Enable 'Shared Memory Support' in HWiNFO Settings.";
+            } else if (HwInfo.AccessDenied) {
+                monHwTxt.Text = "HWiNFO is running, but StarMaster can't read its data.";
+                lbl.Text = "Open HWiNFO";
+                monHwTip.Text = "Admin mismatch: run HWiNFO and StarMaster the same way - both normal, or both as administrator. (If HWiNFO auto-starts elevated, either run StarMaster as admin too, or turn off HWiNFO's 'Run as administrator'.)";
+            } else if (!HwInfo.SmEnabled) {
+                // running, shared memory switched off in settings
+                monHwTxt.Text = "HWiNFO is running, but Shared Memory is off.";
+                lbl.Text = "Open HWiNFO";
+                monHwTip.Text = "Turn it on: in HWiNFO -> Settings (gear) -> tick 'Shared Memory Support' -> OK. StarMaster picks it up within a few seconds.";
             } else {
-                // self-service setup guide: numbered steps per detected state, so a first-timer can follow it without being talked through.
-                // AV-safe: the only actions are opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
-                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
-                if (HwInfo.State == HwInfo.NotInstalled) {
-                    monHwTxt.Text = "Not set up - optional, adds CPU temp / watts.";
-                    lbl.Text = "Get HWiNFO";
-                    monHwTip.Text = "1. Get HWiNFO (free), then install & run it.\n2. In HWiNFO: Settings (gear) -> tick 'Shared Memory Support'.\n3. Tick Auto Start + Minimize so it's always ready.";
-                } else if (HwInfo.State == HwInfo.NotRunning) {
-                    monHwTxt.Text = "Installed but not running.";
-                    lbl.Text = "Start HWiNFO";
-                    monHwTip.Text = "1. Click Start HWiNFO (or enable Auto Start in its settings).\n2. Still no data? In HWiNFO: Settings -> tick 'Shared Memory Support'.";
-                } else if (HwInfo.AccessDenied) {
-                    monHwTxt.Text = "Running, but StarMaster can't read its Shared Memory.";
-                    lbl.Text = "Open HWiNFO";
-                    monHwTip.Text = "Usually an admin mismatch - run HWiNFO and StarMaster the same way (both normal, or both as administrator).";
-                } else {
-                    monHwTxt.Text = "Running, but Shared Memory is off.";
-                    lbl.Text = "Open HWiNFO";
-                    monHwTip.Text = "In HWiNFO: Settings (gear) -> tick 'Shared Memory Support' -> OK.\nAlready ticked? The free version's 12-hour limit expired - untick/re-tick it, or restart HWiNFO.";
-                }
+                // running, shared memory ticked in the INI but not actually publishing -> HWiNFO Free's 12-hour auto-off
+                monHwTxt.Text = "Shared Memory is enabled but not active.";
+                lbl.Text = "Open HWiNFO";
+                monHwTip.Text = "HWiNFO Free turns Shared Memory off after 12 hours. Fix: in HWiNFO untick and re-tick 'Shared Memory Support', or just restart HWiNFO.";
             }
         }
         void MonTick(object s, EventArgs e) {
@@ -1054,7 +1081,8 @@ namespace StarMaster {
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
             bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
-            if (++hwTick >= 5) { hwTick = 0; HwInfo.RefreshState(sm); }   // heavier state check every ~5s
+            // ~5s cadence, but refresh immediately when shared memory comes live or drops so "did my fix work?" feedback is instant
+            if (++hwTick >= 5 || (sm && HwInfo.State != HwInfo.Connected) || (!sm && HwInfo.State == HwInfo.Connected)) { hwTick = 0; HwInfo.RefreshState(sm); }
             if (IsVisible) {
                 UpdateShaderCard();
                 if (hwTick == 0) UpdateHwUi();

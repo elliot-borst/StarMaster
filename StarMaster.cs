@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("63.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("63.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("64.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("64.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,7 +495,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "63";
+        public const string Version = "64";
         public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1024,11 +1024,26 @@ namespace StarMaster {
                 monHwTip.Text = tipNeeded ? "Tip: in HWiNFO enable Auto Start + Minimize on startup so it's always ready." : "";
                 monHwTip.Visibility = tipNeeded ? Visibility.Visible : Visibility.Collapsed;
             } else {
-                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Collapsed;
-                if (HwInfo.State == HwInfo.NotInstalled) { monHwTxt.Text = "Not installed (needed for CPU temp / watts)."; lbl.Text = "Get HWiNFO"; }
-                else if (HwInfo.State == HwInfo.NotRunning) { monHwTxt.Text = "Installed but not running."; lbl.Text = "Start HWiNFO"; monHwTip.Text = (!HwInfo.Autorun || !HwInfo.StartMin) ? "Tip: enable Auto Start + Minimize on startup in HWiNFO." : ""; monHwTip.Visibility = monHwTip.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
-                else if (HwInfo.AccessDenied) { monHwTxt.Text = "Running, but StarMaster can't read its Shared Memory."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "This is usually an admin mismatch - run HWiNFO and StarMaster the same way (both normal, or both as administrator)."; monHwTip.Visibility = Visibility.Visible; }
-                else { monHwTxt.Text = "Running, but Shared Memory isn't active."; lbl.Text = "Open HWiNFO"; monHwTip.Text = "Enable 'Shared Memory Support' in HWiNFO Settings. If it's already ticked, the free version's 12-hour limit has expired - untick and re-tick it (or restart HWiNFO)."; monHwTip.Visibility = Visibility.Visible; }
+                // self-service setup guide: numbered steps per detected state, so a first-timer can follow it without being talked through.
+                // AV-safe: the only actions are opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
+                monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
+                if (HwInfo.State == HwInfo.NotInstalled) {
+                    monHwTxt.Text = "Not set up - optional, adds CPU temp / watts.";
+                    lbl.Text = "Get HWiNFO";
+                    monHwTip.Text = "1. Get HWiNFO (free), then install & run it.\n2. In HWiNFO: Settings (gear) -> tick 'Shared Memory Support'.\n3. Tick Auto Start + Minimize so it's always ready.";
+                } else if (HwInfo.State == HwInfo.NotRunning) {
+                    monHwTxt.Text = "Installed but not running.";
+                    lbl.Text = "Start HWiNFO";
+                    monHwTip.Text = "1. Click Start HWiNFO (or enable Auto Start in its settings).\n2. Still no data? In HWiNFO: Settings -> tick 'Shared Memory Support'.";
+                } else if (HwInfo.AccessDenied) {
+                    monHwTxt.Text = "Running, but StarMaster can't read its Shared Memory.";
+                    lbl.Text = "Open HWiNFO";
+                    monHwTip.Text = "Usually an admin mismatch - run HWiNFO and StarMaster the same way (both normal, or both as administrator).";
+                } else {
+                    monHwTxt.Text = "Running, but Shared Memory is off.";
+                    lbl.Text = "Open HWiNFO";
+                    monHwTip.Text = "In HWiNFO: Settings (gear) -> tick 'Shared Memory Support' -> OK.\nAlready ticked? The free version's 12-hour limit expired - untick/re-tick it, or restart HWiNFO.";
+                }
             }
         }
         void MonTick(object s, EventArgs e) {

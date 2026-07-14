@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("62.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("62.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("63.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("63.0.0.0")]
 
 namespace StarMaster {
 
@@ -495,8 +495,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "62";
-        public const string VersionDate = "2026-07-13";   // bump alongside Version at release time
+        public const string Version = "63";
+        public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -594,7 +594,7 @@ namespace StarMaster {
             // (the flash could linger under post-update AV/disk load). Restore() puts it back in shownState (Maximised).
             if (startMinimized || (App.MinimizedArg && !firstRun)) { WindowState = WindowState.Minimized; ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }
             if (autostart) ToggleRun();
-            if (monOverlayOn) Loaded += delegate { SetOverlay(true); };   // restore the over-the-game overlay if it was on last session
+            Loaded += delegate { ApplyOverlay(); };   // restore the over-the-game overlay if it was on last session (but ApplyOverlay keeps it off the desktop when we launch straight to the tray with no game running)
             if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); };   // FPS defaults on
         }
 
@@ -784,7 +784,7 @@ namespace StarMaster {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "▦", "System Monitor", "live overlay over the game - CPU / RAM / GPU (no injection)");
             // overlay controls (in the body - the narrow column header has no room for them)
             StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-            ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; SetOverlay(v); }, out setOverlayToggleVisual));
+            ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; ApplyOverlay(); }, out setOverlayToggleVisual));
             ov.Children.Add(new TextBlock { Text = "  Show Overlay", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ov);
             // global hotkey to show/hide the overlay - toggles it without alt-tabbing out of the game
@@ -804,7 +804,7 @@ namespace StarMaster {
             body.Children.Add(lk);
             // only display the overlay while Star Citizen is the foreground window (hidden on the desktop / Alt-Tab / other apps)
             StackPanel ao = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-            ao.Children.Add(Toggle(monActiveOnly, delegate (bool v) { monActiveOnly = v; ApplyActiveOnly(); }));
+            ao.Children.Add(Toggle(monActiveOnly, delegate (bool v) { monActiveOnly = v; ApplyOverlay(); }));
             ao.Children.Add(new TextBlock { Text = "  Only show over Star Citizen", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ao);
             StackPanel cl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
@@ -880,13 +880,25 @@ namespace StarMaster {
             d.Children.Add(bar);   // LastChildFill: the bar fills the middle
             return d;
         }
-        // show/hide the over-the-game OSD window
-        void SetOverlay(bool on) {
-            if (on) {
+        // Single source of truth for the OSD overlay's visibility. Called on launch, from every overlay-related
+        // toggle/hotkey, from Restore()/OnClosing(), and each MonTick. Decides whether the overlay should be on
+        // screen right now and shows/hides + (re)creates the window to match:
+        //   - overlay off               -> hidden
+        //   - "Only show over SC" on     -> visible only while StarCitizen.exe is the FOREGROUND window
+        //   - always-on, window OPEN     -> visible (the on-desktop preview while you're using StarMaster)
+        //   - always-on, in the TRAY     -> visible only while StarCitizen is running (a minimised launch / close-to-tray
+        //                                    must not clutter the bare desktop; the overlay still auto-appears over the game)
+        // The tray case is why "start minimised" felt broken: the overlay used to be forced on at launch regardless.
+        void ApplyOverlay() {
+            bool want = monOverlayOn && (monActiveOnly
+                ? string.Equals(Native.ActiveProcessName(), "StarCitizen", StringComparison.OrdinalIgnoreCase)   // foreground-gated
+                : (IsVisible || ScRunning()));   // always-on while the window's up; in the tray, only while the game runs
+            if (want) {
                 if (monWin == null) { monWin = new MonWindow(); monWin.Left = monOvX; monWin.Top = monOvY; monWin.Closed += delegate { if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; } monWin = null; }; }
-                monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); monWin.SetColors(monColors);
-            } else if (monWin != null) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
+                if (monWin.Visibility != Visibility.Visible) { monWin.Show(); monWin.SetLocked(monLocked); monWin.SetStyle(monOvAlpha, monOvColor, monTextAlpha); monWin.SetColors(monColors); }
+            } else if (monWin != null && monWin.Visibility == Visibility.Visible) { monOvX = monWin.Left; monOvY = monWin.Top; monWin.Hide(); }
         }
+        static bool ScRunning() { try { return System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { return false; } }
         // ----- overlay show/hide global hotkey (RegisterHotKey; delivered as WM_HOTKEY to our HWND even while the game has focus and we're in the tray) -----
         protected override void OnSourceInitialized(EventArgs e) {
             base.OnSourceInitialized(e);
@@ -902,7 +914,7 @@ namespace StarMaster {
         // flip the overlay on/off from the hotkey (runs on the UI thread), keeping the card's "Show Overlay" switch in sync + persisting
         void ToggleOverlayHotkey() {
             monOverlayOn = !monOverlayOn;
-            SetOverlay(monOverlayOn);
+            ApplyOverlay();
             if (setOverlayToggleVisual != null) setOverlayToggleVisual(monOverlayOn);
             SaveConfig();
         }
@@ -915,13 +927,6 @@ namespace StarMaster {
             if (vk == 0) return;
             // fsModifiers = MOD_NOREPEAT (0x4000) only -> a bare key press toggles once (no auto-repeat while held)
             hotkeyRegistered = Native.RegisterHotKey(hotkeyHwnd, HotkeyId, 0x4000, vk);
-        }
-        // when "Only show over Star Citizen" is on, hide the overlay unless the FOREGROUND process is StarCitizen.exe. Matches on the process name (not window title) so a terminal/editor whose title merely contains "Star Citizen" doesn't trigger it. Fails closed. No-op unless the overlay is enabled.
-        void ApplyActiveOnly() {
-            if (monWin == null || !monOverlayOn) return;
-            bool show = !monActiveOnly || string.Equals(Native.ActiveProcessName(), "StarCitizen", StringComparison.OrdinalIgnoreCase);
-            if (show) { if (monWin.Visibility != Visibility.Visible) monWin.Show(); }
-            else if (monWin.Visibility == Visibility.Visible) monWin.Hide();
         }
         // a labelled opacity slider (0-100, 10% steps) with a live % readout
         UIElement OpacityRow(string label, int initial, Action<int> set) {
@@ -1027,7 +1032,7 @@ namespace StarMaster {
             }
         }
         void MonTick(object s, EventArgs e) {
-            ApplyActiveOnly();   // active-only: show/hide the overlay to track whether SC is the foreground window
+            ApplyOverlay();   // keep the overlay's visibility in sync (active-only foreground tracking + the tray "only while the game runs" rule)
             bool overlay = monWin != null && monOverlayOn && monWin.Visibility == Visibility.Visible;
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
@@ -1428,10 +1433,10 @@ namespace StarMaster {
             trayIcon.ContextMenuStrip = m;
             trayIcon.MouseClick += delegate (object s, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) Restore(); };   // single left-click opens; right-click still shows the menu
         }
-        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = shownState; Activate(); })); }   // surface in shownState (Maximised by default, or the size the user left it at); preserved across the tray Hide()/Show() cycle
+        void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = shownState; Activate(); ApplyOverlay(); })); }   // surface in shownState (Maximised by default, or the size the user left it at); preserved across the tray Hide()/Show() cycle. ApplyOverlay() brings the on-desktop overlay back now that the window is up.
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {
             SaveConfig();
-            if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { if (WindowState != WindowState.Minimized) shownState = WindowState; e.Cancel = true; Hide(); return; }   // overlay keeps running while we're in the tray; remember the visible state so it comes back the same
+            if (!exiting && trayIcon != null && trayIcon.Icon != null && trayIcon.Visible) { if (WindowState != WindowState.Minimized) shownState = WindowState; e.Cancel = true; Hide(); ApplyOverlay(); return; }   // overlay keeps running while we're in the tray; remember the visible state so it comes back the same. ApplyOverlay() drops the on-desktop overlay unless the game is running (it stays put over SC).
             timer.Stop(); if (monTimer != null) monTimer.Stop(); FpsMon.Stop(); if (monWin != null) { monWin.Close(); monWin = null; }
             if (hotkeyRegistered && hotkeyHwnd != IntPtr.Zero) { Native.UnregisterHotKey(hotkeyHwnd, HotkeyId); hotkeyRegistered = false; }
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); }

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("67.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("67.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("68.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("68.0.0.0")]
 
 namespace StarMaster {
 
@@ -512,8 +512,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "67";
-        public const string VersionDate = "2026-07-14";   // bump alongside Version at release time
+        public const string Version = "68";
+        public const string VersionDate = "2026-07-15";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -523,6 +523,8 @@ namespace StarMaster {
         bool running = false, focusGuard = true, autostart = false, startMinimized = false; TextBox winTitleBox;
         // the state to show the window in when it's surfaced from the tray (Maximised by default, v59); tracks a user restore-down so it isn't lost across a tray cycle
         WindowState shownState = WindowState.Maximized;
+        readonly int launchTick = Environment.TickCount;   // when this instance came up; a duplicate launch that pokes us within the startup grace window is a boot double-start, not a deliberate re-run (v68)
+        const int StartupGraceMs = 5000;
         DispatcherTimer timer;
         // backup
         TextBox scRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;   // scRoot: shared SC-folder field, lives in the top bar
@@ -600,7 +602,14 @@ namespace StarMaster {
             // listen for a second launch wanting to bring us forward (e.g. user re-runs while we're in the tray)
             try {
                 singleInstanceEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, App.ActivateEvent);
-                System.Threading.ThreadPool.RegisterWaitForSingleObject(singleInstanceEvent, delegate { Dispatcher.BeginInvoke(new Action(delegate { Restore(); })); }, null, -1, false);
+                System.Threading.ThreadPool.RegisterWaitForSingleObject(singleInstanceEvent, delegate { Dispatcher.BeginInvoke(new Action(delegate {
+                    // Ignore activation pokes fired in the first few seconds after our own launch. At boot a
+                    // second startup entry (e.g. a stale Startup-folder shortcut, or Windows "restart apps"
+                    // relaunching us) can start a duplicate that would otherwise yank a start-minimised window
+                    // out of the tray. A deliberate user re-run happens long after startup, so it still surfaces.
+                    if (unchecked(Environment.TickCount - launchTick) < StartupGraceMs) return;
+                    Restore();
+                })); }, null, -1, false);
             } catch { }
             BuildTray();
             Closing += OnClosing;
@@ -1768,8 +1777,11 @@ namespace StarMaster {
             try { foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-Setup-*.exe")) { try { File.Delete(f); } catch { } } } catch { }
             bool createdNew;
             mtx = new System.Threading.Mutex(true, MutexName, out createdNew);
-            if (!createdNew) {                                  // already running: poke the live instance to surface, then bow out
-                try { System.Threading.EventWaitHandle.OpenExisting(ActivateEvent).Set(); } catch { }
+            if (!createdNew) {                                  // already running
+                // A --minimized launch means "start in the background" - it must never pull the live instance
+                // to the foreground. On boot the Start-with-Windows Run key can fire alongside a Windows
+                // "restart apps" relaunch; only a deliberate re-run (no --minimized) should surface the window.
+                if (!MinimizedArg) { try { System.Threading.EventWaitHandle.OpenExisting(ActivateEvent).Set(); } catch { } }
                 return;
             }
             System.Windows.Application app = new System.Windows.Application();

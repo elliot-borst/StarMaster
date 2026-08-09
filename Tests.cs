@@ -51,11 +51,16 @@ namespace StarMaster {
 
             // ----- CVars: catalog (the user.cfg VFX texture-streaming tweaks) -----
             CVarDef mips = CVars.Find("r_texturesStreamingVFXDesiredMips"), pre = CVars.Find("e_ParticleTexturePreLoading");
-            Check(mips != null && mips.Min == 0 && mips.Max == 8 && mips.Def == 2 && !mips.Toggle, "catalog: DesiredMips is 0-8, game default 2, numeric");
+            Check(mips != null && mips.Min == 0 && mips.Max == 2 && mips.Def == 2 && !mips.Toggle, "catalog: DesiredMips is 0-2, game default 2, numeric");
             Check(pre != null && pre.Min == 0 && pre.Max == 1 && pre.Def == 0 && pre.Toggle, "catalog: PreLoading is 0/1, game default 0, toggle");
             Check(CVars.Find("no_such_cvar") == null, "catalog: unknown name -> null");
-            Check(CVars.Clamp(mips, -3) == 0 && CVars.Clamp(mips, 9) == 8 && CVars.Clamp(mips, 5) == 5, "clamp: DesiredMips clamps to 0-8");
+            Check(CVars.Clamp(mips, -3) == 0 && CVars.Clamp(mips, 9) == 2 && CVars.Clamp(mips, 1) == 1, "clamp: DesiredMips clamps to 0-2");
             Check(CVars.Clamp(pre, 7) == 1 && CVars.Clamp(pre, -1) == 0, "clamp: PreLoading clamps to 0/1");
+            // value labels (v71): mips choices show resolution names; parse recovers the number
+            Check(CVars.ValueLabel(mips, 0) == "0 - Full resolution" && CVars.ValueLabel(mips, 1) == "1 - Half resolution" && CVars.ValueLabel(mips, 2) == "2 - Quarter resolution", "labels: mips values name their resolution");
+            Check(CVars.ValueLabel(mips, 9) == "2 - Quarter resolution" && CVars.ValueLabel(pre, 1) == "1", "labels: out-of-range clamps; unlabelled defs show the bare number");
+            Check(CVars.ParseChoice("1 - Half resolution", 9) == 1 && CVars.ParseChoice("2", 9) == 2, "labels: ParseChoice recovers the leading value");
+            Check(CVars.ParseChoice("garbage", 2) == 2 && CVars.ParseChoice(null, 1) == 1, "labels: ParseChoice falls back on junk/null");
 
             // ----- CVars: TryRead ("name = value" lines; the game is last-assignment-wins) -----
             int v;

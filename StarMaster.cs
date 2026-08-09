@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("70.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("70.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("71.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("71.0.0.0")]
 
 namespace StarMaster {
 
@@ -512,7 +512,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "70";
+        public const string Version = "71";
         public const string VersionDate = "2026-08-09";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -770,8 +770,8 @@ namespace StarMaster {
             DockPanel.SetDock(cvCurrent, Dock.Right); capRow.Children.Add(cvCurrent);
             body.Children.Add(capRow);
             cvMipsDef = CVars.Find("r_texturesStreamingVFXDesiredMips"); cvPreDef = CVars.Find("e_ParticleTexturePreLoading");
-            cvMipChoices = new string[cvMipsDef.Max - cvMipsDef.Min + 1]; for (int i = 0; i < cvMipChoices.Length; i++) cvMipChoices[i] = (cvMipsDef.Min + i).ToString();
-            cvMips = new Dropdown(cvMipChoices, cvMipsDef.Def.ToString(), 56); cvMips.OnChange = delegate (string v) { cvDirty = true; };
+            cvMipChoices = new string[cvMipsDef.Max - cvMipsDef.Min + 1]; for (int i = 0; i < cvMipChoices.Length; i++) cvMipChoices[i] = CVars.ValueLabel(cvMipsDef, cvMipsDef.Min + i);
+            cvMips = new Dropdown(cvMipChoices, CVars.ValueLabel(cvMipsDef, cvMipsDef.Def), 168); cvMips.OnChange = delegate (string v) { cvDirty = true; };
             StackPanel mipsRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(cvMipsDef) };
             mipsRow.Children.Add(cvMips);
             mipsRow.Children.Add(new TextBlock { Text = cvMipsDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
@@ -802,7 +802,7 @@ namespace StarMaster {
             if (readFail) { cvCurrent.Text = "can't read user.cfg"; cvCurrent.Foreground = Ui.Warn; return; }
             int mips, pre; bool hasMips = CVars.TryRead(text, cvMipsDef.Name, out mips), hasPre = CVars.TryRead(text, cvPreDef.Name, out pre);
             if (!cvDirty) {   // don't clobber un-applied user edits when a backup/LostFocus refresh lands
-                cvMips.SetItems(cvMipChoices, CVars.Clamp(cvMipsDef, hasMips ? mips : cvMipsDef.Def).ToString());
+                cvMips.SetItems(cvMipChoices, CVars.ValueLabel(cvMipsDef, hasMips ? mips : cvMipsDef.Def));
                 cvPreload = CVars.Clamp(cvPreDef, hasPre ? pre : cvPreDef.Def) == 1;
                 if (setCvPreloadVisual != null) setCvPreloadVisual(cvPreload);
             }
@@ -813,8 +813,7 @@ namespace StarMaster {
         }
         void CvApply() {
             if (ScRunning()) { shaderStatus.Text = "close Star Citizen first - user.cfg is only read at launch"; shaderStatus.Foreground = Ui.Warn; return; }
-            int mipsVal; if (!int.TryParse(cvMips.Value, out mipsVal)) mipsVal = cvMipsDef.Def;
-            mipsVal = CVars.Clamp(cvMipsDef, mipsVal);                     // dropdown only offers 0-8, but clamp anyway
+            int mipsVal = CVars.Clamp(cvMipsDef, CVars.ParseChoice(cvMips.Value, cvMipsDef.Def));   // "1 - Half resolution" -> 1; dropdown only offers 0-2, but clamp anyway
             int preVal = CVars.Clamp(cvPreDef, cvPreload ? 1 : 0);
             string channelRoot, cfg;
             try { channelRoot = Path.Combine(scRoot.Text.Trim(), cvChannel.Value); cfg = Path.Combine(channelRoot, "user.cfg"); }

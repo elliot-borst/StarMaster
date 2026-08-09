@@ -1314,7 +1314,7 @@ namespace StarMaster {
             StackPanel checks = new StackPanel { Margin = new Thickness(0, 4, 0, 10) };
             checks.Children.Add(Check("User settings & bindings (user\\)", wUser, delegate (bool v) { wUser = v; }));
             checks.Children.Add(Check("StarStrings text mod (data\\Localization\\)", wLoc, delegate (bool v) { wLoc = v; }));
-            checks.Children.Add(Check("StarStrings language line (user.cfg)", wCfg, delegate (bool v) { wCfg = v; }));
+            checks.Children.Add(Check("Game settings (user.cfg - whole file)", wCfg, delegate (bool v) { wCfg = v; }));
             body.Children.Add(checks);
             StackPanel r1 = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             bkChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, "LIVE", 120); r1.Children.Add(bkChannel); r1.Children.Add(Sp(9));

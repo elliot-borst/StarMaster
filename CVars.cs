@@ -14,6 +14,7 @@ namespace StarMaster {
         public int Min, Max;   // integer range - values clamp to this
         public int Def;        // the game's own default (what an unset CVar behaves as)
         public bool Toggle;    // 0/1 - rendered as a switch instead of a number picker
+        public string[] ValueLabels;   // optional per-value display names (index = value), e.g. 0 -> "Full resolution"
     }
 
     public static class CVars {
@@ -21,10 +22,13 @@ namespace StarMaster {
         public static CVarDef[] Catalog() {
             return new CVarDef[] {
                 // NB the value's direction is NOT officially documented (mip index vs resident-mip
-                // count): the label stays neutral and the tooltip hedges its hint ("likely", "test
-                // in-game"); no UI ordering/preset logic assumes a direction anywhere.
-                new CVarDef { Name = "r_texturesStreamingVFXDesiredMips", Label = "VFX texture mip floor", Min = 0, Max = 8, Def = 2, Toggle = false,
-                    Tip = "Minimum resolution floor for particle/VFX textures kept in VRAM. Game default 2. Likely lower = sharper floor at higher VRAM cost - direction not officially documented, test in-game." },
+                // count). The value labels (v71, user-requested) assume the LIKELY mip-index reading
+                // - each mip step halves resolution, so 0=full / 1=half / 2=quarter - and the tooltip
+                // still says the direction is unverified; if in-game testing proves it backwards,
+                // flip ValueLabels here. Range trimmed 0-8 -> 0-2 (deeper floors aren't useful).
+                new CVarDef { Name = "r_texturesStreamingVFXDesiredMips", Label = "VFX texture mip floor", Min = 0, Max = 2, Def = 2, Toggle = false,
+                    ValueLabels = new string[] { "Full resolution", "Half resolution", "Quarter resolution" },
+                    Tip = "Minimum resolution floor for particle/VFX textures kept in VRAM. Game default 2 (quarter). Labels assume the likely reading (0 = sharpest floor, more VRAM) - the direction isn't officially documented, so test in-game." },
                 new CVarDef { Name = "e_ParticleTexturePreLoading", Label = "Pre-load particle textures", Min = 0, Max = 1, Def = 0, Toggle = true,
                     Tip = "Pre-load particle textures at startup. Sharper effects on first use; longer loads and higher VRAM use. Recommended for 16GB+ GPUs." },
             };
@@ -32,6 +36,18 @@ namespace StarMaster {
         public static CVarDef Find(string name) { foreach (CVarDef d in Catalog()) if (string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase)) return d; return null; }
 
         public static int Clamp(CVarDef d, int v) { return v < d.Min ? d.Min : (v > d.Max ? d.Max : v); }
+
+        // Display string for a value: "0 - Full resolution" when the def carries labels, else just "0".
+        public static string ValueLabel(CVarDef d, int v) {
+            v = Clamp(d, v);
+            return d.ValueLabels != null && v >= 0 && v < d.ValueLabels.Length ? v + " - " + d.ValueLabels[v] : v.ToString();
+        }
+        // The value back out of a ValueLabel-style choice string (leading integer token); fallback when unparseable.
+        public static int ParseChoice(string choice, int fallback) {
+            if (choice == null) return fallback;
+            string s = choice.Trim(); int sp = s.IndexOf(' '); if (sp > 0) s = s.Substring(0, sp);
+            int v; return int.TryParse(s, out v) ? v : fallback;
+        }
 
         // The key of a "name = value" line, or null for blanks / comments / non-assignments.
         static string KeyOf(string line) {

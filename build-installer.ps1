@@ -31,12 +31,12 @@ $csc = "$fw\csc.exe"
     /reference:"$fw\WPF\PresentationFramework.dll" /reference:"$fw\WPF\PresentationCore.dll" /reference:"$fw\WPF\WindowsBase.dll" `
     /reference:"$fw\System.Xaml.dll" /reference:System.Core.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll `
     /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll `
-    StarMaster.cs BackupForm.cs WholeVersion.cs
+    StarMaster.cs BackupForm.cs WholeVersion.cs CVars.cs
 if ($LASTEXITCODE -ne 0) { throw 'csc failed' }
 
 # ---- tests (dependency-free runner; a failure stops the release build) ----
 New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot 'dist') | Out-Null
-& $csc /nologo /target:exe /out:dist\StarMaster.Tests.exe WholeVersion.cs Tests.cs
+& $csc /nologo /target:exe /out:dist\StarMaster.Tests.exe WholeVersion.cs CVars.cs Tests.cs
 if ($LASTEXITCODE -ne 0) { throw 'test build failed' }
 & (Join-Path $PSScriptRoot 'dist\StarMaster.Tests.exe')
 if ($LASTEXITCODE -ne 0) { throw 'tests failed' }

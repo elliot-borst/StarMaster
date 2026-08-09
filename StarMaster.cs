@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("68.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("68.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("69.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("69.0.0.0")]
 
 namespace StarMaster {
 
@@ -512,8 +512,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "68";
-        public const string VersionDate = "2026-07-15";   // bump alongside Version at release time
+        public const string Version = "69";
+        public const string VersionDate = "2026-08-09";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -530,6 +530,8 @@ namespace StarMaster {
         TextBox scRoot; Dropdown bkChannel, cpFrom, cpTo; bool wUser = true, wLoc = true, wCfg = true; StackPanel bkChips; TextBlock bkStatus;   // scRoot: shared SC-folder field, lives in the top bar
         // shader cache
         TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false, shaderSized = false; int shaderTick = 100;
+        // VFX texture-streaming CVars (section in the Shader Cache card; merged into the selected channel's user.cfg)
+        Dropdown cvChannel, cvMips; string[] cvMipChoices; bool cvPreload = false; Action<bool> setCvPreloadVisual; TextBlock cvCurrent; Border cvApplyBtn; bool cvBtnEnabled = true;
         // system monitor (control card + the over-the-game OSD overlay)
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
@@ -752,13 +754,84 @@ namespace StarMaster {
         }
         // ---------- shader cache card (half-width tile) ----------
         FrameworkElement ShaderCacheCard() {
-            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "fixes graphical glitches - rebuilt on next launch");
-            body.Children.Add(new TextBlock { Text = "Deletes the Star Citizen shader cache at %LOCALAPPDATA%\\Star Citizen. Safe to do - the game rebuilds it automatically on next launch (the first load afterwards is a little slower). Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 12) });
-            shaderSizeTxt = new TextBlock { Text = "Cache size: checking...", Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 0, 0, 12) }; body.Children.Add(shaderSizeTxt);
+            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "cache clear + VFX texture streaming tweaks");
+            body.Children.Add(new TextBlock { Text = "Deletes the shader cache at %LOCALAPPDATA%\\Star Citizen - safe, the game rebuilds it on next launch. Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 10) });
+            shaderSizeTxt = new TextBlock { Text = "Cache size: checking...", Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 0, 0, 10) }; body.Children.Add(shaderSizeTxt);
             shaderClrBtn = Btn("♻  Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { if (shaderBtnEnabled) ClearShaderCache(); }); shaderClrBtn.Padding = new Thickness(18, 10, 18, 10); shaderClrBtn.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(shaderClrBtn);
-            shaderRunNote = new TextBlock { Text = "Star Citizen is running - close it to clear the cache.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(shaderRunNote);
-            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) }; body.Children.Add(shaderStatus);
+            shaderRunNote = new TextBlock { Text = "Star Citizen is running - close it to clear the cache or apply tweaks.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(shaderRunNote);
+            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) }; body.Children.Add(shaderStatus);
+            // --- VFX texture streaming (user.cfg CVars from the CVars catalog) ---
+            body.Children.Add(new Border { Height = 1, Background = Ui.Line, Margin = new Thickness(0, 12, 0, 10) });
+            DockPanel capRow = new DockPanel { LastChildFill = false };
+            TextBlock cvCap = Caps("VFX streaming - user.cfg"); DockPanel.SetDock(cvCap, Dock.Left); capRow.Children.Add(cvCap);
+            cvCurrent = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(cvCurrent, Dock.Right); capRow.Children.Add(cvCurrent);
+            body.Children.Add(capRow);
+            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
+            cvMipChoices = new string[mipsDef.Max - mipsDef.Min + 1]; for (int i = 0; i < cvMipChoices.Length; i++) cvMipChoices[i] = (mipsDef.Min + i).ToString();
+            cvMips = new Dropdown(cvMipChoices, mipsDef.Def.ToString(), 56);
+            StackPanel mipsRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(mipsDef) };
+            mipsRow.Children.Add(cvMips);
+            mipsRow.Children.Add(new TextBlock { Text = mipsDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            body.Children.Add(mipsRow);
+            StackPanel preRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(preDef) };
+            preRow.Children.Add(Toggle(cvPreload, delegate (bool v) { cvPreload = v; }, out setCvPreloadVisual));
+            preRow.Children.Add(new TextBlock { Text = preDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            body.Children.Add(preRow);
+            StackPanel applyRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            string[] chans = BackupOps.DetectChannels(scRoot != null ? scRoot.Text.Trim() : ""); if (chans.Length == 0) chans = new string[] { "LIVE", "HOTFIX" };
+            cvChannel = new Dropdown(chans, Pick(chans, "LIVE"), 92); cvChannel.OnChange = delegate (string v) { CvRefresh(); };
+            applyRow.Children.Add(cvChannel); applyRow.Children.Add(Sp(9));
+            cvApplyBtn = Btn("Apply to user.cfg", Ui.Card2, Ui.Text, false, delegate { if (cvBtnEnabled) CvApply(); }); cvApplyBtn.Padding = new Thickness(14, 8, 14, 8); applyRow.Children.Add(cvApplyBtn);
+            body.Children.Add(applyRow);
+            CvRefresh();
             return card;
+        }
+        // tooltip = exact CVar name + what it does (semantics direction unverified for DesiredMips - the tip says so)
+        static ToolTip CvTip(CVarDef d) { return new ToolTip { Content = new TextBlock { Text = d.Name + "\n\n" + d.Tip, MaxWidth = 340, TextWrapping = TextWrapping.Wrap } }; }
+        // reads the selected channel's user.cfg and reflects it in the section: controls sync to the file
+        // (game defaults when unset) and the caps-row readout shows what's actually set right now
+        void CvRefresh() { CvRefresh(false); }
+        void CvRefresh(bool justApplied) {
+            if (cvCurrent == null || scRoot == null) return;
+            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
+            string text = null;
+            try { string cfg = Path.Combine(Path.Combine(scRoot.Text.Trim(), cvChannel.Value), "user.cfg"); if (File.Exists(cfg)) text = File.ReadAllText(cfg); } catch { }
+            int mips, pre; bool hasMips = CVars.TryRead(text, mipsDef.Name, out mips), hasPre = CVars.TryRead(text, preDef.Name, out pre);
+            cvMips.SetItems(cvMipChoices, CVars.Clamp(mipsDef, hasMips ? mips : mipsDef.Def).ToString());
+            cvPreload = CVars.Clamp(preDef, hasPre ? pre : preDef.Def) == 1;
+            if (setCvPreloadVisual != null) setCvPreloadVisual(cvPreload);
+            cvCurrent.Text = (justApplied ? "✓ " : "") + (hasMips || hasPre
+                ? "mips " + (hasMips ? mips.ToString() : "unset") + " · pre " + (hasPre ? (pre != 0 ? "on" : "off") : "unset")
+                : "not set (game defaults)");
+            cvCurrent.Foreground = justApplied ? Ui.Good : Ui.Dim;
+        }
+        void CvApply() {
+            bool running = false; try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
+            if (running) { shaderStatus.Text = "close Star Citizen first - user.cfg is only read at launch"; shaderStatus.Foreground = Ui.Warn; return; }
+            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
+            int mipsVal; if (!int.TryParse(cvMips.Value, out mipsVal)) mipsVal = mipsDef.Def;
+            mipsVal = CVars.Clamp(mipsDef, mipsVal);                       // dropdown only offers 0-8, but clamp anyway
+            int preVal = CVars.Clamp(preDef, cvPreload ? 1 : 0);
+            string channelRoot = Path.Combine(scRoot.Text.Trim(), cvChannel.Value);
+            if (!Directory.Exists(channelRoot)) { shaderStatus.Text = "channel not found: " + channelRoot; shaderStatus.Foreground = Ui.Warn; return; }
+            string cfg = Path.Combine(channelRoot, "user.cfg");
+            ShowConfirm("Apply VFX streaming tweaks", "Writes to:\n\n" + cfg + "\n\n" + mipsDef.Name + " = " + mipsVal + "\n" + preDef.Name + " = " + preVal + "\n\nExisting lines are updated in place - everything else in user.cfg is kept. Takes effect on the next game launch.", "Apply", delegate {
+                try {
+                    string text = File.Exists(cfg) ? File.ReadAllText(cfg) : "";
+                    text = CVars.Merge(text, mipsDef.Name, mipsVal);
+                    text = CVars.Merge(text, preDef.Name, preVal);
+                    File.WriteAllText(cfg, text);
+                    shaderStatus.Text = "VFX tweaks written to " + cvChannel.Value + " user.cfg"; shaderStatus.Foreground = Ui.Good;
+                    CvRefresh(true);
+                } catch (Exception ex) { shaderStatus.Text = "user.cfg write failed: " + ex.Message; shaderStatus.Foreground = Ui.DangerFg; }
+            });
+        }
+        void SetCvBtnEnabled(bool on) {
+            if (cvApplyBtn == null || cvBtnEnabled == on) return;
+            cvBtnEnabled = on;
+            cvApplyBtn.Opacity = on ? 1.0 : 0.4;
+            cvApplyBtn.Cursor = on ? Cursors.Hand : Cursors.Arrow;
         }
         // called each visible tick: disable the SC-writing actions (Clear shader cache, StarStrings install) while the game is running, and refresh the cache-size readout (throttled, off-thread)
         void UpdateShaderCard() {
@@ -766,6 +839,7 @@ namespace StarMaster {
             try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
             if (shaderClrBtn != null) {
                 SetShaderBtnEnabled(!running);
+                SetCvBtnEnabled(!running);   // Apply writes user.cfg in the SC folder - gated like the other SC-writing actions
                 shaderRunNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
                 // The cache-size walk is a recursive scan of thousands of files - it caused a periodic CPU blip while the window was open.
                 // Do it once when the card first appears, then only every ~30s and NEVER while the game is running (the size barely changes and Clear is disabled anyway).
@@ -1270,6 +1344,7 @@ namespace StarMaster {
             List<string> from = new List<string>(); foreach (string c in chans) from.Add(c + " (current)"); foreach (string s in BackupOps.Snapshots()) from.Add(s);
             cpFrom.SetItems(from.ToArray(), from.Count > 0 ? from[0] : "");
             if (ssChannel != null) ssChannel.SetItems(chans, Pick(chans, ssChannel.Value));
+            if (cvChannel != null) { cvChannel.SetItems(chans, Pick(chans, cvChannel.Value)); CvRefresh(); }
             bkChips.Children.Clear();
             string[] snaps = BackupOps.Snapshots(); int shown = 0;
             foreach (string s in snaps) { if (shown++ >= 4) break; bkChips.Children.Add(new TextBlock { Text = s, Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, Margin = new Thickness(0, 2, 0, 2) }); }

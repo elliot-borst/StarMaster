@@ -21,7 +21,8 @@ namespace StarMaster {
         public static CVarDef[] Catalog() {
             return new CVarDef[] {
                 // NB the value's direction is NOT officially documented (mip index vs resident-mip
-                // count), so the label/tooltip stay neutral - no "lower = better" anywhere.
+                // count): the label stays neutral and the tooltip hedges its hint ("likely", "test
+                // in-game"); no UI ordering/preset logic assumes a direction anywhere.
                 new CVarDef { Name = "r_texturesStreamingVFXDesiredMips", Label = "VFX texture mip floor", Min = 0, Max = 8, Def = 2, Toggle = false,
                     Tip = "Minimum resolution floor for particle/VFX textures kept in VRAM. Game default 2. Likely lower = sharper floor at higher VRAM cost - direction not officially documented, test in-game." },
                 new CVarDef { Name = "e_ParticleTexturePreLoading", Label = "Pre-load particle textures", Min = 0, Max = 1, Def = 0, Toggle = true,
@@ -42,18 +43,25 @@ namespace StarMaster {
         }
 
         // Reads a CVar's integer value from user.cfg text. The LAST assignment wins (matches the
-        // game's read order); surrounding quotes tolerated. False when absent or not an integer.
+        // game's read order); surrounding quotes tolerated; float-formatted values ("1.0" - a common
+        // hand-written form) truncate to int. False when absent or not numeric.
         public static bool TryRead(string cfgText, string name, out int value) {
             value = 0; bool found = false;
             if (cfgText == null) return false;
-            foreach (string raw in cfgText.Replace("\r\n", "\n").Split('\n')) {
+            foreach (string raw in Normalize(cfgText).Split('\n')) {
                 string key = KeyOf(raw);
                 if (key == null || !string.Equals(key, name, StringComparison.OrdinalIgnoreCase)) continue;
                 string v = raw.Substring(raw.IndexOf('=') + 1).Trim().Trim('"', '\'');
-                int parsed; if (int.TryParse(v, out parsed)) { value = parsed; found = true; }
+                int parsed; double d;
+                if (int.TryParse(v, out parsed)) { value = parsed; found = true; }
+                else if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d)) { value = (int)d; found = true; }
             }
             return found;
         }
+
+        // CRLF and lone-CR endings both become LF, so a bare-\r file (old/foreign editors) can't glue
+        // two settings into one "line" (which would make Merge silently drop the second one).
+        static string Normalize(string text) { return text.Replace("\r\n", "\n").Replace('\r', '\n'); }
 
         // Merges "name = value" into user.cfg text: replaces the first existing assignment in place
         // (case-insensitive), drops any later duplicates (the file is last-wins, so a stale duplicate
@@ -62,7 +70,7 @@ namespace StarMaster {
         public static string Merge(string cfgText, string name, int value) {
             string line = name + " = " + value;
             StringBuilder sb = new StringBuilder(); bool replaced = false;
-            string[] lines = (cfgText == null ? "" : cfgText).Replace("\r\n", "\n").Split('\n');
+            string[] lines = Normalize(cfgText == null ? "" : cfgText).Split('\n');
             int last = lines.Length; while (last > 0 && lines[last - 1].Length == 0) last--;   // don't grow trailing blank lines on every merge
             for (int i = 0; i < last; i++) {
                 string key = KeyOf(lines[i]);

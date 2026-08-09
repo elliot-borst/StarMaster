@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("69.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("69.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("70.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("70.0.0.0")]
 
 namespace StarMaster {
 
@@ -512,7 +512,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "69";
+        public const string Version = "70";
         public const string VersionDate = "2026-08-09";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -532,6 +532,8 @@ namespace StarMaster {
         TextBlock shaderStatus, shaderSizeTxt, shaderRunNote; Border shaderClrBtn; bool shaderBtnEnabled = true, shaderSizing = false, shaderSized = false; int shaderTick = 100;
         // VFX texture-streaming CVars (section in the Shader Cache card; merged into the selected channel's user.cfg)
         Dropdown cvChannel, cvMips; string[] cvMipChoices; bool cvPreload = false; Action<bool> setCvPreloadVisual; TextBlock cvCurrent; Border cvApplyBtn; bool cvBtnEnabled = true;
+        CVarDef cvMipsDef, cvPreDef;      // catalog entries looked up by name once (no magic indices)
+        bool cvDirty = false;             // user changed mips/pre-load but hasn't applied - CvRefresh leaves the controls alone so a background refresh can't silently revert the edits
         // system monitor (control card + the over-the-game OSD overlay)
         DispatcherTimer monTimer;
         MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
@@ -767,20 +769,20 @@ namespace StarMaster {
             cvCurrent = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(cvCurrent, Dock.Right); capRow.Children.Add(cvCurrent);
             body.Children.Add(capRow);
-            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
-            cvMipChoices = new string[mipsDef.Max - mipsDef.Min + 1]; for (int i = 0; i < cvMipChoices.Length; i++) cvMipChoices[i] = (mipsDef.Min + i).ToString();
-            cvMips = new Dropdown(cvMipChoices, mipsDef.Def.ToString(), 56);
-            StackPanel mipsRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(mipsDef) };
+            cvMipsDef = CVars.Find("r_texturesStreamingVFXDesiredMips"); cvPreDef = CVars.Find("e_ParticleTexturePreLoading");
+            cvMipChoices = new string[cvMipsDef.Max - cvMipsDef.Min + 1]; for (int i = 0; i < cvMipChoices.Length; i++) cvMipChoices[i] = (cvMipsDef.Min + i).ToString();
+            cvMips = new Dropdown(cvMipChoices, cvMipsDef.Def.ToString(), 56); cvMips.OnChange = delegate (string v) { cvDirty = true; };
+            StackPanel mipsRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(cvMipsDef) };
             mipsRow.Children.Add(cvMips);
-            mipsRow.Children.Add(new TextBlock { Text = mipsDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            mipsRow.Children.Add(new TextBlock { Text = cvMipsDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
             body.Children.Add(mipsRow);
-            StackPanel preRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(preDef) };
-            preRow.Children.Add(Toggle(cvPreload, delegate (bool v) { cvPreload = v; }, out setCvPreloadVisual));
-            preRow.Children.Add(new TextBlock { Text = preDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            StackPanel preRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(cvPreDef) };
+            preRow.Children.Add(Toggle(cvPreload, delegate (bool v) { cvPreload = v; cvDirty = true; }, out setCvPreloadVisual));
+            preRow.Children.Add(new TextBlock { Text = cvPreDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
             body.Children.Add(preRow);
             StackPanel applyRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             string[] chans = BackupOps.DetectChannels(scRoot != null ? scRoot.Text.Trim() : ""); if (chans.Length == 0) chans = new string[] { "LIVE", "HOTFIX" };
-            cvChannel = new Dropdown(chans, Pick(chans, "LIVE"), 92); cvChannel.OnChange = delegate (string v) { CvRefresh(); };
+            cvChannel = new Dropdown(chans, Pick(chans, "LIVE"), 92); cvChannel.OnChange = delegate (string v) { cvDirty = false; CvRefresh(); };   // switching channel deliberately loads that channel's state
             applyRow.Children.Add(cvChannel); applyRow.Children.Add(Sp(9));
             cvApplyBtn = Btn("Apply to user.cfg", Ui.Card2, Ui.Text, false, delegate { if (cvBtnEnabled) CvApply(); }); cvApplyBtn.Padding = new Thickness(14, 8, 14, 8); applyRow.Children.Add(cvApplyBtn);
             body.Children.Add(applyRow);
@@ -794,36 +796,39 @@ namespace StarMaster {
         void CvRefresh() { CvRefresh(false); }
         void CvRefresh(bool justApplied) {
             if (cvCurrent == null || scRoot == null) return;
-            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
-            string text = null;
-            try { string cfg = Path.Combine(Path.Combine(scRoot.Text.Trim(), cvChannel.Value), "user.cfg"); if (File.Exists(cfg)) text = File.ReadAllText(cfg); } catch { }
-            int mips, pre; bool hasMips = CVars.TryRead(text, mipsDef.Name, out mips), hasPre = CVars.TryRead(text, preDef.Name, out pre);
-            cvMips.SetItems(cvMipChoices, CVars.Clamp(mipsDef, hasMips ? mips : mipsDef.Def).ToString());
-            cvPreload = CVars.Clamp(preDef, hasPre ? pre : preDef.Def) == 1;
-            if (setCvPreloadVisual != null) setCvPreloadVisual(cvPreload);
+            string text = null; bool readFail = false;
+            try { string cfg = Path.Combine(Path.Combine(scRoot.Text.Trim(), cvChannel.Value), "user.cfg"); if (File.Exists(cfg)) text = File.ReadAllText(cfg); }
+            catch { readFail = true; }   // locked / access-denied / invalid path - say so instead of claiming "not set"
+            if (readFail) { cvCurrent.Text = "can't read user.cfg"; cvCurrent.Foreground = Ui.Warn; return; }
+            int mips, pre; bool hasMips = CVars.TryRead(text, cvMipsDef.Name, out mips), hasPre = CVars.TryRead(text, cvPreDef.Name, out pre);
+            if (!cvDirty) {   // don't clobber un-applied user edits when a backup/LostFocus refresh lands
+                cvMips.SetItems(cvMipChoices, CVars.Clamp(cvMipsDef, hasMips ? mips : cvMipsDef.Def).ToString());
+                cvPreload = CVars.Clamp(cvPreDef, hasPre ? pre : cvPreDef.Def) == 1;
+                if (setCvPreloadVisual != null) setCvPreloadVisual(cvPreload);
+            }
             cvCurrent.Text = (justApplied ? "✓ " : "") + (hasMips || hasPre
                 ? "mips " + (hasMips ? mips.ToString() : "unset") + " · pre " + (hasPre ? (pre != 0 ? "on" : "off") : "unset")
                 : "not set (game defaults)");
             cvCurrent.Foreground = justApplied ? Ui.Good : Ui.Dim;
         }
         void CvApply() {
-            bool running = false; try { running = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
-            if (running) { shaderStatus.Text = "close Star Citizen first - user.cfg is only read at launch"; shaderStatus.Foreground = Ui.Warn; return; }
-            CVarDef mipsDef = CVars.Catalog()[0], preDef = CVars.Catalog()[1];
-            int mipsVal; if (!int.TryParse(cvMips.Value, out mipsVal)) mipsVal = mipsDef.Def;
-            mipsVal = CVars.Clamp(mipsDef, mipsVal);                       // dropdown only offers 0-8, but clamp anyway
-            int preVal = CVars.Clamp(preDef, cvPreload ? 1 : 0);
-            string channelRoot = Path.Combine(scRoot.Text.Trim(), cvChannel.Value);
+            if (ScRunning()) { shaderStatus.Text = "close Star Citizen first - user.cfg is only read at launch"; shaderStatus.Foreground = Ui.Warn; return; }
+            int mipsVal; if (!int.TryParse(cvMips.Value, out mipsVal)) mipsVal = cvMipsDef.Def;
+            mipsVal = CVars.Clamp(cvMipsDef, mipsVal);                     // dropdown only offers 0-8, but clamp anyway
+            int preVal = CVars.Clamp(cvPreDef, cvPreload ? 1 : 0);
+            string channelRoot, cfg;
+            try { channelRoot = Path.Combine(scRoot.Text.Trim(), cvChannel.Value); cfg = Path.Combine(channelRoot, "user.cfg"); }
+            catch { shaderStatus.Text = "SC folder path is invalid - fix it in the top bar (no quotes)"; shaderStatus.Foreground = Ui.Warn; return; }   // e.g. a pasted Explorer "Copy as path" with quotes - Path.Combine throws, don't crash
             if (!Directory.Exists(channelRoot)) { shaderStatus.Text = "channel not found: " + channelRoot; shaderStatus.Foreground = Ui.Warn; return; }
-            string cfg = Path.Combine(channelRoot, "user.cfg");
-            ShowConfirm("Apply VFX streaming tweaks", "Writes to:\n\n" + cfg + "\n\n" + mipsDef.Name + " = " + mipsVal + "\n" + preDef.Name + " = " + preVal + "\n\nExisting lines are updated in place - everything else in user.cfg is kept. Takes effect on the next game launch.", "Apply", delegate {
+            ShowConfirm("Apply VFX streaming tweaks", "Writes to:\n\n" + cfg + "\n\n" + cvMipsDef.Name + " = " + mipsVal + "\n" + cvPreDef.Name + " = " + preVal + "\n\nYour other user.cfg settings are kept (existing lines updated in place). Takes effect on the next game launch.", "Apply", delegate {
+                if (ScRunning()) { shaderStatus.Text = "close Star Citizen first - user.cfg is only read at launch"; shaderStatus.Foreground = Ui.Warn; return; }   // re-check: the game may have launched while the confirm sat open
                 try {
                     string text = File.Exists(cfg) ? File.ReadAllText(cfg) : "";
-                    text = CVars.Merge(text, mipsDef.Name, mipsVal);
-                    text = CVars.Merge(text, preDef.Name, preVal);
+                    text = CVars.Merge(text, cvMipsDef.Name, mipsVal);
+                    text = CVars.Merge(text, cvPreDef.Name, preVal);
                     File.WriteAllText(cfg, text);
                     shaderStatus.Text = "VFX tweaks written to " + cvChannel.Value + " user.cfg"; shaderStatus.Foreground = Ui.Good;
-                    CvRefresh(true);
+                    cvDirty = false; CvRefresh(true);
                 } catch (Exception ex) { shaderStatus.Text = "user.cfg write failed: " + ex.Message; shaderStatus.Foreground = Ui.DangerFg; }
             });
         }
@@ -1367,7 +1372,7 @@ namespace StarMaster {
             try { if (string.Equals(Path.GetFullPath(srcBase).TrimEnd('\\'), Path.GetFullPath(dstBase).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { bkStatus.Text = "source and target are the same - nothing to do"; return; } } catch { }
             ShowConfirm("Confirm copy / restore", "Copy the ticked items\n\nFROM:  " + from + "\nTO:      " + to + " channel\n\nExisting files are overwritten (nothing deleted). Close Star Citizen first.", "Copy / Restore", delegate {
                 bkStatus.Text = "copying " + from + " → " + to + " ...";
-                RunBg(delegate { int n = BackupOps.CopyItems(srcBase, dstBase, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("done - copied " + n + " files into " + to + ". Restart Star Citizen.") : "nothing copied"; }, null);
+                RunBg(delegate { int n = BackupOps.CopyItems(srcBase, dstBase, wUser, wLoc, wCfg, BkLog); return n > 0 ? ("done - copied " + n + " files into " + to + ". Restart Star Citizen.") : "nothing copied"; }, delegate { RefreshChannels(); });   // a restore can overwrite user.cfg - refresh so the VFX readout stays truthful
             });
         }
         // delete the SC shader cache (%LOCALAPPDATA%\Star Citizen) - it regenerates on next launch; fixes most graphical glitches

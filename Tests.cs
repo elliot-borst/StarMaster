@@ -65,8 +65,11 @@ namespace StarMaster {
             Check(CVars.TryRead("e_ParticleTexturePreLoading = 0\ne_ParticleTexturePreLoading = 1\n", pre.Name, out v) && v == 1, "read: last assignment wins");
             Check(!CVars.TryRead("g_language = english\r\n", mips.Name, out v), "read: absent -> false");
             Check(!CVars.TryRead("-- r_texturesStreamingVFXDesiredMips = 4\n", mips.Name, out v), "read: commented-out line ignored");
-            Check(!CVars.TryRead("r_texturesStreamingVFXDesiredMips = high\n", mips.Name, out v), "read: non-integer value -> false");
+            Check(!CVars.TryRead("r_texturesStreamingVFXDesiredMips = high\n", mips.Name, out v), "read: non-numeric value -> false");
             Check(!CVars.TryRead(null, pre.Name, out v), "read: null text -> false");
+            Check(CVars.TryRead("e_ParticleTexturePreLoading = 1.0\n", pre.Name, out v) && v == 1, "read: float-formatted value truncates to int (v70)");
+            Check(CVars.TryRead("r_texturesStreamingVFXDesiredMips = 2\nr_texturesStreamingVFXDesiredMips = 5.0\n", mips.Name, out v) && v == 5, "read: float re-assignment still last-wins (v70)");
+            Check(CVars.TryRead("e_ParticleTexturePreLoading = 1\rg_language = english", pre.Name, out v) && v == 1, "read: lone-CR line endings split correctly (v70)");
 
             // ----- CVars: Merge (emit 'name = value'; replace in place, keep everything else) -----
             string m = CVars.Merge("", pre.Name, 1);
@@ -82,6 +85,8 @@ namespace StarMaster {
             Check(m.IndexOf(pre.Name) == m.LastIndexOf(pre.Name) && CVars.TryRead(m, pre.Name, out v) && v == 0, "merge: duplicate lines collapse (a stale last-wins dup would defeat the write)");
             m = CVars.Merge(CVars.Merge("g_language = english\r\n", pre.Name, 1), pre.Name, 1);
             Check(m.IndexOf(pre.Name) == m.LastIndexOf(pre.Name) && m.StartsWith("g_language = english"), "merge: re-applying is idempotent (no line growth)");
+            m = CVars.Merge("e_ParticleTexturePreLoading = 1\rg_language = english", pre.Name, 0);
+            Check(m.IndexOf("g_language = english") >= 0 && CVars.TryRead(m, pre.Name, out v) && v == 0, "merge: lone-CR endings don't swallow the next setting (v70)");
 
             Console.WriteLine(failed == 0 ? "OK  " + passed + " tests passed" : "" + failed + " FAILED, " + passed + " passed");
             return failed == 0 ? 0 : 1;

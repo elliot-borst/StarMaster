@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("74.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("74.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("75.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("75.0.0.0")]
 
 namespace StarMaster {
 
@@ -308,9 +308,20 @@ namespace StarMaster {
         static System.Threading.Thread reader; static volatile bool running; static volatile int fps;
         static volatile bool gotFrames; static volatile string csvPath;
         public static volatile string Status = "";
-        public static int Fps { get { return fps; } }
+        // Staleness (v75). A capture can die under us - PresentMon killed, its ETW session stolen by another
+        // overlay tool, the reader losing the file - and `fps` is just the last number the reader ever wrote,
+        // so the overlay went on confidently displaying it forever. Observed live: FPS pinned at 60 while the
+        // real rate was ~130 and every other cell kept updating. So a reading is only trusted while frames are
+        // actually still arriving; otherwise Fps reports 0, which the overlay renders as "--".
+        const int StaleMs = 3000;          // no new frame for this long => don't trust the number
+        static volatile int lastFrameTick;   // Environment.TickCount at the last parsed frame
+        static volatile int lastActiveTick;  // ...or at the last Start(), so a fresh capture gets a grace period
+        public static bool Stale { get { return !gotFrames || unchecked(Environment.TickCount - lastFrameTick) > StaleMs; } }
+        // ms since the capture last did anything (a frame, or being started) - drives the self-heal restart
+        public static int MsSinceActivity { get { return unchecked(Environment.TickCount - lastActiveTick); } }
+        public static int Fps { get { return Stale ? 0 : fps; } }
         public static bool Running { get { return running; } }
-        public static bool GotFrames { get { return gotFrames; } }
+        public static bool GotFrames { get { return gotFrames && !Stale; } }   // v75: false again once frames stop, so the card stops claiming "Connected"
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
 
         // Is the current user in "Performance Log Users"? If so, PresentMon can capture without elevation - no per-session UAC.
@@ -348,6 +359,7 @@ namespace StarMaster {
             CleanOldCsvs();    // drop stale capture files
             if (!EnsurePm()) return;
             gotFrames = false; fps = 0;
+            lastActiveTick = Environment.TickCount;   // grace period: a just-started capture isn't "stalled" yet
             Status = "Waiting for frames...";
             try {
                 csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
@@ -404,7 +416,7 @@ namespace StarMaster {
                                         win.Enqueue(ms); winMs += ms;
                                         while (win.Count > 1 && winMs - win.Peek() >= 1000.0) winMs -= win.Dequeue();
                                         if (winMs > 0) fps = (int)(1000.0 * win.Count / winMs + 0.5);
-                                        gotFrames = true; Status = "running";
+                                        gotFrames = true; lastFrameTick = lastActiveTick = Environment.TickCount; Status = "running";
                                     }
                                 }
                                 lineLeft = lines[lines.Length - 1];
@@ -537,7 +549,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "74";
+        public const string Version = "75";
         public const string VersionDate = "2026-09-24";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1244,6 +1256,12 @@ namespace StarMaster {
             if (!IsVisible && !overlay) return;   // nothing on screen - skip the sample
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
+            // FPS self-heal (v75): if the game is running but the capture has produced nothing for 15s, it's
+            // broken, not slow - restart it. Start() resets lastActiveTick, so this self-throttles to one
+            // attempt per 15s instead of needing a retry counter. Off-thread: Start kills and respawns a
+            // process and must never block the 1s tick.
+            if (monFpsOn && FpsMon.Running && FpsMon.MsSinceActivity > 15000 && ScRunning())
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); });
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
             // CPU temperature still needs HWiNFO - Tctl/Tdie sits behind ring-0 on AMD. Watts no longer do:
             // SysMon.Read has already filled CpuPowerW from Windows' own RAPL counter, so HWiNFO's copy is
@@ -1926,6 +1944,10 @@ namespace StarMaster {
             }
             System.Windows.Application app = new System.Windows.Application();
             app.Run(new MainWindow());
+            // Don't orphan PresentMon (v75). Every exit path lands here - including the auto-updater, which
+            // calls Shutdown() and used to leave its capture process running. Found one still alive 2 hours
+            // and two updates later, surviving every later KillProc; new ones won't accumulate.
+            try { FpsMon.Stop(); } catch { }
             GC.KeepAlive(mtx);
         }
     }

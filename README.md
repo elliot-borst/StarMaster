@@ -9,16 +9,13 @@ A personal **Star Citizen helper app** for Windows — dependency-free (needs on
 - **Shader Cache + VFX tweaks** — one-click shader-cache clear (fixes graphical glitches; the game rebuilds it on next launch), plus the VFX texture-streaming `user.cfg` settings (`r_texturesStreamingVFXDesiredMips`, `e_ParticleTexturePreLoading`) set per channel from the app — existing `user.cfg` lines are updated in place and everything else is kept.
 
 ## Download & install
-Grab the latest from the **[Releases page](https://github.com/elliot-borst/StarMaster/releases/latest)**:
+Grab **`StarMaster-Setup.exe`** from the **[Releases page](https://github.com/elliot-borst/StarMaster/releases/latest)**. It installs per-user (no admin prompt), adds a Start-menu shortcut and an uninstaller, and asks nothing.
 
-| Download | What it is |
-|----------|------------|
-| **`StarMaster-Setup.exe`** | Installer — Start-menu shortcut, optional "run on Windows startup", and an uninstaller. **Recommended.** |
-| **`StarMaster.exe`** | Portable — just run it, nothing installed. |
+> Windows SmartScreen may warn about an "unknown publisher" (the app isn't code-signed yet) — click **More info → Run anyway**. On first launch the app creates its own `config.txt`; to run on boot, use the **Start with Windows** toggle in the header.
 
-> Windows SmartScreen may warn about an "unknown publisher" (the app isn't code-signed yet) — click **More info → Run anyway**. On first launch the app creates its own `config.txt` next to itself; for run-on-boot, tick *Auto-start* (the installer can also add a startup shortcut).
+**There is no portable build.** StarMaster keeps itself up to date by silently installing the new release over itself, which it can only do for an installed copy — a portable .exe could never update itself, so publishing one only stranded people on old versions.
 
-StarMaster checks for newer versions on launch and offers to update.
+**Updates are fully hands-off.** StarMaster checks on launch and once an hour while running; when a newer release exists it downloads and installs it silently and restarts itself. There's no prompt and nothing to click — the *Check for updates* button in the header is only a manual override and status readout.
 
 ## Build from source
 Only needs the C# compiler that ships with Windows — no Node / NuGet / internet:

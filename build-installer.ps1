@@ -3,7 +3,9 @@
 # MainWindow.Version const in StarMaster.cs - this script reads it, checks the assembly
 # attributes agree, and passes it to ISCC via /DMyAppVersion.
 #
-# Release:  gh release create vN dist\StarMaster.exe dist\StarMaster-Setup.exe --title "StarMaster vN" --notes "..."
+# Release:  gh release create vN dist\StarMaster-Setup.exe --title "StarMaster vN" --notes "..."
+# INSTALLER ONLY - no portable exe is published (v74). The updater only ever updates a copy running
+# from the install dir, so a portable build could never update itself - shipping one just stranded people.
 # The setup asset MUST keep "Setup" in its filename - the in-app updater matches on it.
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot   # csc/ISCC args below are repo-relative
@@ -51,8 +53,9 @@ if (-not $iscc) { throw 'Inno Setup 6 (ISCC.exe) not found - install from https:
 & $iscc /Q "/DMyAppVersion=$version" (Join-Path $PSScriptRoot 'installer.iss')
 if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
-# the portable exe ships alongside the installer on the release
-Copy-Item (Join-Path $PSScriptRoot 'StarMaster.exe') (Join-Path $PSScriptRoot 'dist\StarMaster.exe') -Force
+# NOT copied to dist for release - the installer already embeds it (v74, installer-only).
+# It stays in the repo root for quick local iteration.
+Remove-Item (Join-Path $PSScriptRoot 'dist\StarMaster.exe') -Force -ErrorAction SilentlyContinue   # sweep a portable left by an older build
 
-Write-Host "Done: dist\StarMaster.exe + dist\StarMaster-Setup.exe (v$version)"
-Write-Host "Release: gh release create v$version dist\StarMaster.exe dist\StarMaster-Setup.exe --title `"StarMaster v$version`" --notes `"...`""
+Write-Host "Done: dist\StarMaster-Setup.exe (v$version)"
+Write-Host "Release: gh release create v$version dist\StarMaster-Setup.exe --title `"StarMaster v$version`" --notes `"...`""

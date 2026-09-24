@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("73.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("73.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("74.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("74.0.0.0")]
 
 namespace StarMaster {
 
@@ -537,7 +537,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "73";
+        public const string Version = "74";
         public const string VersionDate = "2026-09-24";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -587,7 +587,7 @@ namespace StarMaster {
         // single-instance: a second launch signals this handle to surface the existing window
         System.Threading.EventWaitHandle singleInstanceEvent;
         // header update button (its own label doubles as the status)
-        Border updBtn; TextBlock updBtnLbl; DispatcherTimer updRevertTimer;
+        Border updBtn; TextBlock updBtnLbl; DispatcherTimer updRevertTimer; DispatcherTimer updCheckTimer;
         DateTime lastUpdateCheck = DateTime.MinValue;   // throttles the automatic launch check (persisted in config)
         // hands-off update status line in the header top row (updates install themselves - no prompt)
         StackPanel updateNotice; TextBlock updateNoticeText;
@@ -631,6 +631,14 @@ namespace StarMaster {
             // delivered once nothing else is queued, so the overlay skipped seconds and looked frozen exactly
             // when it needed to be right - the machine flat out under a game.
             monTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(1) }; monTimer.Tick += MonTick; monTimer.Start();
+            // Re-check for updates hourly while we're running (v74). The launch check alone wasn't enough:
+            // StarMaster starts with Windows and then sits in the tray for as long as the machine is up, so
+            // on a PC that isn't rebooted it would never look again. CheckUpdate(true) already carries the
+            // 5-minute throttle and the `updating` re-entrancy guard, so this needs no guards of its own.
+            // Normal priority for the same reason as monTimer - a Background tick can be starved for hours
+            // under sustained load, which is exactly the machine that would be left un-updated.
+            updCheckTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromHours(1) };
+            updCheckTimer.Tick += delegate { CheckUpdate(true); }; updCheckTimer.Start();
             // listen for a second launch wanting to bring us forward (e.g. user re-runs while we're in the tray)
             try {
                 singleInstanceEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, App.ActivateEvent);
@@ -1548,8 +1556,11 @@ namespace StarMaster {
         // with --minimized. The tray icon is released first so no ghost icon lingers.
         void StartAutoUpdate(Updater.Info info) {
             if (info.SetupUrl == null || !RunningFromInstallDir()) {
-                // portable copy (or a release without a setup asset): a silent install would leave this
-                // exe stale and re-trigger every launch - flip the header button to the Releases page instead
+                // Running from anywhere but the install dir (or a release with no setup asset). Since v74 we
+                // don't publish a portable build at all, but the guard stays: a loose copy - an old portable,
+                // a dev build, one on a USB stick - must NOT be silently installed over, because the silent
+                // install would replace the INSTALLED copy and leave THIS exe stale, re-triggering every
+                // launch. Flip the header button to the Releases page instead.
                 portableUpdate = info;
                 SetUpdBtn("↑  " + info.Tag + " available - open Releases", Ui.Accent);
                 return;

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("71.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("71.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("72.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("72.0.0.0")]
 
 namespace StarMaster {
 
@@ -512,8 +512,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "71";
-        public const string VersionDate = "2026-08-09";   // bump alongside Version at release time
+        public const string Version = "72";
+        public const string VersionDate = "2026-09-24";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -627,6 +627,15 @@ namespace StarMaster {
             if (autostart) ToggleRun();
             Loaded += delegate { ApplyOverlay(); };   // restore the over-the-game overlay if it was on last session (but ApplyOverlay keeps it off the desktop when we launch straight to the tray with no game running)
             if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); };   // FPS defaults on
+        }
+
+        // The Max clamps are in WPF units, whose meaning changes with the DPI - and under PerMonitorV2 (v72)
+        // the DPI really can change under us: a logon-time launch can start at 96 and be corrected to the
+        // screen's real 192 a moment later. Re-read the work area so that correction can't leave the window
+        // clamped to a stale (2x too large) size with its title bar off-screen.
+        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi) {
+            base.OnDpiChanged(oldDpi, newDpi);
+            MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
         }
 
         // ---------- header ----------
@@ -1850,6 +1859,13 @@ namespace StarMaster {
         static System.Threading.Mutex mtx;
         [STAThread]
         static void Main(string[] args) {
+            // Per-monitor DPI (v72) - MUST be the first thing we do: WPF caches this switch the moment it
+            // builds its first window, and there's no app.config to set it in (we ship a lone .exe). The
+            // manifest asks Windows for PerMonitorV2, but WPF only scales to each window's own DPI - and
+            // only re-scales on WM_DPICHANGED - when this "don't" switch is off. Without it the manifest
+            // alone would be WORSE than before: no bitmap-stretching, but WPF would still lay out at the
+            // stale start-up system DPI, i.e. a half-size window instead of a blurry one.
+            try { AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false); } catch { }
             foreach (string a in args) if (string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)) MinimizedArg = true;
             // sweep installers left in %TEMP% by earlier auto-updates (the one that just ran us may
             // still be executing - its delete fails quietly and succeeds on the launch after)

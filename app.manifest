@@ -13,11 +13,19 @@
 
   <!-- DPI awareness: declared here so it takes effect at process start (before any window),
        which SetProcessDPIAware() from managed Main() cannot reliably do. Stops Windows from
-       bitmap-stretching the app (blurry) on scaled displays. -->
+       bitmap-stretching the app (blurry) on scaled displays.
+       PerMonitorV2 (v72), NOT system: "system" snapshots the system DPI ONCE at process start, and
+       the Start-with-Windows Run key fires during logon - before Windows has applied the display
+       scale - so the app cached 96 DPI on a 192 DPI (200%) screen and every window, dashboard and
+       overlay alike, was bitmap-stretched 2x until the user quit and reopened it. Under PerMonitorV2
+       each window is told its monitor's REAL DPI at creation and gets WM_DPICHANGED if it ever
+       changes, so a boot race (or a scale change while we sit in the tray) corrects itself instead
+       of going soft. The value is a fallback chain - Windows takes the first mode it supports, and
+       pre-1607 Windows ignores this element entirely and uses the <dpiAware> line above. -->
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">system</dpiAwareness>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor, system</dpiAwareness>
     </windowsSettings>
   </application>
 

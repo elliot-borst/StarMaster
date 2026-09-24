@@ -36,5 +36,11 @@ The installer is built by compiling `installer.iss` with [Inno Setup](https://jr
 | `Make-Icon.ps1` | Regenerates `StarMaster.ico` (GDI+, offline) |
 | `installer.iss` | Inno Setup script → `StarMaster-Setup.exe` |
 | `CLAUDE.md` | Project context / handoff doc |
+| `LICENSE` | MIT licence |
 
 Runtime config (`config.txt`) stays out of git. Backups are saved to `Documents\StarMaster\Backups\`.
+
+## License
+[MIT](LICENSE) © Elliot Borst.
+
+StarMaster bundles no third-party code. Two optional integrations are downloaded at runtime, on request, and remain the property of their authors under their own licences: [Intel PresentMon](https://github.com/GameTechDev/PresentMon) (frame rate) and [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) (localization). [HWiNFO](https://www.hwinfo.com/) is never installed by StarMaster — the app only reads its shared memory if you have chosen to run it.

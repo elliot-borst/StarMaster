@@ -2,7 +2,7 @@
 
 **StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Four tools + a **fully hands-off GitHub self-updater** (v56). **Current version: 73.**
 
-**Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
+**Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. **MIT licensed** (`LICENSE`, added 2026-09-24) — a hard prerequisite for the Certum open-source code-signing certificate, see the `code-signing-plan` memory. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
 **Git identity:** commit as **Elliot Borst** `<61570912+elliot-borst@users.noreply.github.com>`. **No `Co-Authored-By: Claude` trailers** (user is the sole contributor).
 

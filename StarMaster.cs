@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("72.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("72.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("73.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("73.0.0.0")]
 
 namespace StarMaster {
 
@@ -194,7 +194,7 @@ namespace StarMaster {
         [DllImport("nvml.dll", EntryPoint = "nvmlDeviceGetName")] static extern int NvName(IntPtr dev, StringBuilder name, uint len);
 
         public class Sample {
-            public double CpuTotal; public double[] Cores = new double[0]; public string CpuName = "CPU"; public int CpuMhz; public int CpuTempC = -1, CpuPowerW = -1;
+            public double CpuTotal; public string CpuName = "CPU"; public int CpuTempC = -1, CpuPowerW = -1;
             public string CpuNameColor, GpuNameColor;   // override colour (hex) for the name; null = use brand colour
             public double RamUsedGB, RamTotalGB; public int RamPct;
             public bool GpuOk; public string GpuName = "GPU";
@@ -207,18 +207,32 @@ namespace StarMaster {
         static long[] pIdle, pKernel, pUser;   // previous raw tick counts, for per-tick deltas
         static bool gpuReady; static IntPtr gpuDev = IntPtr.Zero; static string gpuName = "GPU";
         static string cpuName = "CPU";
-        // live CPU frequency = base MHz x (% Processor Performance / 100) - captures turbo, driver-free
-        static System.Diagnostics.PerformanceCounter perfFreq, perfPerf; static int cpuBaseMhz;
+        // CPU package watts, driver-free (v73): Windows' own "Energy Meter" counter set publishes the CPU's
+        // RAPL energy sensors - the same sensor HWiNFO reads, minus the kernel driver. Instances are named
+        // like "RAPL_Package0_PKG" and the counter is in milliwatts. Not every board exposes it, so this
+        // stays optional: raplPkg is left null and MonTick falls back to HWiNFO's copy.
+        // (The old "% Processor Performance" CPU-MHz counters lived here; the overlay dropped MHz in v59 and
+        // the card in v38, so they were two PDH reads a second feeding a value nothing displayed.)
+        static System.Diagnostics.PerformanceCounter raplPkg;
 
         public static void Init() {
             cores = Environment.ProcessorCount;
             pIdle = new long[cores]; pKernel = new long[cores]; pUser = new long[cores];
             try { object n = Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString", null); if (n != null) cpuName = n.ToString().Trim(); } catch { }
             try {
-                perfFreq = new System.Diagnostics.PerformanceCounter("Processor Information", "Processor Frequency", "_Total");
-                perfPerf = new System.Diagnostics.PerformanceCounter("Processor Information", "% Processor Performance", "_Total");
-                cpuBaseMhz = (int)perfFreq.NextValue(); perfPerf.NextValue();   // prime (first read is 0)
-            } catch { perfPerf = null; }
+                // enumerating the category costs ~0.5s, so it happens here (Init already runs off the UI
+                // thread) and the per-tick read is then ~1ms
+                System.Diagnostics.PerformanceCounterCategory cat = new System.Diagnostics.PerformanceCounterCategory("Energy Meter");
+                string pkg = null;
+                foreach (string i in cat.GetInstanceNames()) {
+                    if (i.EndsWith("_PKG", StringComparison.OrdinalIgnoreCase)) { pkg = i; break; }
+                    if (pkg == null && i.IndexOf("PKG", StringComparison.OrdinalIgnoreCase) >= 0) pkg = i;   // looser match for non-AMD naming
+                }
+                if (pkg != null) {
+                    raplPkg = new System.Diagnostics.PerformanceCounter("Energy Meter", "power", pkg, true);
+                    raplPkg.NextValue();   // prime: the first read of this counter is always 0
+                }
+            } catch { raplPkg = null; }
             try {
                 if (NvInit() == 0 && NvHandle(0, out gpuDev) == 0) {
                     gpuReady = true;
@@ -230,7 +244,7 @@ namespace StarMaster {
         public static Sample Read() {
             Sample s = new Sample(); s.CpuName = cpuName;
             if (pIdle != null) ReadCpu(s);
-            if (perfPerf != null) { try { if (cpuBaseMhz <= 0 && perfFreq != null) cpuBaseMhz = (int)perfFreq.NextValue(); s.CpuMhz = (int)(cpuBaseMhz * perfPerf.NextValue() / 100.0); } catch { } }
+            if (raplPkg != null) { try { float mw = raplPkg.NextValue(); if (mw > 0) s.CpuPowerW = (int)(mw / 1000f + 0.5f); } catch { } }
             ReadRam(s);
             if (gpuReady) ReadGpu(s);
             return s;
@@ -243,17 +257,20 @@ namespace StarMaster {
                 try {
                     int ret;
                     if (NtQuerySystemInformation(8, buf, sz * cores, out ret) != 0) return;
-                    double[] usage = new double[cores]; double sum = 0;
+                    // Sum the RAW tick deltas and divide once (v73), rather than averaging each core's own
+                    // percentage. Cores don't all report the same amount of elapsed time - a parked or
+                    // just-woken core covers a shorter slice - and averaging percentages weights that core
+                    // as heavily as a fully-busy one, which skewed the total whenever cores were idling.
+                    long idleSum = 0, totSum = 0;
                     for (int i = 0; i < cores; i++) {
                         PerfInfo pi = (PerfInfo)Marshal.PtrToStructure(new IntPtr(buf.ToInt64() + i * sz), typeof(PerfInfo));
                         long idleD = pi.Idle - pIdle[i];
-                        long totD = (pi.Kernel + pi.User) - (pKernel[i] + pUser[i]);
-                        double u = totD > 0 ? (100.0 * (totD - idleD) / totD) : 0;
-                        if (u < 0) u = 0; if (u > 100) u = 100;
-                        usage[i] = u; sum += u;
+                        long totD = (pi.Kernel + pi.User) - (pKernel[i] + pUser[i]);   // Kernel already includes Idle
+                        if (totD > 0) { totSum += totD; idleSum += idleD < 0 ? 0 : idleD; }
                         pIdle[i] = pi.Idle; pKernel[i] = pi.Kernel; pUser[i] = pi.User;
                     }
-                    s.Cores = usage; s.CpuTotal = cores > 0 ? sum / cores : 0;
+                    double u = totSum > 0 ? 100.0 * (totSum - idleSum) / totSum : 0;
+                    s.CpuTotal = u < 0 ? 0 : (u > 100 ? 100 : u);
                 } finally { Marshal.FreeHGlobal(buf); }
             } catch { }
         }
@@ -354,12 +371,13 @@ namespace StarMaster {
 
         // single reader: follows csvPath (resets on switch) and tails the file, decoding UTF-16LE (PresentMon/cmd's encoding) or UTF-8
         static void ReadLoop() {
-            string cur = null; long pos = 0; int msCol = -1; string lineLeft = ""; List<double> win = new List<double>();
+            string cur = null; long pos = 0; int msCol = -1; string lineLeft = "";
+            Queue<double> win = new Queue<double>(); double winMs = 0;   // frametimes covering the last ~1s
             bool utf16 = false, encChecked = false; byte[] carry = new byte[0];
             while (running) {
                 try {
                     string pth = csvPath;
-                    if (pth != cur) { cur = pth; pos = 0; msCol = -1; lineLeft = ""; win.Clear(); carry = new byte[0]; utf16 = false; encChecked = false; }
+                    if (pth != cur) { cur = pth; pos = 0; msCol = -1; lineLeft = ""; win.Clear(); winMs = 0; carry = new byte[0]; utf16 = false; encChecked = false; }
                     if (cur != null && File.Exists(cur)) {
                         using (FileStream fs = new FileStream(cur, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
                             if (fs.Length > pos) {
@@ -378,9 +396,14 @@ namespace StarMaster {
                                     if (msCol < 0) { if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } } continue; }
                                     string[] f = line.Split(','); double ms;
                                     if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
-                                        win.Add(ms); while (win.Count > 60) win.RemoveAt(0);
-                                        double sum = 0; for (int k = 0; k < win.Count; k++) sum += win[k];
-                                        if (sum > 0) fps = (int)(1000.0 * win.Count / sum + 0.5);
+                                        // Average over a fixed ONE-SECOND window, not a fixed frame count (v73).
+                                        // The old 60-frame window stretched to 2s at 30fps and shrank to 0.3s at
+                                        // 200fps - over-smoothed exactly when a dip mattered, jittery when it
+                                        // didn't. By time, the number means what everyone reads it as: frames
+                                        // presented in the last second.
+                                        win.Enqueue(ms); winMs += ms;
+                                        while (win.Count > 1 && winMs - win.Peek() >= 1000.0) winMs -= win.Dequeue();
+                                        if (winMs > 0) fps = (int)(1000.0 * win.Count / winMs + 0.5);
                                         gotFrames = true; Status = "running";
                                     }
                                 }
@@ -394,7 +417,9 @@ namespace StarMaster {
         }
     }
 
-    // ===== HWiNFO integration: reads CPU temp/watts from HWiNFO's shared memory (it does the ring-0 work; we just read). Optional - blank when HWiNFO isn't running. =====
+    // ===== HWiNFO integration: reads the CPU TEMPERATURE from HWiNFO's shared memory (it does the ring-0 work; we just read).
+    // Optional, and since v73 only for temperature - CPU watts come from Windows' own RAPL counter in SysMon, no HWiNFO needed.
+    // Tctl/Tdie has no user-mode source on AMD (it is behind SMN/PCI-config access), which is why this stays the one thing we can't self-serve. =====
     public static class HwInfo {
         public const string DownloadUrl = "https://www.hwinfo.com/download/";
         public const int NotInstalled = 0, NotRunning = 1, NoSharedMem = 2, Connected = 3;
@@ -512,7 +537,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "72";
+        public const string Version = "73";
         public const string VersionDate = "2026-09-24";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -602,7 +627,10 @@ namespace StarMaster {
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { SysMon.Init(); });   // NVML init is slow - do it off the UI thread
-            monTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; monTimer.Tick += MonTick; monTimer.Start();
+            // Normal priority, NOT DispatcherTimer's Background default (v73): a Background tick is only
+            // delivered once nothing else is queued, so the overlay skipped seconds and looked frozen exactly
+            // when it needed to be right - the machine flat out under a game.
+            monTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(1) }; monTimer.Tick += MonTick; monTimer.Start();
             // listen for a second launch wanting to bring us forward (e.g. user re-runs while we're in the tray)
             try {
                 singleInstanceEvent = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, App.ActivateEvent);
@@ -960,7 +988,7 @@ namespace StarMaster {
             body.Children.Add(MetricRow("RAM", out monRamBar, out monRamTxt));
             body.Children.Add(MetricRow("GPU", out monGpuBar, out monGpuTxt));
             body.Children.Add(MetricRow("VRAM", out monVramBar, out monVramTxt));
-            // HWiNFO status (CPU temp/watts come from it). Shows install/run state + an action button.
+            // HWiNFO status (the CPU TEMPERATURE source; watts come from Windows RAPL since v73). Shows install/run state + an action button.
             Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
             hwIn.Children.Add(new TextBlock { Text = "HWiNFO", Foreground = Ui.Text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
@@ -971,7 +999,7 @@ namespace StarMaster {
             // setup checklist: one pill per requirement, green when done / yellow when still to do (status only - StarMaster can't tick HWiNFO's boxes without the shelved elevated helper)
             WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 8, 0, 2) };
             hwPills.Children.Add(hwPillInstall = HwPill("Installed", "HWiNFO is installed."));
-            hwPills.Children.Add(hwPillSm = HwPill("Shared memory", "Shared Memory Support is active - how StarMaster reads CPU temp/watts. HWiNFO -> Settings -> tick 'Shared Memory Support'."));
+            hwPills.Children.Add(hwPillSm = HwPill("Shared memory", "Shared Memory Support is active - how StarMaster reads the CPU temperature. HWiNFO -> Settings -> tick 'Shared Memory Support'."));
             hwPills.Children.Add(hwPillAuto = HwPill("Auto-start", "HWiNFO starts with Windows. HWiNFO -> Settings -> tick 'Auto Start'."));
             hwPills.Children.Add(hwPillMinW = HwPill("Min. window", "Main window starts minimized. HWiNFO -> Settings -> tick 'Minimize Main Window on Startup'."));
             hwPills.Children.Add(hwPillMinS = HwPill("Min. sensors", "Sensors window starts minimized. HWiNFO -> Settings -> tick 'Minimize Sensors on Startup'."));
@@ -1153,7 +1181,9 @@ namespace StarMaster {
         void UpdateHwUi() {
             if (monHwTxt == null) return;
             TextBlock lbl = (TextBlock)monHwBtn.Child;
-            bool haveTemp = HwInfo.CpuTempC >= 0, havePower = HwInfo.CpuPowerW >= 0;
+            // Since v73 this panel is about CPU TEMPERATURE only - watts come from Windows' RAPL counter
+            // whether HWiNFO is there or not, so they must not gate any of the states below.
+            bool haveTemp = HwInfo.CpuTempC >= 0;
             // refresh the checklist pills (green=done / yellow=to do)
             SetPill(hwPillInstall, HwInfo.State != HwInfo.NotInstalled);
             SetPill(hwPillSm, HwInfo.State == HwInfo.Connected);   // shared memory is live
@@ -1161,9 +1191,9 @@ namespace StarMaster {
             SetPill(hwPillMinW, HwInfo.MinMain);
             SetPill(hwPillMinS, HwInfo.StartMin);
             SetPill(hwPillMinC, HwInfo.MinClose);
-            if (HwInfo.State == HwInfo.Connected && haveTemp && havePower) {
+            if (HwInfo.State == HwInfo.Connected && haveTemp) {
                 // fully working
-                monHwTxt.Text = "Connected - CPU " + HwInfo.CpuTempC + " °C · " + HwInfo.CpuPowerW + " W";
+                monHwTxt.Text = "Connected - CPU " + HwInfo.CpuTempC + " °C";
                 monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
                 bool optTodo = !HwInfo.Autorun || !HwInfo.MinMain || !HwInfo.StartMin || !HwInfo.MinClose;
                 monHwTip.Text = optTodo ? "The yellow items above are optional - tick them in HWiNFO -> Settings so it's always ready." : "";
@@ -1172,13 +1202,12 @@ namespace StarMaster {
             }
             monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
             if (HwInfo.State == HwInfo.Connected) {
-                // shared memory is live but a CPU sensor is missing (hidden/disabled in HWiNFO, or an unusual sensor name)
-                string missing = (!haveTemp && !havePower) ? "CPU temp + watts" : (!haveTemp ? "CPU temperature" : "CPU watts");
-                monHwTxt.Text = "CPU " + (haveTemp ? HwInfo.CpuTempC + " °C" : "temp n/a") + " · " + (havePower ? HwInfo.CpuPowerW + " W" : "watts n/a") + " - " + missing + " sensor not found.";
+                // shared memory is live but the CPU temp sensor is missing (hidden/disabled in HWiNFO, or an unusual sensor name)
+                monHwTxt.Text = "Connected, but no CPU temperature sensor found.";
                 lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "In HWiNFO, make sure the " + missing + " sensor isn't hidden or disabled (right-click a sensor to show it), and you're on a recent version.";
+                monHwTip.Text = "In HWiNFO, make sure the CPU temperature sensor (Tctl/Tdie) isn't hidden or disabled (right-click a sensor to show it), and you're on a recent version.";
             } else if (HwInfo.State == HwInfo.NotInstalled) {
-                monHwTxt.Text = "Not set up - optional, adds CPU temp + watts.";
+                monHwTxt.Text = "Not set up - optional, adds CPU temperature.";
                 lbl.Text = "Get HWiNFO";
                 monHwTip.Text = "Click Get HWiNFO, install & run it, then tick the yellow items in HWiNFO -> Settings.";
             } else if (HwInfo.State == HwInfo.NotRunning) {
@@ -1208,7 +1237,12 @@ namespace StarMaster {
             SysMon.Sample smp = SysMon.Read();
             smp.Fps = monFpsOn ? FpsMon.Fps : -1;
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
-            bool sm = HwInfo.ReadSensors(); smp.CpuTempC = HwInfo.CpuTempC; smp.CpuPowerW = HwInfo.CpuPowerW;
+            // CPU temperature still needs HWiNFO - Tctl/Tdie sits behind ring-0 on AMD. Watts no longer do:
+            // SysMon.Read has already filled CpuPowerW from Windows' own RAPL counter, so HWiNFO's copy is
+            // only a fallback for boards that don't publish one.
+            bool sm = HwInfo.ReadSensors();
+            smp.CpuTempC = HwInfo.CpuTempC;
+            if (smp.CpuPowerW < 0) smp.CpuPowerW = HwInfo.CpuPowerW;
             // ~5s cadence, but refresh immediately when shared memory comes live or drops so "did my fix work?" feedback is instant
             if (++hwTick >= 5 || (sm && HwInfo.State != HwInfo.Connected) || (!sm && HwInfo.State == HwInfo.Connected)) { hwTick = 0; HwInfo.RefreshState(sm); }
             if (IsVisible) {

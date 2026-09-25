@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("75.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("75.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("76.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("76.0.0.0")]
 
 namespace StarMaster {
 
@@ -47,6 +47,7 @@ namespace StarMaster {
             try { int pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); if (pid <= 0) return ""; return System.Diagnostics.Process.GetProcessById(pid).ProcessName; }
             catch { return ""; }
         }
+        public static int ActivePid() { try { int pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; } catch { return 0; } }
         static void Key(byte vk, bool up) {
             uint sc = MapVirtualKey(vk, 0);
             uint flags = SCANCODE | (up ? KEYUP : 0);
@@ -322,6 +323,15 @@ namespace StarMaster {
         public static int Fps { get { return Stale ? 0 : fps; } }
         public static bool Running { get { return running; } }
         public static bool GotFrames { get { return gotFrames && !Stale; } }   // v75: false again once frames stop, so the card stops claiming "Connected"
+        public static volatile string TargetName = "";   // exe the FPS belongs to (e.g. "HaloCampaignEvolved.exe")
+        static volatile int targetPid;
+        // is the process we last measured still alive? (gates the self-heal restart for games other than SC)
+        public static bool TargetAlive() {
+            int p = targetPid; if (p <= 0) return false;
+            try { using (System.Diagnostics.Process pr = System.Diagnostics.Process.GetProcessById(p)) return !pr.HasExited; } catch { return false; }
+        }
+        // one rolling 1-second window per swap chain
+        class Chain { public int Pid; public string App; public Queue<double> Win = new Queue<double>(); public double WinMs; public int Fps, LastTick; }
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
 
         // Is the current user in "Performance Log Users"? If so, PresentMon can capture without elevation - no per-session UAC.
@@ -354,16 +364,18 @@ namespace StarMaster {
         // PresentMon produces NO stdout when our process has no console (a GUI app), so we run it via `cmd ... > file`
         // (cmd gives it a console) and tail the file. That file is UTF-16LE, so the reader decodes accordingly.
         // Always non-elevated - the Performance Log Users group (one-time GrantPerfAccess) grants the ETW privilege.
-        public static void Start(string pn) {
+        // v76: captures EVERY process (it used to pass --process_name StarCitizen.exe, so no other game ever showed
+        // an FPS) and the reader reports whichever one is in the foreground - so it works for any game.
+        public static void Start() {
             KillProc();        // kill any orphaned PresentMon so only ours runs
             CleanOldCsvs();    // drop stale capture files
             if (!EnsurePm()) return;
-            gotFrames = false; fps = 0;
+            gotFrames = false; fps = 0; TargetName = ""; targetPid = 0;
             lastActiveTick = Environment.TickCount;   // grace period: a just-started capture isn't "stalled" yet
             Status = "Waiting for frames...";
             try {
                 csvPath = Path.Combine(Path.GetTempPath(), "StarMaster-fps-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv");
-                string pmArgs = "--stop_existing_session --session_name StarMasterFPS --terminate_on_proc_exit --no_console_stats --v1_metrics --process_name " + pn + " --output_stdout";
+                string pmArgs = "--stop_existing_session --session_name StarMasterFPS --no_console_stats --v1_metrics --exclude dwm.exe --output_stdout";
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd.exe");
                 psi.Arguments = "/c \"\"" + PmPath() + "\" " + pmArgs + " > \"" + csvPath + "\"\"";
                 psi.UseShellExecute = true; psi.CreateNoWindow = true; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
@@ -373,7 +385,17 @@ namespace StarMaster {
             } catch (Exception ex) { Status = "FPS start failed: " + ex.Message; running = false; }
         }
 
-        public static void Stop() { running = false; fps = 0; gotFrames = false; Status = ""; csvPath = null; KillProc(); }
+        public static void Stop() { running = false; fps = 0; gotFrames = false; Status = ""; csvPath = null; KillProc(); EndSession(); }
+        // Killing PresentMon leaves its ETW session running, and orphaned sessions eat the graphics providers'
+        // limited session slots - enough of them and NO capture (ours or another tool's) gets frames. So end it.
+        static void EndSession() {
+            try {
+                if (!File.Exists(PmPath())) return;
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(PmPath(), "--terminate_existing_session --session_name StarMasterFPS");
+                psi.UseShellExecute = false; psi.CreateNoWindow = true;
+                using (System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi)) p.WaitForExit(3000);
+            } catch { }
+        }
         static void KillProc() {
             try { foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName("PresentMon")) { try { if (!p.HasExited) { p.Kill(); p.WaitForExit(1500); } } catch { } } } catch { }
         }
@@ -383,13 +405,14 @@ namespace StarMaster {
 
         // single reader: follows csvPath (resets on switch) and tails the file, decoding UTF-16LE (PresentMon/cmd's encoding) or UTF-8
         static void ReadLoop() {
-            string cur = null; long pos = 0; int msCol = -1; string lineLeft = "";
-            Queue<double> win = new Queue<double>(); double winMs = 0;   // frametimes covering the last ~1s
+            string cur = null; long pos = 0; int msCol = -1, appCol = -1, pidCol = -1, scCol = -1; string lineLeft = "";
+            Dictionary<string, Chain> chains = new Dictionary<string, Chain>();
+            int self = 0; try { self = System.Diagnostics.Process.GetCurrentProcess().Id; } catch { }
             bool utf16 = false, encChecked = false; byte[] carry = new byte[0];
             while (running) {
                 try {
                     string pth = csvPath;
-                    if (pth != cur) { cur = pth; pos = 0; msCol = -1; lineLeft = ""; win.Clear(); winMs = 0; carry = new byte[0]; utf16 = false; encChecked = false; }
+                    if (pth != cur) { cur = pth; pos = 0; msCol = appCol = pidCol = scCol = -1; lineLeft = ""; chains.Clear(); carry = new byte[0]; utf16 = false; encChecked = false; }
                     if (cur != null && File.Exists(cur)) {
                         using (FileStream fs = new FileStream(cur, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
                             if (fs.Length > pos) {
@@ -405,27 +428,66 @@ namespace StarMaster {
                                 string[] lines = (lineLeft + chunk).Split('\n');
                                 for (int i = 0; i < lines.Length - 1; i++) {
                                     string line = lines[i].TrimEnd('\r'); if (line.Length == 0) continue;
-                                    if (msCol < 0) { if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) { string[] h = line.Split(','); for (int j = 0; j < h.Length; j++) if (h[j].Trim().Equals(MsCol, StringComparison.OrdinalIgnoreCase)) { msCol = j; break; } } continue; }
-                                    string[] f = line.Split(','); double ms;
+                                    if (msCol < 0) {
+                                        if (line.IndexOf(MsCol, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                            string[] h = line.Split(',');
+                                            for (int j = 0; j < h.Length; j++) {
+                                                string hn = h[j].Trim();
+                                                if (hn.Equals(MsCol, StringComparison.OrdinalIgnoreCase)) msCol = j;
+                                                else if (hn.Equals("Application", StringComparison.OrdinalIgnoreCase)) appCol = j;
+                                                else if (hn.Equals("ProcessID", StringComparison.OrdinalIgnoreCase)) pidCol = j;
+                                                else if (hn.Equals("SwapChainAddress", StringComparison.OrdinalIgnoreCase)) scCol = j;
+                                            }
+                                        }
+                                        continue;
+                                    }
+                                    string[] f = line.Split(','); double ms; int pid = 0;
                                     if (msCol < f.Length && double.TryParse(f[msCol], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out ms) && ms > 0.0001) {
+                                        int now = Environment.TickCount;
+                                        lastActiveTick = now;   // the capture itself is alive (any process counts)
+                                        if (pidCol < 0 || pidCol >= f.Length || !int.TryParse(f[pidCol], out pid) || pid <= 0 || pid == self) continue;
+                                        string key = pid + "|" + (scCol >= 0 && scCol < f.Length ? f[scCol] : "");
+                                        Chain c;
+                                        if (!chains.TryGetValue(key, out c)) { c = new Chain(); c.Pid = pid; c.App = appCol >= 0 && appCol < f.Length ? f[appCol] : ""; chains[key] = c; }
                                         // Average over a fixed ONE-SECOND window, not a fixed frame count (v73).
                                         // The old 60-frame window stretched to 2s at 30fps and shrank to 0.3s at
                                         // 200fps - over-smoothed exactly when a dip mattered, jittery when it
                                         // didn't. By time, the number means what everyone reads it as: frames
                                         // presented in the last second.
-                                        win.Enqueue(ms); winMs += ms;
-                                        while (win.Count > 1 && winMs - win.Peek() >= 1000.0) winMs -= win.Dequeue();
-                                        if (winMs > 0) fps = (int)(1000.0 * win.Count / winMs + 0.5);
-                                        gotFrames = true; lastFrameTick = lastActiveTick = Environment.TickCount; Status = "running";
+                                        c.Win.Enqueue(ms); c.WinMs += ms;
+                                        while (c.Win.Count > 1 && c.WinMs - c.Win.Peek() >= 1000.0) c.WinMs -= c.Win.Dequeue();
+                                        if (c.WinMs > 0) c.Fps = (int)(1000.0 * c.Win.Count / c.WinMs + 0.5);
+                                        c.LastTick = now;
                                     }
                                 }
                                 lineLeft = lines[lines.Length - 1];
                             }
                         }
                     }
+                    PickTarget(chains);
                 } catch { }
                 System.Threading.Thread.Sleep(250);
             }
+        }
+
+        // Which process's FPS to show: the FOREGROUND one if it's presenting; otherwise keep the last game we
+        // measured while it's still presenting (so a quick Alt-Tab doesn't blank it). A process with several
+        // swap chains reports its busiest one. Nothing fresh => leave it; Stale turns the number into "--".
+        static void PickTarget(Dictionary<string, Chain> chains) {
+            int now = Environment.TickCount, fg = Native.ActivePid();
+            Chain best = null, bestPrev = null; List<string> dead = null;
+            foreach (KeyValuePair<string, Chain> kv in chains) {
+                Chain c = kv.Value; int age = unchecked(now - c.LastTick);
+                if (age > 30000) { if (dead == null) dead = new List<string>(); dead.Add(kv.Key); continue; }
+                if (age > StaleMs) continue;
+                if (c.Pid == fg && (best == null || c.Fps > best.Fps)) best = c;
+                if (c.Pid == targetPid && (bestPrev == null || c.Fps > bestPrev.Fps)) bestPrev = c;
+            }
+            if (dead != null) foreach (string k in dead) chains.Remove(k);
+            if (best == null) best = bestPrev;
+            if (best == null) return;
+            targetPid = best.Pid; TargetName = best.App; fps = best.Fps;
+            gotFrames = true; lastFrameTick = best.LastTick; Status = "running";
         }
     }
 
@@ -549,8 +611,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "75";
-        public const string VersionDate = "2026-09-24";   // bump alongside Version at release time
+        public const string Version = "76";
+        public const string VersionDate = "2026-09-25";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -674,7 +736,7 @@ namespace StarMaster {
             if (startMinimized || (App.MinimizedArg && !firstRun)) { WindowState = WindowState.Minimized; ShowInTaskbar = false; Visibility = Visibility.Hidden; Loaded += delegate { Hide(); }; }
             if (autostart) ToggleRun();
             Loaded += delegate { ApplyOverlay(); };   // restore the over-the-game overlay if it was on last session (but ApplyOverlay keeps it off the desktop when we launch straight to the tray with no game running)
-            if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); };   // FPS defaults on
+            if (monFpsOn) Loaded += delegate { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); }); };   // FPS defaults on
         }
 
         // The Max clamps are in WPF units, whose meaning changes with the DPI - and under PerMonitorV2 (v72)
@@ -1133,7 +1195,7 @@ namespace StarMaster {
         // turn FPS on/off (PresentMon, off the UI thread - download + UAC can block)
         void ToggleFps(bool on) {
             monFpsOn = on;
-            if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); }); }
+            if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); }); }
             else { FpsMon.Stop(); }
             UpdateFpsUi();
         }
@@ -1159,10 +1221,9 @@ namespace StarMaster {
             if (FpsMon.Status.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0) {   // download / start error
                 monFpsTxt.Foreground = Ui.Crit; monFpsTxt.Text = FpsMon.Status; return;
             }
-            if (FpsMon.GotFrames) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS"; return; }
-            bool scRunning = false;
-            try { scRunning = System.Diagnostics.Process.GetProcessesByName("StarCitizen").Length > 0; } catch { }
-            if (!scRunning) { monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Ready - waiting for Star Citizen to launch..."; }
+            if (FpsMon.GotFrames) { string tn = FpsMon.TargetName; monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS" + (string.IsNullOrEmpty(tn) || tn == "<unknown>" ? "" : " (" + tn + ")"); return; }
+            bool scRunning = ScRunning();
+            if (!scRunning) { monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Ready - shows the FPS of whichever game is in front."; }
             else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds."; SetFpsTip("If it stays here, another FPS/overlay tool (RTSS, MSI Afterburner, etc.) may be holding the capture - close it and toggle Show FPS off/on."); }
         }
         void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
@@ -1260,8 +1321,8 @@ namespace StarMaster {
             // broken, not slow - restart it. Start() resets lastActiveTick, so this self-throttles to one
             // attempt per 15s instead of needing a retry counter. Off-thread: Start kills and respawns a
             // process and must never block the 1s tick.
-            if (monFpsOn && FpsMon.Running && FpsMon.MsSinceActivity > 15000 && ScRunning())
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start("StarCitizen.exe"); });
+            if (monFpsOn && FpsMon.Running && FpsMon.MsSinceActivity > 15000 && (ScRunning() || FpsMon.TargetAlive()))
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); });
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
             // CPU temperature still needs HWiNFO - Tctl/Tdie sits behind ring-0 on AMD. Watts no longer do:
             // SysMon.Read has already filled CpuPowerW from Windows' own RAPL counter, so HWiNFO's copy is

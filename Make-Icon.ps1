@@ -1,78 +1,64 @@
 # Generates StarMaster.ico (multi-resolution: 16/32/48/64/128/256) from the
-# "Aurora sparkle-star on a dark tile" design (cyan->violet gradient), GDI+ offline.
+# "Command insignia" design (v77): a hex squadron badge with an Aurora (cyan->violet)
+# gradient outline, a light sparkle star and two rank chevrons. No square tile - the hex
+# is its own silhouette, corners stay transparent. GDI+, offline. Coordinates are on a
+# 256 grid (same as the in-app header logo in MainWindow.Header). Run on Windows.
 Add-Type -AssemblyName System.Drawing
 $d = $PSScriptRoot
 $icoPath = Join-Path $d 'StarMaster.ico'
 
-function New-RoundRect([single]$x,[single]$y,[single]$w,[single]$h,[single]$r) {
+function C([int]$a,[int]$r,[int]$g,[int]$b) { return [System.Drawing.Color]::FromArgb($a,$r,$g,$b) }
+function P([double]$x,[double]$y,[double]$sc) { return New-Object System.Drawing.PointF(([single]($x*$sc)), ([single]($y*$sc))) }
+
+# Curved 4-point sparkle (quadratic sides, converted to cubic beziers for GDI+)
+function New-Sparkle([double]$cx,[double]$cy,[double]$ro,[double]$k,[double]$sc) {
+    $tips = @(@($cx,($cy-$ro)), @(($cx+$ro),$cy), @($cx,($cy+$ro)), @(($cx-$ro),$cy))
+    $ctrl = @(@(($cx+$k),($cy-$k)), @(($cx+$k),($cy+$k)), @(($cx-$k),($cy+$k)), @(($cx-$k),($cy-$k)))
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $dia = 2 * $r
-    $p.AddArc($x, $y, $dia, $dia, 180, 90)
-    $p.AddArc($x + $w - $dia, $y, $dia, $dia, 270, 90)
-    $p.AddArc($x + $w - $dia, $y + $h - $dia, $dia, $dia, 0, 90)
-    $p.AddArc($x, $y + $h - $dia, $dia, $dia, 90, 90)
+    for ($i = 0; $i -lt 4; $i++) {
+        $a = $tips[$i]; $b = $tips[($i+1)%4]; $q = $ctrl[$i]
+        $c1x = $a[0] + 2.0/3.0*($q[0]-$a[0]); $c1y = $a[1] + 2.0/3.0*($q[1]-$a[1])
+        $c2x = $b[0] + 2.0/3.0*($q[0]-$b[0]); $c2y = $b[1] + 2.0/3.0*($q[1]-$b[1])
+        $p.AddBezier((P $a[0] $a[1] $sc), (P $c1x $c1y $sc), (P $c2x $c2y $sc), (P $b[0] $b[1] $sc))
+    }
     $p.CloseFigure()
     return $p
 }
 
-# 4-point sparkle: outer points on the axes (R), inner points on the diagonals (r)
-function New-Star([single]$cx,[single]$cy,[single]$ro,[single]$ri) {
-    $pts = New-Object 'System.Drawing.PointF[]' 8
-    $pts[0] = New-Object System.Drawing.PointF($cx,         ($cy-$ro))
-    $pts[1] = New-Object System.Drawing.PointF(($cx+$ri),   ($cy-$ri))
-    $pts[2] = New-Object System.Drawing.PointF(($cx+$ro),   $cy)
-    $pts[3] = New-Object System.Drawing.PointF(($cx+$ri),   ($cy+$ri))
-    $pts[4] = New-Object System.Drawing.PointF($cx,         ($cy+$ro))
-    $pts[5] = New-Object System.Drawing.PointF(($cx-$ri),   ($cy+$ri))
-    $pts[6] = New-Object System.Drawing.PointF(($cx-$ro),   $cy)
-    $pts[7] = New-Object System.Drawing.PointF(($cx-$ri),   ($cy-$ri))
-    return $pts
-}
-function C([int]$a,[int]$r,[int]$g,[int]$b) { return [System.Drawing.Color]::FromArgb($a,$r,$g,$b) }
-
 function Draw-Icon([int]$s) {
     $sc = $s / 256.0
+    # small sizes get proportionally thicker strokes so the badge doesn't dissolve in the tray
+    $boost = 1.0; if ($s -le 16) { $boost = 1.45 } elseif ($s -le 32) { $boost = 1.2 }
     $bmp = New-Object System.Drawing.Bitmap($s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb))
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # dark Aurora tile
-    $m = 12 * $sc; $rw = 232 * $sc; $rr = 54 * $sc
-    $path = New-RoundRect $m $m $rw $rw $rr
-    $rectF = New-Object System.Drawing.RectangleF($m, $m, $rw, $rw)
-    $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rectF, (C 255 22 26 48), (C 255 11 14 22), ([System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal))
-    $g.FillPath($bg, $path)
-    $bpen = New-Object System.Drawing.Pen((C 255 50 60 94), ([single][Math]::Max(1.0, 3 * $sc)))
-    $g.DrawPath($bpen, $path)
-    if ($s -ge 32) {
-        $ip = New-RoundRect (30*$sc) (30*$sc) (196*$sc) (196*$sc) (38*$sc)
-        $ipen = New-Object System.Drawing.Pen((C 255 44 58 102), ([single][Math]::Max(1.0, 2 * $sc)))
-        $g.DrawPath($ipen, $ip); $ip.Dispose(); $ipen.Dispose()
-    }
+    $aur = New-Object System.Drawing.Drawing2D.LinearGradientBrush((P 40 40 $sc), (P 216 216 $sc), (C 255 34 211 238), (C 255 168 85 247))
 
-    $cx = 128 * $sc; $cy = 132 * $sc; $ro = 82 * $sc; $ri = 27 * $sc
+    # hex badge (pointy top): dark fill + gradient outline
+    $hex = [System.Drawing.PointF[]]@((P 128 20 $sc), (P 222 74 $sc), (P 222 182 $sc), (P 128 236 $sc), (P 34 182 $sc), (P 34 74 $sc))
+    $fill = New-Object System.Drawing.SolidBrush((C 255 13 17 32))
+    $g.FillPolygon($fill, $hex)
+    $hpen = New-Object System.Drawing.Pen($aur, ([single][Math]::Max(1.0, 12 * $sc * $boost)))
+    $hpen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawPolygon($hpen, $hex)
 
-    # cyan glow behind the star
-    $glow = New-Star $cx $cy ($ro * 1.3) ($ri * 1.55)
-    $gb = New-Object System.Drawing.SolidBrush((C 70 34 211 238))
-    $g.FillPolygon($gb, $glow)
+    # sparkle star (light) above the chevrons
+    $star = New-Sparkle 128 92 33 4 $sc
+    $sb = New-Object System.Drawing.SolidBrush((C 255 224 236 255))
+    $g.FillPath($sb, $star)
 
-    # main sparkle, cyan -> violet diagonal gradient
-    $star = New-Star $cx $cy $ro $ri
-    $sbRect = New-Object System.Drawing.RectangleF(([single]($cx-$ro)), ([single]($cy-$ro)), ([single](2*$ro)), ([single](2*$ro)))
-    $sbrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($sbRect, (C 255 34 211 238), (C 255 168 85 247), ([System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal))
-    $g.FillPolygon($sbrush, $star)
+    # two rank chevrons
+    $cpen = New-Object System.Drawing.Pen($aur, ([single][Math]::Max(1.0, 18 * $sc * $boost)))
+    $cpen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $cpen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $cpen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawLines($cpen, [System.Drawing.PointF[]]@((P 84 144 $sc), (P 128 170 $sc), (P 172 144 $sc)))
+    $g.DrawLines($cpen, [System.Drawing.PointF[]]@((P 84 178 $sc), (P 128 204 $sc), (P 172 178 $sc)))
 
-    # small accent sparkle, top-right
-    if ($s -ge 32) {
-        $mini = New-Star (190*$sc) (74*$sc) (22*$sc) (6*$sc)
-        $mb = New-Object System.Drawing.SolidBrush((C 235 201 225 255))
-        $g.FillPolygon($mb, $mini); $mb.Dispose()
-    }
-
-    $g.Dispose(); $bg.Dispose(); $bpen.Dispose(); $gb.Dispose(); $sbrush.Dispose(); $path.Dispose()
+    $g.Dispose(); $aur.Dispose(); $fill.Dispose(); $hpen.Dispose(); $sb.Dispose(); $star.Dispose(); $cpen.Dispose()
     return $bmp
 }
 

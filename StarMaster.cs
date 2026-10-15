@@ -751,10 +751,17 @@ namespace StarMaster {
         // ---------- header ----------
         UIElement Header() {
             DockPanel d = new DockPanel { LastChildFill = false };
-            Border logo = new Border { Width = 46, Height = 46, CornerRadius = new CornerRadius(12), Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
-            Polygon star = new Polygon { Fill = Ui.AccentGrad(), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
-            star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
-            logo.Child = star; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
+            // logo: the "command insignia" (v77) - hex badge, light sparkle, two rank chevrons; drawn on the
+            // same 256 grid as Make-Icon.ps1 so the header matches StarMaster.ico
+            LinearGradientBrush ag = new LinearGradientBrush(Color.FromRgb(0x22, 0xd3, 0xee), Color.FromRgb(0xa8, 0x55, 0xf7), new Point(40, 40), new Point(216, 216));
+            ag.MappingMode = BrushMappingMode.Absolute; ag.Freeze();
+            Canvas badge = new Canvas { Width = 256, Height = 256 };
+            badge.Children.Add(new Polygon { Points = new PointCollection(new Point[] { new Point(128, 20), new Point(222, 74), new Point(222, 182), new Point(128, 236), new Point(34, 182), new Point(34, 74) }), Fill = new SolidColorBrush(Color.FromRgb(0x0d, 0x11, 0x20)), Stroke = ag, StrokeThickness = 12, StrokeLineJoin = PenLineJoin.Round });
+            badge.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M128 59 Q132 88 161 92 Q132 96 128 125 Q124 96 95 92 Q124 88 128 59Z"), Fill = new SolidColorBrush(Color.FromRgb(0xe0, 0xec, 0xff)) });
+            foreach (double cy in new double[] { 144, 178 })
+                badge.Children.Add(new Polyline { Points = new PointCollection(new Point[] { new Point(84, cy), new Point(128, cy + 26), new Point(172, cy) }), Stroke = ag, StrokeThickness = 18, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round });
+            Viewbox logo = new Viewbox { Width = 50, Height = 50, Child = badge, VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
             StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
             ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 23, FontWeight = FontWeights.Bold });
             ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });

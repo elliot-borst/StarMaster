@@ -93,6 +93,31 @@ namespace StarMaster {
             m = CVars.Merge("e_ParticleTexturePreLoading = 1\rg_language = english", pre.Name, 0);
             Check(m.IndexOf("g_language = english") >= 0 && CVars.TryRead(m, pre.Name, out v) && v == 0, "merge: lone-CR endings don't swallow the next setting (v70)");
 
+            // ----- LocOverrides (v77): ship-name overrides on global.ini -----
+            string ini = "﻿a_key=Alpha\nvehicle_NameRSI_Constellation_Mk5_Andromeda=RSI Constellation Mk V Centaurus\nvehicle_NameRSI_Constellation_Mk5_Andromeda_short=Constelltn. MkV Cntr\nvehicle_NameAEGS_Tiburon_short,P=Tiburon\nvehicle_NameAEGS_Firebird_Collector_Milt,P=Aegis Sabre Firebird Wikelo War Special\nvehicle_NameEmpty=\nvehicle_DescX=desc\n";
+            Check(LocOverrides.InGroup("Ships", "vehicle_NameDRAK_Cutlass_Black"), "ovr: vehicle_Name is a ship");
+            Check(!LocOverrides.InGroup("Ships", "vehicle_NameDRAK_Cutlass_Black_short"), "ovr: _short excluded");
+            Check(!LocOverrides.InGroup("Ships", "vehicle_NameAEGS_Tiburon_short,P"), "ovr: _short,P excluded");
+            Check(LocOverrides.InGroup("Ships", "vehicle_NameAEGS_Firebird_Collector_Milt,P"), "ovr: ,P full name included");
+            Check(!LocOverrides.InGroup("Ships", "vehicle_DescX"), "ovr: descriptions excluded");
+            System.Collections.Generic.List<LocEntry> ships = LocOverrides.List(ini, "Ships");
+            Check(ships.Count == 2 && ships[0].Value.StartsWith("Aegis") && ships[1].Key == "vehicle_NameRSI_Constellation_Mk5_Andromeda", "ovr: list = full names only, sorted, blanks skipped");
+            System.Collections.Generic.List<LocOverride> ol = new System.Collections.Generic.List<LocOverride>();
+            ol.Add(new LocOverride { Group = "Ships", Key = "vehicle_NameRSI_Constellation_Mk5_Andromeda", Original = "RSI Constellation Mk V Centaurus", Name = "Connie Centaurus" });
+            int nch; string applied = LocOverrides.Apply(ini, ol, out nch);
+            string got; Check(nch == 1 && LocOverrides.TryGet(applied, ol[0].Key, out got) && got == "Connie Centaurus", "ovr: apply renames the key");
+            Check(ini.Replace("RSI Constellation Mk V Centaurus", "Connie Centaurus") == applied, "ovr: apply leaves every other byte alone");
+            Check(LocOverrides.TryGet(applied, "vehicle_NameRSI_Constellation_Mk5_Andromeda_short", out got) && got == "Constelltn. MkV Cntr", "ovr: _short key untouched");
+            LocOverrides.Apply(applied, ol, out nch); Check(nch == 0, "ovr: re-apply is a no-op (no needless write)");
+            string crlf = LocOverrides.Apply("x=1\r\nvehicle_NameRSI_Constellation_Mk5_Andromeda=Old\r\ny=2\r\n", ol, out nch);
+            Check(crlf == "x=1\r\nvehicle_NameRSI_Constellation_Mk5_Andromeda=Connie Centaurus\r\ny=2\r\n", "ovr: CRLF endings preserved");
+            Check(!LocOverrides.Reconcile(applied, ol), "ovr: reconcile - our own value isn't a new original");
+            string fresh = ini.Replace("RSI Constellation Mk V Centaurus", "RSI Constellation Centaurus Mk V");
+            Check(LocOverrides.Reconcile(fresh, ol) && ol[0].Original == "RSI Constellation Centaurus Mk V", "ovr: reconcile picks up a StarStrings rename as the new original");
+            LocOverride rt = LocOverrides.Decode(LocOverrides.Encode(new LocOverride { Group = "Ships", Key = "k,P", Original = "A|B", Name = "N\tx" }));
+            Check(rt != null && rt.Key == "k,P" && rt.Original == "A|B" && rt.Name == "N x", "ovr: config encode/decode round-trips (tabs cleaned)");
+            Check(LocOverrides.Decode("garbage") == null, "ovr: bad config line ignored");
+
             Console.WriteLine(failed == 0 ? "OK  " + passed + " tests passed" : "" + failed + " FAILED, " + passed + " passed");
             return failed == 0 ? 0 : 1;
         }

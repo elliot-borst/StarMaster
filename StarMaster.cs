@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("76.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("76.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("77.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("77.0.0.0")]
 
 namespace StarMaster {
 
@@ -611,8 +611,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "76";
-        public const string VersionDate = "2026-09-25";   // bump alongside Version at release time
+        public const string Version = "77";
+        public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -727,7 +727,7 @@ namespace StarMaster {
             } catch { }
             BuildTray();
             Closing += OnClosing;
-            Loaded += delegate { CheckUpdate(true); SSCheck(false); };
+            Loaded += delegate { CheckUpdate(true); SSCheck(false); if (overrides.Count > 0) RunOverrides(null); };   // re-assert name overrides (no write if the file already has them)
             // launch straight to the tray: the user setting, or the installer's --minimized relaunch after a
             // silent auto-update - but a TRUE first run (no config yet) always shows the window.
             // Open MINIMISED (not the Maximised set above): Application.Run() calls Show(), and a minimised +
@@ -807,7 +807,7 @@ namespace StarMaster {
             overlayHost.Children.Add(overlayCard);
             return overlayHost;
         }
-        void HideOverlay() { overlayHost.Visibility = Visibility.Collapsed; overlayCard.Child = null; }
+        void HideOverlay() { overlayHost.Visibility = Visibility.Collapsed; overlayCard.Child = null; overlayCard.MaxWidth = 480; }
         StackPanel DialogShell(string title, double width) {
             StackPanel s = new StackPanel(); if (width > 0) s.Width = width;
             s.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
@@ -1530,31 +1530,281 @@ namespace StarMaster {
 
         // ---------- starstrings card (half-width tile: stacked vertically) ----------
         FrameworkElement StarStringsCard() {
-            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization");
+            // v77: compacted (installed/latest side by side, controls on one row, one-line credit) so the
+            // rest of the tile is free for the Name overrides list, which fills whatever height is left.
+            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization + your own name overrides");
+            head.Margin = new Thickness(0, 0, 0, 10);
             StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint;
             ssBadgePill = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(0), Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Top, Child = ssBadge };
             DockPanel.SetDock(ssBadgePill, Dock.Right); head.Children.Add(ssBadgePill);
-            body.Children.Add(BuildRow("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text));
-            body.Children.Add(BuildRow("Latest", out ssLatest, "(check)", Ui.Accent));
-            StackPanel ctl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+            Grid info = new Grid();
+            info.ColumnDefinitions.Add(new ColumnDefinition()); info.ColumnDefinitions.Add(new ColumnDefinition());
+            StackPanel inst = BuildRow("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text); inst.Margin = new Thickness(0, 0, 12, 0); info.Children.Add(inst);
+            StackPanel lat = BuildRow("Latest", out ssLatest, "(check)", Ui.Accent); lat.Margin = new Thickness(0); Grid.SetColumn(lat, 1); info.Children.Add(lat);
+            body.Children.Add(info);
+            StackPanel ctl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 100); ctl.Children.Add(ssChannel); ctl.Children.Add(Sp(9));
-            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 9, 14, 9); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
-            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { if (ssBtnEnabled) SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 9, 14, 9); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
+            ssChannel.OnChange = delegate (string v) { RefreshOverrides(); if (overrides.Count > 0) RunOverrides(null); };   // overrides go into the selected channel's global.ini
+            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 8, 14, 8); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
+            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { if (ssBtnEnabled) SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 8, 14, 8); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
             body.Children.Add(ctl);
-            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
-            // full credit to MrKraken, the creator of StarStrings
-            TextBlock credit = new TextBlock { Margin = new Thickness(0, 14, 0, 0), FontSize = 11.5, Foreground = Ui.Faint, TextWrapping = TextWrapping.Wrap, LineHeight = 16 };
-            credit.Inlines.Add(new Run("Created and maintained by MrKraken — all credit to him."));
-            credit.Inlines.Add(new LineBreak());
-            credit.Inlines.Add(new Run("Source: "));
+            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
+            // full credit to MrKraken, the creator of StarStrings (one line now)
+            TextBlock credit = new TextBlock { Margin = new Thickness(0, 8, 0, 0), FontSize = 11, Foreground = Ui.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
+            credit.Inlines.Add(new Run("By MrKraken - all credit to him · "));
             Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
             try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
             link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };
             link.Cursor = Cursors.Hand;
             credit.Inlines.Add(link);
             body.Children.Add(credit);
+
+            // ---- Name overrides: fills the rest of the tile (the card's StackPanel is re-hosted in a Grid so the list gets a star row) ----
+            card.Child = null;
+            Grid g = new Grid();
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            g.Children.Add(body);
+            DockPanel oh = new DockPanel { LastChildFill = false };
+            Border ohb = new Border { BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 12, 0, 8), Margin = new Thickness(0, 12, 0, 0), Child = oh };
+            StackPanel ohl = new StackPanel { Orientation = Orientation.Horizontal };
+            ohl.Children.Add(new TextBlock { Text = "NAME OVERRIDES", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            ovrCount = new TextBlock { Foreground = Ui.Faint, FontSize = 11, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center }; ohl.Children.Add(ovrCount);
+            DockPanel.SetDock(ohl, Dock.Left); oh.Children.Add(ohl);
+            ovrStatus = new TextBlock { Foreground = Ui.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 0, 0, 0) };
+            DockPanel.SetDock(ovrStatus, Dock.Right); oh.Children.Add(ovrStatus);
+            Grid.SetRow(ohb, 1); g.Children.Add(ohb);
+            ovrPanel = new StackPanel();
+            ScrollViewer sv = DarkScroll(ovrPanel); Grid.SetRow(sv, 2); g.Children.Add(sv);
+            Border add = new Border { Margin = new Thickness(0, 6, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = new TextBlock { Text = "+  Add override", Foreground = Ui.Dim, FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center } };
+            add.MouseLeftButtonUp += delegate { ShowOverrideGroups(); };
+            Grid.SetRow(add, 3); g.Children.Add(add);
+            card.Child = g;
+            RefreshOverrides();
             return card;
         }
+
+        // ---------- name overrides (v77): user renames layered on top of StarStrings' global.ini ----------
+        List<LocOverride> overrides = new List<LocOverride>();
+        StackPanel ovrPanel; TextBlock ovrStatus, ovrCount; bool ovrBusy = false;
+
+        string LocPath() {
+            try { return Path.Combine(scRoot.Text.Trim(), ssChannel.Value, "data", "Localization", "english", "global.ini"); } catch { return null; }
+        }
+        // global.ini is UTF-8 (with a BOM as StarStrings ships it); keep whichever it had
+        static string ReadLoc(string p, out bool bom) {
+            byte[] b = File.ReadAllBytes(p);
+            bom = b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF;
+            int o = bom ? 3 : 0; return new UTF8Encoding(false).GetString(b, o, b.Length - o);
+        }
+        void SetOvrStatus(string t, Brush fg) { if (ovrStatus != null) { ovrStatus.Text = t; ovrStatus.Foreground = fg; ovrStatus.ToolTip = t; } }
+
+        void RefreshOverrides() {
+            if (ovrPanel == null) return;
+            ovrPanel.Children.Clear();
+            ovrCount.Text = overrides.Count > 0 ? "· " + overrides.Count : "";
+            if (overrides.Count == 0) {
+                ovrPanel.Children.Add(new TextBlock { Text = "None yet. Rename ships (e.g. shorter names that don't wrap in the ASOP fleet manager) - your renames are re-applied automatically after every StarStrings update.", Foreground = Ui.Faint, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, LineHeight = 16, Margin = new Thickness(2, 2, 2, 6) });
+                return;
+            }
+            List<LocOverride> sorted = new List<LocOverride>(overrides);
+            sorted.Sort(delegate (LocOverride a, LocOverride b) { return string.Compare(a.Original, b.Original, StringComparison.OrdinalIgnoreCase); });
+            foreach (LocOverride o in sorted) ovrPanel.Children.Add(OverrideRow(o));
+        }
+        UIElement OverrideRow(LocOverride o) {
+            LocOverride oo = o;
+            Border row = new Border { Margin = new Thickness(0, 0, 0, 6), Padding = new Thickness(12, 7, 10, 7), CornerRadius = new CornerRadius(11), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            DockPanel d = new DockPanel();
+            Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Remove - puts the original name back", Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            del.MouseLeftButtonUp += delegate { RemoveOverride(oo); };
+            DockPanel.SetDock(del, Dock.Right); d.Children.Add(del);
+            Border grp = new Border { CornerRadius = new CornerRadius(6), Background = Ui.Card2, Padding = new Thickness(7, 2, 7, 2), Margin = new Thickness(8, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = o.Group, Foreground = Ui.Faint, FontSize = 10.5 } };
+            DockPanel.SetDock(grp, Dock.Right); d.Children.Add(grp);
+            StackPanel left = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = "Click to edit  ·  " + o.Key };
+            left.Children.Add(new TextBlock { Text = o.Name, Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+            TextBlock orig = new TextBlock { FontSize = 11.5, Foreground = Ui.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
+            orig.Inlines.Add(new Run("original  ")); orig.Inlines.Add(new Run(o.Original) { Foreground = Ui.Dim });
+            left.Children.Add(orig);
+            left.MouseLeftButtonUp += delegate { ShowRenameForm(oo.Group, oo.Key, oo.Original, oo); };
+            d.Children.Add(left);
+            row.Child = d; return row;
+        }
+        LocOverride FindOverride(string key) { foreach (LocOverride o in overrides) if (string.Equals(o.Key, key, StringComparison.OrdinalIgnoreCase)) return o; return null; }
+        void RemoveOverride(LocOverride o) {
+            overrides.Remove(o); SaveConfig(); RefreshOverrides();
+            RunOverrides(new LocOverride[] { new LocOverride { Group = o.Group, Key = o.Key, Original = o.Original, Name = o.Original } });   // write the original back
+        }
+
+        // Write every override (plus any reverts) into the selected channel's global.ini, off the UI thread.
+        // Reconciles first: if StarStrings rewrote a value, that fresh value becomes the remembered original.
+        void RunOverrides(IList<LocOverride> reverts) {
+            string p = LocPath(); string ch = ssChannel != null ? ssChannel.Value : "";
+            if (p == null || !File.Exists(p)) { if (overrides.Count > 0 || reverts != null) SetOvrStatus("no global.ini in " + ch + " - install StarStrings first", Ui.Warn); return; }
+            if (ovrBusy) { Dispatcher.BeginInvoke(new Action(delegate { RunOverrides(reverts); }), DispatcherPriority.Background); return; }
+            ovrBusy = true; SetOvrStatus("applying...", Ui.Dim);
+            List<LocOverride> work = new List<LocOverride>();
+            foreach (LocOverride o in overrides) work.Add(new LocOverride { Group = o.Group, Key = o.Key, Original = o.Original, Name = o.Name });
+            List<LocOverride> all = new List<LocOverride>();
+            if (reverts != null) all.AddRange(reverts);
+            all.AddRange(work);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string res = null; Brush fg = Ui.Good; bool reconciled = false;
+                try {
+                    bool bom; string text = ReadLoc(p, out bom);
+                    reconciled = LocOverrides.Reconcile(text, work);
+                    int missing = 0; foreach (LocOverride o in work) { string v; if (!LocOverrides.TryGet(text, o.Key, out v)) missing++; }
+                    int n; string outText = LocOverrides.Apply(text, all, out n);
+                    if (n > 0) File.WriteAllText(p, outText, new UTF8Encoding(bom));
+                    res = n > 0 ? "✓ applied to " + ch + " - restart Star Citizen to see it" : (work.Count > 0 ? "✓ all applied (" + ch + ")" : "✓ original restored (" + ch + ")");
+                    if (missing > 0) { res = missing + " name(s) not found in " + ch; fg = Ui.Warn; }
+                } catch (Exception ex) { res = "couldn't write global.ini: " + ex.Message; fg = Ui.DangerFg; }
+                Dispatcher.BeginInvoke(new Action(delegate {
+                    ovrBusy = false;
+                    if (reconciled) { foreach (LocOverride w in work) { LocOverride o = FindOverride(w.Key); if (o != null) o.Original = w.Original; } SaveConfig(); RefreshOverrides(); }
+                    SetOvrStatus(res, fg);
+                }));
+            });
+        }
+
+        // a thin dark scrollbar (WPF's default is a light-grey Win32-looking bar)
+        static Style darkScrollStyle;
+        ScrollViewer DarkScroll(UIElement content) {
+            ScrollViewer sv = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false };
+            if (darkScrollStyle == null) {
+                try {
+                    darkScrollStyle = (Style)System.Windows.Markup.XamlReader.Parse(
+                        "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ScrollBar'>" +
+                        "<Setter Property='Width' Value='8'/><Setter Property='MinWidth' Value='8'/><Setter Property='Margin' Value='6,0,0,0'/>" +
+                        "<Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'>" +
+                        "<Track x:Name='PART_Track' IsDirectionReversed='True'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'>" +
+                        "<Border Background='#3a4670' CornerRadius='4'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>" +
+                        "</ControlTemplate></Setter.Value></Setter></Style>");
+                } catch { }
+            }
+            if (darkScrollStyle != null) sv.Resources.Add(typeof(ScrollBar), darkScrollStyle);
+            return sv;
+        }
+
+        // step 1: pick a group (only Ships today; more groups slot into LocOverrides.Groups)
+        void ShowOverrideGroups() {
+            StackPanel s = DialogShell("Add override", 420);
+            s.Children.Add(new TextBlock { Text = "What do you want to rename?", Foreground = Ui.Dim, FontSize = 13, Margin = new Thickness(0, 0, 0, 10) });
+            foreach (string grp in LocOverrides.Groups) {
+                string gg = grp;
+                Border b = new Border { Padding = new Thickness(14, 11, 14, 11), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(11), Background = Ui.Inset, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand };
+                DockPanel d = new DockPanel();
+                TextBlock arr = new TextBlock { Text = "›", Foreground = Ui.Accent, FontSize = 18, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(arr, Dock.Right); d.Children.Add(arr);
+                StackPanel t = new StackPanel();
+                t.Children.Add(new TextBlock { Text = gg, Foreground = Ui.Text, FontSize = 14, FontWeight = FontWeights.SemiBold });
+                t.Children.Add(new TextBlock { Text = gg == "Ships" ? "Ship and vehicle names (fleet manager, hangars, HUD)" : "", Foreground = Ui.Faint, FontSize = 11.5 });
+                d.Children.Add(t); b.Child = d;
+                b.MouseEnter += delegate { b.BorderBrush = Ui.Accent; }; b.MouseLeave += delegate { b.BorderBrush = Ui.Line2; };
+                b.MouseLeftButtonUp += delegate { ShowGroupList(gg); };
+                s.Children.Add(b);
+            }
+            s.Children.Add(new TextBlock { Text = "More groups (weapons, items...) can be added later.", Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 2, 0, 0) });
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+            Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(cancel);
+            s.Children.Add(btns);
+            ShowOverlay(s);
+        }
+
+        // step 2: the full list for a group, read live from the channel's global.ini, with search
+        void ShowGroupList(string group) {
+            string p = LocPath(); string ch = ssChannel.Value;
+            if (p == null || !File.Exists(p)) { ShowAlert("StarStrings not installed", "There's no localization file for " + ch + " yet:\n\n" + p + "\n\nInstall StarStrings for this channel first - overrides are layered on top of it."); return; }
+            StackPanel wait = DialogShell("Add override - " + group, 560);
+            wait.Children.Add(new TextBlock { Text = "Reading " + ch + " localization...", Foreground = Ui.Dim, FontSize = 13 });
+            ShowWide(wait, 620);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                List<LocEntry> items = null; string err = null;
+                try { bool bom; items = LocOverrides.List(ReadLoc(p, out bom), group); } catch (Exception ex) { err = ex.Message; }
+                Dispatcher.BeginInvoke(new Action(delegate {
+                    if (overlayHost.Visibility != Visibility.Visible || overlayCard.Child != wait) return;   // cancelled meanwhile
+                    if (items == null) { ShowAlert("Couldn't read global.ini", err); return; }
+                    BuildGroupList(group, items);
+                }));
+            });
+        }
+        void BuildGroupList(string group, List<LocEntry> items) {
+            StackPanel s = DialogShell("Add override - " + group, 560);
+            TextBox search = FormTb(""); search.FontSize = 13.5;
+            TextBlock count = new TextBlock { Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 0, 0, 4) };
+            DockPanel sh = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+            DockPanel.SetDock(count, Dock.Right); sh.Children.Add(count);
+            sh.Children.Add(new TextBlock { Text = "Search  (name or part of a name)", Foreground = Ui.Dim, FontSize = 11.5 });
+            s.Children.Add(sh); s.Children.Add(search);
+            StackPanel list = new StackPanel();
+            List<KeyValuePair<Border, string>> rows = new List<KeyValuePair<Border, string>>();
+            foreach (LocEntry e in items) {
+                LocEntry ee = e; LocOverride ex = FindOverride(e.Key);
+                string original = ex != null ? ex.Original : e.Value;   // once applied, the file holds our override - show the remembered original
+                Border r = new Border { Padding = new Thickness(11, 7, 11, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand, Background = Brushes.Transparent };
+                DockPanel d = new DockPanel();
+                if (ex != null) { TextBlock tag = new TextBlock { Text = "→ " + ex.Name, Foreground = Ui.Accent, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) }; DockPanel.SetDock(tag, Dock.Right); d.Children.Add(tag); }
+                StackPanel t = new StackPanel();
+                t.Children.Add(new TextBlock { Text = original, Foreground = Ui.Text, FontSize = 13 });
+                t.Children.Add(new TextBlock { Text = e.Key, Foreground = Ui.Faint, FontSize = 10.5, FontFamily = Ui.Mono });
+                d.Children.Add(t); r.Child = d;
+                r.MouseEnter += delegate { r.Background = Ui.Card2; }; r.MouseLeave += delegate { r.Background = Brushes.Transparent; };
+                r.MouseLeftButtonUp += delegate { ShowRenameForm(group, ee.Key, original, FindOverride(ee.Key)); };
+                list.Children.Add(r);
+                rows.Add(new KeyValuePair<Border, string>(r, (original + " " + e.Key).ToLowerInvariant()));
+            }
+            Border box = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(4), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            ScrollViewer sv = DarkScroll(list); sv.Height = Math.Max(240, Math.Min(460, ActualHeight - 330));
+            box.Child = sv; s.Children.Add(box);
+            Action filter = delegate {
+                string[] toks = search.Text.Trim().ToLowerInvariant().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                int shown = 0;
+                foreach (KeyValuePair<Border, string> kv in rows) {
+                    bool ok = true; foreach (string tk in toks) if (kv.Value.IndexOf(tk, StringComparison.Ordinal) < 0) { ok = false; break; }
+                    kv.Key.Visibility = ok ? Visibility.Visible : Visibility.Collapsed; if (ok) shown++;
+                }
+                count.Text = shown == rows.Count ? rows.Count + " " + group.ToLowerInvariant() : shown + " of " + rows.Count;
+                sv.ScrollToTop();
+            };
+            search.TextChanged += delegate { filter(); };
+            filter();
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+            Border back = Btn("‹ Back", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); ShowOverrideGroups(); }); back.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(back); btns.Children.Add(Sp(10));
+            Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(cancel);
+            s.Children.Add(btns);
+            ShowWide(s, 620);
+            Dispatcher.BeginInvoke(new Action(delegate { search.Focus(); }), DispatcherPriority.Input);
+        }
+
+        // step 3: rename - always shows the original; the override starts as the original (or the current override)
+        void ShowRenameForm(string group, string key, string original, LocOverride existing) {
+            StackPanel s = DialogShell(existing != null ? "Edit override" : "Rename " + (group == "Ships" ? "ship" : group.ToLowerInvariant()), 520);
+            s.Children.Add(FormLbl("Original name"));
+            s.Children.Add(new Border { Padding = new Thickness(8, 6, 8, 6), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Child = new TextBlock { Text = original, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap } });
+            s.Children.Add(new TextBlock { Text = key, Foreground = Ui.Faint, FontSize = 10.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 4, 0, 0) });
+            s.Children.Add(FormLbl("Override name"));
+            TextBox tb = FormTb(existing != null ? existing.Name : original); s.Children.Add(tb);
+            TextBlock len = new TextBlock { Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 6, 0, 0) }; s.Children.Add(len);
+            Action upd = delegate { int n = LocOverrides.Clean(tb.Text).Length; len.Text = n + " characters  ·  original " + original.Length + (n < original.Length ? "  (" + (original.Length - n) + " shorter)" : ""); };
+            tb.TextChanged += delegate { upd(); }; upd();
+            Action save = delegate {
+                string name = LocOverrides.Clean(tb.Text);
+                HideOverlay();
+                if (name.Length == 0 || name == original) { if (existing != null) RemoveOverride(existing); return; }   // back to the original = no override
+                LocOverride o = existing != null ? existing : FindOverride(key);
+                if (o == null) { o = new LocOverride { Group = group, Key = key, Original = original }; overrides.Add(o); }
+                o.Name = name; SaveConfig(); RefreshOverrides(); RunOverrides(null);
+            };
+            tb.KeyDown += delegate (object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; save(); } else if (e.Key == Key.Escape) { e.Handled = true; HideOverlay(); } };
+            DockPanel btns = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 16, 0, 0) };
+            Border reset = Btn("Reset to original", Ui.Card2, Ui.Text, false, delegate { tb.Text = original; tb.Focus(); tb.SelectAll(); }); reset.Padding = new Thickness(14, 8, 14, 8); DockPanel.SetDock(reset, Dock.Left); btns.Children.Add(reset);
+            Border ok = Btn("Save", Ui.AccentGrad(), Ui.Ink, true, delegate { save(); }); ok.Padding = new Thickness(20, 8, 20, 8); DockPanel.SetDock(ok, Dock.Right); btns.Children.Add(ok);
+            Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); cancel.Margin = new Thickness(0, 0, 10, 0); DockPanel.SetDock(cancel, Dock.Right); btns.Children.Add(cancel);
+            s.Children.Add(btns);
+            ShowWide(s, 620);
+            Dispatcher.BeginInvoke(new Action(delegate { tb.Focus(); tb.SelectAll(); }), DispatcherPriority.Input);
+        }
+        void ShowWide(UIElement content, double maxW) { overlayCard.MaxWidth = maxW; ShowOverlay(content); }
         // a stacked label + wrapping mono value (for the half-width tile)
         StackPanel BuildRow(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 8, 0, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap }; s.Children.Add(val); return s; }
         void SSCheck(bool announce) {
@@ -1597,7 +1847,7 @@ namespace StarMaster {
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                     string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
                     Dispatcher.BeginInvoke(new Action(delegate {
-                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; SetSsBadge("Installed - restart SC", Ui.Good, Ui.Good, false); ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); }
+                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; SetSsBadge("Installed - restart SC", Ui.Good, Ui.Good, false); ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); if (overrides.Count > 0) RunOverrides(null); }   // the install just overwrote global.ini - put the user's renames back on top
                         else { SetSsBadge("failed: " + msg, Ui.DangerFg, Ui.Crit, false); }
                     }));
                 });
@@ -1740,10 +1990,11 @@ namespace StarMaster {
 
         // ---------- config ----------
         void LoadConfig() {
-            commands = new List<Cmd>(); autostart = false; focusGuard = true; startMinimized = false; winTitleField = "Star Citizen";
+            commands = new List<Cmd>(); overrides = new List<LocOverride>(); autostart = false; focusGuard = true; startMinimized = false; winTitleField = "Star Citizen";
             try {
                 if (File.Exists(cfgPath)) foreach (string line in File.ReadAllLines(cfgPath)) {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
+                    if (line.StartsWith("ovr=")) { LocOverride o = LocOverrides.Decode(line.Substring(4).TrimEnd('\r', '\n')); if (o != null) overrides.Add(o); continue; }   // before the '|' command-row test: a name may contain '|'
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
                     else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
                 }
@@ -1793,6 +2044,8 @@ namespace StarMaster {
                 sb.AppendLine("mon_textalpha=" + monTextAlpha);
                 sb.AppendLine("mon_hotkey_on=" + (monHotkeyOn ? "1" : "0"));
                 sb.AppendLine("mon_hotkey=" + monHotkey);
+                sb.AppendLine("# name overrides: ovr=Group<TAB>Key<TAB>Original<TAB>Name");
+                foreach (LocOverride o in overrides) sb.AppendLine("ovr=" + LocOverrides.Encode(o));
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
                 foreach (Cmd c in commands) sb.AppendLine(c.Label.Replace("|", "/") + "|" + (c.Shift ? "1" : "0") + "|" + (c.Ctrl ? "1" : "0") + "|" + (c.Alt ? "1" : "0") + "|" + c.Key + "|" + c.Interval + "|" + (c.Enabled ? "1" : "0"));
                 File.WriteAllText(cfgPath, sb.ToString());

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("81.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("81.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("82.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("82.0.0.0")]
 
 namespace StarMaster {
 
@@ -40,6 +40,12 @@ namespace StarMaster {
         [DllImport("user32.dll")] static extern int GetWindowThreadProcessId(IntPtr hWnd, out int pid);
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        // custom title bar (v82): measure the maximised overhang against the monitor's work area
+        [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+        [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+        [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+        [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+        [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
         const uint KEYUP = 0x2, SCANCODE = 0x8, EXTENDED = 0x1;
         public static string ActiveTitle() { StringBuilder sb = new StringBuilder(256); GetWindowText(GetForegroundWindow(), sb, 256); return sb.ToString(); }
         // process name (no extension) of the foreground window's owner - precise SC detection (title text can contain "Star Citizen" by coincidence, e.g. a terminal editing this app)
@@ -611,7 +617,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "81";
+        public const string Version = "82";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -697,7 +703,22 @@ namespace StarMaster {
             root.Children.Add(Header());
             FrameworkElement cards = (FrameworkElement)Cards(); cards.Margin = new Thickness(0, 12, 0, 0); Grid.SetRow(cards, 1); root.Children.Add(cards);
             Grid shell = new Grid(); shell.Children.Add(root); shell.Children.Add(BuildOverlay());
-            Content = shell;
+            // v82: our own dark title bar (WindowChrome) instead of the native one - the native caption put the
+            // icon ~3 px from the screen edge when maximised and couldn't be styled. Windows still does the
+            // dragging, double-click maximise, Aero-snap, resize borders and the Alt+Space system menu.
+            System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome {
+                CaptionHeight = TitleBarH, ResizeBorderThickness = new Thickness(6), GlassFrameThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(0), UseAeroCaptionButtons = false });
+            frame = new Grid();
+            frame.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TitleBarH) });
+            frame.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            frame.Children.Add(TitleBar());
+            Grid.SetRow(shell, 1); frame.Children.Add(shell);
+            frameBorder = new Border { Child = frame, BorderBrush = Ui.Line2 };
+            Content = frameBorder;
+            StateChanged += delegate { FitFrame(); }; SizeChanged += delegate { FitFrame(); }; LocationChanged += delegate { FitFrame(); };
+            Activated += delegate { if (titleText != null) titleText.Foreground = Ui.Dim; };
+            Deactivated += delegate { if (titleText != null) titleText.Foreground = Ui.Faint; };
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { SysMon.Init(); });   // NVML init is slow - do it off the UI thread
@@ -746,6 +767,69 @@ namespace StarMaster {
         protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi) {
             base.OnDpiChanged(oldDpi, newDpi);
             MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
+        }
+
+        // ---------- custom title bar (v82) ----------
+        const double TitleBarH = 34;
+        Grid frame; Border frameBorder; TextBlock titleText, maxGlyph;
+        UIElement TitleBar() {
+            Grid bar = new Grid { Background = Ui.B("#0a0d17") };
+            bar.ColumnDefinitions.Add(new ColumnDefinition());
+            bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            StackPanel left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+            Polygon star = new Polygon { Fill = Ui.AccentGrad(), Width = 15, Height = 15, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
+            star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
+            left.Children.Add(star);
+            titleText = new TextBlock { Text = Title, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
+            left.Children.Add(titleText);
+            bar.Children.Add(left);
+            StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal };
+            btns.Children.Add(CaptionBtn("", false, delegate { SystemCommands.MinimizeWindow(this); }));
+            Border mx = CaptionBtn("", false, delegate { if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this); else SystemCommands.MaximizeWindow(this); });
+            maxGlyph = (TextBlock)mx.Child; btns.Children.Add(mx);
+            btns.Children.Add(CaptionBtn("", true, delegate { SystemCommands.CloseWindow(this); }));   // -> OnClosing -> close-to-tray, as before
+            Grid.SetColumn(btns, 1); bar.Children.Add(btns);
+            bar.Children.Add(new Border { Height = 1, Background = Ui.Line, VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false });
+            Grid.SetColumnSpan(bar.Children[bar.Children.Count - 1], 2);
+            return bar;
+        }
+        Border CaptionBtn(string glyph, bool close, Action click) {
+            TextBlock g = new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 10, Foreground = Ui.Dim, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            Border b = new Border { Width = 46, Height = TitleBarH, Background = Brushes.Transparent, Child = g };
+            System.Windows.Shell.WindowChrome.SetIsHitTestVisibleInChrome(b, true);   // clickable inside the caption area
+            Brush hover = close ? Ui.B("#c42b1c") : Ui.Card2;
+            b.MouseEnter += delegate { b.Background = hover; g.Foreground = close ? Brushes.White : Ui.Text; };
+            b.MouseLeave += delegate { b.Background = Brushes.Transparent; g.Foreground = Ui.Dim; };
+            b.MouseLeftButtonUp += delegate { click(); };
+            return b;
+        }
+        // A maximised window is parked one resize-frame beyond every screen edge; with our own chrome that
+        // frame is client area, so pad it back in or the title bar/edges get clipped. Measured from the real
+        // window vs monitor work-area rects (in device px) so it's right at any DPI / taskbar position.
+        void FitFrame() {
+            if (frame == null) return;
+            bool maxed = WindowState == WindowState.Maximized;
+            if (maxGlyph != null) maxGlyph.Text = maxed ? "" : "";
+            Thickness pad = new Thickness(0);
+            if (maxed) {
+                try {
+                    IntPtr h = new WindowInteropHelper(this).Handle; PresentationSource ps = PresentationSource.FromVisual(this);
+                    Native.RECT wr; Native.MONITORINFO mi = new Native.MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(Native.MONITORINFO));
+                    if (h != IntPtr.Zero && ps != null && Native.GetWindowRect(h, out wr) && Native.GetMonitorInfo(Native.MonitorFromWindow(h, 2), ref mi)) {
+                        Matrix m = ps.CompositionTarget.TransformFromDevice;
+                        pad = new Thickness(Math.Max(0, mi.rcWork.Left - wr.Left) * m.M11, Math.Max(0, mi.rcWork.Top - wr.Top) * m.M22,
+                                            Math.Max(0, wr.Right - mi.rcWork.Right) * m.M11, Math.Max(0, wr.Bottom - mi.rcWork.Bottom) * m.M22);
+                    }
+                } catch { }
+            }
+            frame.Margin = pad;
+            // restore-down could land partly below the screen (seen: top at 220 units, 1000 tall, 1032-unit screen) - nudge it back on
+            if (WindowState == WindowState.Normal && IsLoaded) {
+                Rect wa = SystemParameters.WorkArea;
+                if (Top + ActualHeight > wa.Bottom) Top = Math.Max(wa.Top, wa.Bottom - ActualHeight);
+                if (Left + ActualWidth > wa.Right) Left = Math.Max(wa.Left, wa.Right - ActualWidth);
+            }
+            frameBorder.BorderThickness = maxed ? new Thickness(0) : new Thickness(1);   // a hairline edge when floating (no native frame now)
         }
 
         // ---------- header ----------

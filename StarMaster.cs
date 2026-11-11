@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("79.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("79.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("80.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("80.0.0.0")]
 
 namespace StarMaster {
 
@@ -611,7 +611,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "79";
+        public const string Version = "80";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -691,11 +691,11 @@ namespace StarMaster {
             UseLayoutRounding = true;
             Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
 
-            Grid root = new Grid { Margin = new Thickness(22) };
+            Grid root = new Grid { Margin = new Thickness(22, 12, 22, 22) };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             root.Children.Add(Header());
-            FrameworkElement cards = (FrameworkElement)Cards(); cards.Margin = new Thickness(0, 18, 0, 0); Grid.SetRow(cards, 1); root.Children.Add(cards);
+            FrameworkElement cards = (FrameworkElement)Cards(); cards.Margin = new Thickness(0, 12, 0, 0); Grid.SetRow(cards, 1); root.Children.Add(cards);
             Grid shell = new Grid(); shell.Children.Add(root); shell.Children.Add(BuildOverlay());
             Content = shell;
 
@@ -751,38 +751,37 @@ namespace StarMaster {
         // ---------- header ----------
         UIElement Header() {
             DockPanel d = new DockPanel { LastChildFill = false };
-            Border logo = new Border { Width = 46, Height = 46, CornerRadius = new CornerRadius(12), Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
-            Polygon star = new Polygon { Fill = Ui.AccentGrad(), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+            // v80: every top-bar pill is the same height (PillH) and the bar is slimmer - the launch toggles sit side by side
+            const double PillH = 38;
+            Border logo = new Border { Width = PillH, Height = PillH, CornerRadius = new CornerRadius(11), Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+            Polygon star = new Polygon { Fill = Ui.AccentGrad(), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(0.85, 0.85) };
             star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
             logo.Child = star; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
-            StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
-            ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 20, FontWeight = FontWeights.Bold });
-            ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 11 });
+            StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 18, FontWeight = FontWeights.Bold, LineHeight = 20, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });
+            ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 9.5 });
             DockPanel.SetDock(ttl, Dock.Left); d.Children.Add(ttl);
-            // left-aligned dashboard section: version + release date + the app-wide Start-minimised setting
-            Border sec = new Border { Margin = new Thickness(26, 0, 0, 0), Padding = new Thickness(16, 9, 16, 9), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+            // version + release date + the two app-wide launch settings, all on one line
+            Border sec = HeaderPill(); sec.Margin = new Thickness(22, 0, 0, 0);
             StackPanel secRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            StackPanel ver = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            ver.Children.Add(new TextBlock { Text = "Version " + Version, Foreground = Ui.Accent2, FontSize = 11.5, FontWeight = FontWeights.SemiBold });
-            ver.Children.Add(new TextBlock { Text = "Released " + VersionDate, Foreground = Ui.Faint, FontSize = 9.5 });
+            TextBlock ver = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+            ver.Inlines.Add(new Run("Version " + Version) { Foreground = Ui.Accent2, FontSize = 11.5, FontWeight = FontWeights.SemiBold });
+            ver.Inlines.Add(new Run("   released " + VersionDate) { Foreground = Ui.Faint, FontSize = 9.5 });
             secRow.Children.Add(ver);
-            secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(16, 2, 16, 2) });
-            // two stacked app-wide launch settings (vertical so the header still fits at MinWidth)
-            StackPanel launch = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            launch.Children.Add(LaunchToggleRow(startMinimized, "Start minimised", delegate (bool v) { startMinimized = v; }));
+            secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(14, 9, 14, 9) });
+            secRow.Children.Add(LaunchToggleRow(startMinimized, "Start minimised", delegate (bool v) { startMinimized = v; }));
             StackPanel sww = LaunchToggleRow(StartWithWindowsOn(), "Start with Windows", delegate (bool v) { SetStartWithWindows(v); });
-            sww.Margin = new Thickness(0, 5, 0, 0); launch.Children.Add(sww);
-            secRow.Children.Add(launch);
+            sww.Margin = new Thickness(18, 0, 0, 0); secRow.Children.Add(sww);
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
             // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
-            Border scSec = new Border { Margin = new Thickness(14, 0, 0, 0), Padding = new Thickness(14, 8, 14, 8), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+            Border scSec = HeaderPill(); scSec.Margin = new Thickness(12, 0, 0, 0); scSec.Padding = new Thickness(14, 0, 6, 0);
             StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
-            scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center;
+            scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center; scRoot.Padding = new Thickness(8, 4, 8, 4);
             scRoot.LostFocus += delegate { RefreshChannels(); };
             scRow.Children.Add(scRoot);
             scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
-            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
+            updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; updBtn.Height = PillH; updBtn.Padding = new Thickness(16, 0, 16, 0); updBtn.CornerRadius = new CornerRadius(12); updBtnLbl.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
             // hands-off update status line in the top row; shown instead of the Check button while an
             // update downloads + installs itself (no Download/Later buttons - it's a status, not a prompt)
             updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
@@ -792,6 +791,7 @@ namespace StarMaster {
             DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
             return d;
         }
+        Border HeaderPill() { return new Border { Height = 38, Padding = new Thickness(14, 0, 14, 0), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }; }
         StackPanel LaunchToggleRow(bool on, string label, Action<bool> changed) {
             StackPanel s = new StackPanel { Orientation = Orientation.Horizontal };
             s.Children.Add(Toggle(on, changed));

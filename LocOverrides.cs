@@ -8,6 +8,7 @@ namespace StarMaster {
     // touched it - remembered here because once applied, the file itself only holds the override.
     public class LocOverride {
         public string Group = "", Key = "", Original = "", Name = "";
+        public string Applied = "";   // the value we last wrote into the file - so an EDIT (file still holds the old override) isn't mistaken for a new original (v79)
     }
     public class LocEntry {
         public string Key, Value;
@@ -56,7 +57,7 @@ namespace StarMaster {
             bool changed = false;
             foreach (LocOverride o in list) {
                 string v; if (!TryGet(text, o.Key, out v)) continue;
-                if (v != o.Name && v != o.Original) { o.Original = v; changed = true; }
+                if (v != o.Name && v != o.Original && v != o.Applied) { o.Original = v; changed = true; }
             }
             return changed;
         }
@@ -79,12 +80,12 @@ namespace StarMaster {
             return changed == 0 ? text : string.Join("\n", parts);
         }
 
-        // config line: Group<TAB>Key<TAB>Original<TAB>Name
-        public static string Encode(LocOverride o) { return Clean(o.Group) + "\t" + Clean(o.Key) + "\t" + Clean(o.Original) + "\t" + Clean(o.Name); }
+        // config line: Group<TAB>Key<TAB>Original<TAB>Name<TAB>Applied (Applied optional - v77 lines have 4 fields)
+        public static string Encode(LocOverride o) { return Clean(o.Group) + "\t" + Clean(o.Key) + "\t" + Clean(o.Original) + "\t" + Clean(o.Name) + "\t" + Clean(o.Applied); }
         public static LocOverride Decode(string s) {
             if (s == null) return null;
             string[] f = s.Split('\t'); if (f.Length < 4 || f[1].Length == 0) return null;
-            return new LocOverride { Group = f[0], Key = f[1], Original = f[2], Name = f[3] };
+            return new LocOverride { Group = f[0], Key = f[1], Original = f[2], Name = f[3], Applied = f.Length >= 5 && f[4].Length > 0 ? f[4] : f[3] };
         }
         // names live on one ini line: no tabs / line breaks
         public static string Clean(string s) { if (s == null) return ""; return s.Replace("\t", " ").Replace("\r", " ").Replace("\n", " ").Trim(); }

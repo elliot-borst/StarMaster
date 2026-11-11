@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("78.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("78.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("79.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("79.0.0.0")]
 
 namespace StarMaster {
 
@@ -611,7 +611,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "78";
+        public const string Version = "79";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -756,15 +756,15 @@ namespace StarMaster {
             star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
             logo.Child = star; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
             StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
-            ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 23, FontWeight = FontWeights.Bold });
-            ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 12.5 });
+            ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 20, FontWeight = FontWeights.Bold });
+            ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 11 });
             DockPanel.SetDock(ttl, Dock.Left); d.Children.Add(ttl);
             // left-aligned dashboard section: version + release date + the app-wide Start-minimised setting
             Border sec = new Border { Margin = new Thickness(26, 0, 0, 0), Padding = new Thickness(16, 9, 16, 9), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
             StackPanel secRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             StackPanel ver = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            ver.Children.Add(new TextBlock { Text = "Version " + Version, Foreground = Ui.Accent2, FontSize = 13, FontWeight = FontWeights.SemiBold });
-            ver.Children.Add(new TextBlock { Text = "Released " + VersionDate, Foreground = Ui.Faint, FontSize = 11 });
+            ver.Children.Add(new TextBlock { Text = "Version " + Version, Foreground = Ui.Accent2, FontSize = 11.5, FontWeight = FontWeights.SemiBold });
+            ver.Children.Add(new TextBlock { Text = "Released " + VersionDate, Foreground = Ui.Faint, FontSize = 9.5 });
             secRow.Children.Add(ver);
             secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(16, 2, 16, 2) });
             // two stacked app-wide launch settings (vertical so the header still fits at MinWidth)
@@ -777,7 +777,7 @@ namespace StarMaster {
             // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
             Border scSec = new Border { Margin = new Thickness(14, 0, 0, 0), Padding = new Thickness(14, 8, 14, 8), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
             StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
             scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center;
             scRoot.LostFocus += delegate { RefreshChannels(); };
             scRow.Children.Add(scRoot);
@@ -787,7 +787,7 @@ namespace StarMaster {
             // update downloads + installs itself (no Download/Later buttons - it's a status, not a prompt)
             updateNotice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
             updateNotice.Children.Add(new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = Ui.Good, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
-            updateNoticeText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            updateNoticeText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
             updateNotice.Children.Add(updateNoticeText);
             DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
             return d;
@@ -795,7 +795,7 @@ namespace StarMaster {
         StackPanel LaunchToggleRow(bool on, string label, Action<bool> changed) {
             StackPanel s = new StackPanel { Orientation = Orientation.Horizontal };
             s.Children.Add(Toggle(on, changed));
-            s.Children.Add(new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            s.Children.Add(new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             return s;
         }
 
@@ -810,14 +810,14 @@ namespace StarMaster {
         void HideOverlay() { overlayHost.Visibility = Visibility.Collapsed; overlayCard.Child = null; overlayCard.MaxWidth = 480; }
         StackPanel DialogShell(string title, double width) {
             StackPanel s = new StackPanel(); if (width > 0) s.Width = width;
-            s.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
+            s.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
             return s;
         }
         void ShowOverlay(UIElement content) { overlayCard.Child = content; overlayHost.Visibility = Visibility.Visible; }
         // a yes/no confirm, in-app
         void ShowConfirm(string title, string msg, string okText, Action onOk) {
             StackPanel s = DialogShell(title, 0);
-            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
+            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
             StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
             Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 9, 16, 9); btns.Children.Add(cancel); btns.Children.Add(Sp(10));
             Border ok = Btn(okText, Ui.AccentGrad(), Ui.Ink, true, delegate { HideOverlay(); if (onOk != null) onOk(); }); ok.Padding = new Thickness(18, 9, 18, 9); btns.Children.Add(ok);
@@ -826,7 +826,7 @@ namespace StarMaster {
         // an OK-only message, in-app
         void ShowAlert(string title, string msg) {
             StackPanel s = DialogShell(title, 0);
-            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
+            s.Children.Add(new TextBlock { Text = msg, Foreground = Ui.Dim, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, LineHeight = 19 });
             StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
             Border ok = Btn("OK", Ui.AccentGrad(), Ui.Ink, true, delegate { HideOverlay(); }); ok.Padding = new Thickness(18, 9, 18, 9); btns.Children.Add(ok);
             s.Children.Add(btns); ShowOverlay(s);
@@ -841,7 +841,7 @@ namespace StarMaster {
             s.Children.Add(mods);
             s.Children.Add(FormLbl("Key  (A-Z, 0-9, F1-F12, Space, Enter, Tab, Esc, [ ])")); TextBox key = FormTb(edit != null ? edit.Key : ""); s.Children.Add(key);
             s.Children.Add(FormLbl("Every (seconds)")); TextBox interval = FormTb(edit != null ? edit.Interval.ToString() : "600"); s.Children.Add(interval);
-            TextBlock err = new TextBlock { Foreground = Ui.DangerFg, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
+            TextBlock err = new TextBlock { Foreground = Ui.DangerFg, FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
             s.Children.Add(err);
             StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
             Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(cancel); btns.Children.Add(Sp(10));
@@ -856,8 +856,8 @@ namespace StarMaster {
             btns.Children.Add(save); s.Children.Add(btns);
             ShowOverlay(s);
         }
-        TextBlock FormLbl(string t) { return new TextBlock { Text = t, Foreground = Ui.Dim, FontSize = 11.5, Margin = new Thickness(0, 8, 0, 4) }; }
-        TextBox FormTb(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(7, 5, 7, 5), FontSize = 13 }; }
+        TextBlock FormLbl(string t) { return new TextBlock { Text = t, Foreground = Ui.Dim, FontSize = 10, Margin = new Thickness(0, 8, 0, 4) }; }
+        TextBox FormTb(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(7, 5, 7, 5), FontSize = 11.5 }; }
         UIElement ModBtn(string t, bool[] state) { Border b = Btn(t, state[0] ? (Brush)Ui.AccentGrad() : Ui.Card2, state[0] ? Ui.Ink : Ui.Text, false, null); b.Margin = new Thickness(0, 0, 8, 0); b.Padding = new Thickness(14, 7, 14, 7); b.MouseLeftButtonUp += delegate { state[0] = !state[0]; b.Background = state[0] ? (Brush)Ui.AccentGrad() : Ui.Card2; ((TextBlock)b.Child).Foreground = state[0] ? Ui.Ink : Ui.Text; }; return b; }
 
         UIElement Cards() {
@@ -876,16 +876,16 @@ namespace StarMaster {
         // ---------- shader cache card (half-width tile) ----------
         FrameworkElement ShaderCacheCard() {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♻", "Shader Cache", "cache clear + VFX texture streaming tweaks");
-            body.Children.Add(new TextBlock { Text = "Deletes the shader cache at %LOCALAPPDATA%\\Star Citizen - safe, the game rebuilds it on next launch. Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 10) });
-            shaderSizeTxt = new TextBlock { Text = "Cache size: checking...", Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 0, 0, 10) }; body.Children.Add(shaderSizeTxt);
+            body.Children.Add(new TextBlock { Text = "Deletes the shader cache at %LOCALAPPDATA%\\Star Citizen - safe, the game rebuilds it on next launch. Close Star Citizen first.", Foreground = Ui.Dim, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, LineHeight = 18, Margin = new Thickness(0, 0, 0, 10) });
+            shaderSizeTxt = new TextBlock { Text = "Cache size: checking...", Foreground = Ui.Text, FontSize = 11, FontFamily = Ui.Mono, Margin = new Thickness(0, 0, 0, 10) }; body.Children.Add(shaderSizeTxt);
             shaderClrBtn = Btn("♻  Clear shader cache", Ui.AccentGrad(), Ui.Ink, true, delegate { if (shaderBtnEnabled) ClearShaderCache(); }); shaderClrBtn.Padding = new Thickness(18, 10, 18, 10); shaderClrBtn.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(shaderClrBtn);
-            shaderRunNote = new TextBlock { Text = "Star Citizen is running - close it to clear the cache or apply tweaks.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(shaderRunNote);
-            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) }; body.Children.Add(shaderStatus);
+            shaderRunNote = new TextBlock { Text = "Star Citizen is running - close it to clear the cache or apply tweaks.", Foreground = Ui.Warn, FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(shaderRunNote);
+            shaderStatus = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 10, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) }; body.Children.Add(shaderStatus);
             // --- VFX texture streaming (user.cfg CVars from the CVars catalog) ---
             body.Children.Add(new Border { Height = 1, Background = Ui.Line, Margin = new Thickness(0, 12, 0, 10) });
             DockPanel capRow = new DockPanel { LastChildFill = false };
             TextBlock cvCap = Caps("VFX streaming - user.cfg"); DockPanel.SetDock(cvCap, Dock.Left); capRow.Children.Add(cvCap);
-            cvCurrent = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            cvCurrent = new TextBlock { Text = "", Foreground = Ui.Dim, FontSize = 9.5, FontFamily = Ui.Mono, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(cvCurrent, Dock.Right); capRow.Children.Add(cvCurrent);
             body.Children.Add(capRow);
             cvMipsDef = CVars.Find("r_texturesStreamingVFXDesiredMips"); cvPreDef = CVars.Find("e_ParticleTexturePreLoading");
@@ -893,11 +893,11 @@ namespace StarMaster {
             cvMips = new Dropdown(cvMipChoices, CVars.ValueLabel(cvMipsDef, cvMipsDef.Def), 168); cvMips.OnChange = delegate (string v) { cvDirty = true; };
             StackPanel mipsRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(cvMipsDef) };
             mipsRow.Children.Add(cvMips);
-            mipsRow.Children.Add(new TextBlock { Text = cvMipsDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            mipsRow.Children.Add(new TextBlock { Text = cvMipsDef.Label, Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
             body.Children.Add(mipsRow);
             StackPanel preRow = new StackPanel { Orientation = Orientation.Horizontal, Background = Brushes.Transparent, Margin = new Thickness(0, 8, 0, 0), ToolTip = CvTip(cvPreDef) };
             preRow.Children.Add(Toggle(cvPreload, delegate (bool v) { cvPreload = v; cvDirty = true; }, out setCvPreloadVisual));
-            preRow.Children.Add(new TextBlock { Text = cvPreDef.Label, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
+            preRow.Children.Add(new TextBlock { Text = cvPreDef.Label, Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(9, 0, 0, 0) });
             body.Children.Add(preRow);
             StackPanel applyRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             string[] chans = BackupOps.DetectChannels(scRoot != null ? scRoot.Text.Trim() : ""); if (chans.Length == 0) chans = new string[] { "LIVE", "HOTFIX" };
@@ -1009,36 +1009,36 @@ namespace StarMaster {
             // overlay controls (in the body - the narrow column header has no room for them)
             StackPanel ov = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             ov.Children.Add(Toggle(monOverlayOn, delegate (bool v) { monOverlayOn = v; ApplyOverlay(); }, out setOverlayToggleVisual));
-            ov.Children.Add(new TextBlock { Text = "  Show Overlay", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            ov.Children.Add(new TextBlock { Text = "  Show Overlay", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ov);
             // global hotkey to show/hide the overlay - toggles it without alt-tabbing out of the game
             StackPanel hk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             hk.Children.Add(Toggle(monHotkeyOn, delegate (bool v) { monHotkeyOn = v; if (monHotkeyDrop != null) { monHotkeyDrop.IsEnabled = v; monHotkeyDrop.Opacity = v ? 1.0 : 0.4; } ApplyHotkey(); }));
-            hk.Children.Add(new TextBlock { Text = "  Toggle overlay with a hotkey", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            hk.Children.Add(new TextBlock { Text = "  Toggle overlay with a hotkey", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(hk);
             StackPanel hkr = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-            hkr.Children.Add(new TextBlock { Text = "Hotkey", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            hkr.Children.Add(new TextBlock { Text = "Hotkey", Width = 64, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
             monHotkeyDrop = new Dropdown(HotkeyChoices, monHotkey, 130) { IsEnabled = monHotkeyOn, Opacity = monHotkeyOn ? 1.0 : 0.4 };
             monHotkeyDrop.OnChange = delegate (string k) { monHotkey = k; ApplyHotkey(); };
             hkr.Children.Add(monHotkeyDrop);
             body.Children.Add(hkr);
             StackPanel lk = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             lk.Children.Add(Toggle(monLocked, delegate (bool v) { monLocked = v; if (monWin != null) monWin.SetLocked(v); }));
-            lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            lk.Children.Add(new TextBlock { Text = "  Lock Position", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(lk);
             // only display the overlay while Star Citizen is the foreground window (hidden on the desktop / Alt-Tab / other apps)
             StackPanel ao = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             ao.Children.Add(Toggle(monActiveOnly, delegate (bool v) { monActiveOnly = v; ApplyOverlay(); }));
-            ao.Children.Add(new TextBlock { Text = "  Only show over Star Citizen", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            ao.Children.Add(new TextBlock { Text = "  Only show over Star Citizen", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(ao);
             StackPanel cl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             cl.Children.Add(Toggle(monColors, delegate (bool v) { monColors = v; if (monWin != null) monWin.SetColors(v); }));
-            cl.Children.Add(new TextBlock { Text = "  Show Colours", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            cl.Children.Add(new TextBlock { Text = "  Show Colours", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(cl);
             // custom CPU/GPU display names
             StackPanel no = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
             no.Children.Add(Toggle(monNameOvr, delegate (bool v) { monNameOvr = v; if (monCpuNameBox != null) monCpuNameBox.IsEnabled = v; if (monGpuNameBox != null) monGpuNameBox.IsEnabled = v; }));
-            no.Children.Add(new TextBlock { Text = "  Override names (blank = detected)", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            no.Children.Add(new TextBlock { Text = "  Override names (blank = detected)", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(no);
             monCpuNameBox = TextField(monCpuName); monCpuNameBox.IsEnabled = monNameOvr; monCpuNameBox.TextChanged += delegate { monCpuName = monCpuNameBox.Text; };
             body.Children.Add(NameOverrideRow("CPU name", monCpuNameBox, monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
@@ -1047,14 +1047,14 @@ namespace StarMaster {
             // FPS via PresentMon (reads frames via ETW). The Show-FPS toggle; PresentMon's health/status lives in its own box at the bottom (mirrors the HWiNFO box).
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
-            fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(fp);
             // box + text opacity sliders (10% steps)
             body.Children.Add(OpacityRow("Box Opacity", monOvAlpha, delegate (int v) { monOvAlpha = v; SetOverlayStyle(); }));
             body.Children.Add(OpacityRow("Text Opacity", monTextAlpha, delegate (int v) { monTextAlpha = v; SetOverlayStyle(); }));
             // overlay background colour (swatches)
             StackPanel coR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
-            coR.Children.Add(new TextBlock { Text = "Colour", Width = 64, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            coR.Children.Add(new TextBlock { Text = "Colour", Width = 64, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
             string[] swatches = { "0a0e18", "000000", "10131c", "141a2b", "0a1a14", "1a0e12", "140a1e", "20242e" };
             List<Border> swBorders = new List<Border>();
             foreach (string hx in swatches) {
@@ -1073,10 +1073,10 @@ namespace StarMaster {
             // HWiNFO status (the CPU TEMPERATURE source; watts come from Windows RAPL since v73). Shows install/run state + an action button.
             Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
-            hwIn.Children.Add(new TextBlock { Text = "HWiNFO", Foreground = Ui.Text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            hwIn.Children.Add(new TextBlock { Text = "HWiNFO", Foreground = Ui.Text, FontSize = 9.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
             DockPanel hwTop = new DockPanel { LastChildFill = false };
             monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
-            monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
+            monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
             hwIn.Children.Add(hwTop);
             // setup checklist: one pill per requirement, green when done / yellow when still to do (status only - StarMaster can't tick HWiNFO's boxes without the shelved elevated helper)
             WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 8, 0, 2) };
@@ -1087,27 +1087,27 @@ namespace StarMaster {
             hwPills.Children.Add(hwPillMinS = HwPill("Min. sensors", "Sensors window starts minimized. HWiNFO -> Settings -> tick 'Minimize Sensors on Startup'."));
             hwPills.Children.Add(hwPillMinC = HwPill("Min. on close", "Closing goes to the tray instead of quitting. HWiNFO -> Settings -> tick 'Minimize Sensors instead of closing'."));
             hwIn.Children.Add(hwPills);
-            monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+            monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
             hwIn.Children.Add(monHwTip);
             hwBox.Child = hwIn; body.Children.Add(hwBox);
             // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
             Border fpsBox = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(new TextBlock { Text = "PresentMon", Foreground = Ui.Text, FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            fpsIn.Children.Add(new TextBlock { Text = "PresentMon", Foreground = Ui.Text, FontSize = 9.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
             DockPanel fpsTop = new DockPanel { LastChildFill = false };
             monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
-            monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
+            monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
             fpsIn.Children.Add(fpsTop);
-            monFpsTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+            monFpsTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
             fpsIn.Children.Add(monFpsTip);
             fpsBox.Child = fpsIn; body.Children.Add(fpsBox);
             return card;
         }
         FrameworkElement MetricRow(string label, out MonBar bar, out TextBlock val) {
             DockPanel d = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-            TextBlock l = new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 12.5, FontFamily = Ui.Mono, Width = 46, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock l = new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, Width = 46, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(l, Dock.Left); d.Children.Add(l);
-            val = new TextBlock { Text = "--", Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, Width = 180, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            val = new TextBlock { Text = "--", Foreground = Ui.Text, FontSize = 11, FontFamily = Ui.Mono, Width = 180, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
             DockPanel.SetDock(val, Dock.Right); d.Children.Add(val);
             bar = new MonBar(14) { VerticalAlignment = VerticalAlignment.Center };
             d.Children.Add(bar);   // LastChildFill: the bar fills the middle
@@ -1164,8 +1164,8 @@ namespace StarMaster {
         // a labelled opacity slider (0-100, 10% steps) with a live % readout
         UIElement OpacityRow(string label, int initial, Action<int> set) {
             StackPanel r = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-            r.Children.Add(new TextBlock { Text = label, Width = 96, Foreground = Ui.Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
-            TextBlock val = new TextBlock { Text = initial + "%", Width = 44, Foreground = Ui.Text, FontSize = 12.5, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
+            r.Children.Add(new TextBlock { Text = label, Width = 96, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+            TextBlock val = new TextBlock { Text = initial + "%", Width = 44, Foreground = Ui.Text, FontSize = 11, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
             MonSlider sl = new MonSlider(initial, 10, delegate (int v) { val.Text = v + "%"; set(v); }); sl.VerticalAlignment = VerticalAlignment.Center;
             r.Children.Add(sl); r.Children.Add(Sp(10)); r.Children.Add(val);
             return r;
@@ -1177,7 +1177,7 @@ namespace StarMaster {
         UIElement NameOverrideRow(string k, TextBox box, string curColor, Action<string> setColor) {
             box.Width = 160; box.VerticalAlignment = VerticalAlignment.Center;
             StackPanel r = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-            r.Children.Add(new TextBlock { Text = k, Foreground = Ui.Dim, FontSize = 12.5, Width = 72, VerticalAlignment = VerticalAlignment.Center });
+            r.Children.Add(new TextBlock { Text = k, Foreground = Ui.Dim, FontSize = 11, Width = 72, VerticalAlignment = VerticalAlignment.Center });
             r.Children.Add(box);
             Dropdown cd = ColorDropdown(curColor, setColor); cd.Margin = new Thickness(8, 0, 0, 0);
             r.Children.Add(cd);
@@ -1248,7 +1248,7 @@ namespace StarMaster {
         }
         // a status pill: rounded label, coloured green when the requirement is met, yellow while it's still to do
         Border HwPill(string label, string tip) {
-            TextBlock t = new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock t = new TextBlock { Text = label, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center };
             return new Border { CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1), BorderBrush = Ui.Warn, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 6), Child = t, ToolTip = tip, Tag = label };
         }
         void SetPill(Border pill, bool done) {
@@ -1353,18 +1353,18 @@ namespace StarMaster {
             Border card = new Border { CornerRadius = new CornerRadius(15), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Padding = new Thickness(20, 18, 20, 18), VerticalAlignment = VerticalAlignment.Top };
             StackPanel s = new StackPanel();
             head = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 0, 0, 15) };
-            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.B("#16203a"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 16, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.B("#16203a"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 14, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
             DockPanel.SetDock(ic, Dock.Left); head.Children.Add(ic);
             StackPanel tt = new StackPanel { Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            tt.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 15.5, FontWeight = FontWeights.SemiBold });
-            tt.Children.Add(new TextBlock { Text = sub, Foreground = Ui.Faint, FontSize = 11.5 });
+            tt.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
+            tt.Children.Add(new TextBlock { Text = sub, Foreground = Ui.Faint, FontSize = 10 });
             DockPanel.SetDock(tt, Dock.Left); head.Children.Add(tt);
             s.Children.Add(head); card.Child = s; body = s; return card;
         }
         StackPanel StatusBadge(out Border dot, out TextBlock txt, string text, Brush color) {
             StackPanel st = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             dot = new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(5), Background = color, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 7, 0) };
-            txt = new TextBlock { Text = text, Foreground = color, FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            txt = new TextBlock { Text = text, Foreground = color, FontSize = 10.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
             st.Children.Add(dot); st.Children.Add(txt); return st;
         }
 
@@ -1373,16 +1373,16 @@ namespace StarMaster {
             StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "♥", "Keep-Alive", "anti-idle keystrokes");
             StackPanel kaBadge = StatusBadge(out statusDot, out statusText, "Stopped", Ui.Dim); statusDot.Background = Ui.Faint; kaBadge.VerticalAlignment = VerticalAlignment.Top; DockPanel.SetDock(kaBadge, Dock.Right); head.Children.Add(kaBadge);
             cmdPanel = new StackPanel(); body.Children.Add(cmdPanel); RefreshCommands();
-            Border add = new Border { Margin = new Thickness(0, 2, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Child = new TextBlock { Text = "+  Add keystroke", Foreground = Ui.Dim, FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center } };
+            Border add = new Border { Margin = new Thickness(0, 2, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Child = new TextBlock { Text = "+  Add keystroke", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center } };
             add.MouseLeftButtonUp += delegate { AddKey(); }; body.Children.Add(add);
             // focus guard
             StackPanel fg = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
             fg.Children.Add(Toggle(focusGuard, delegate (bool v) { focusGuard = v; }));
-            fg.Children.Add(new TextBlock { Text = "  Only while window contains:", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) });
-            winTitleBox = new TextBox { Text = winTitle(), Width = 110, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(6, 4, 6, 4), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            fg.Children.Add(new TextBlock { Text = "  Only while window contains:", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) });
+            winTitleBox = new TextBox { Text = winTitle(), Width = 110, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(6, 4, 6, 4), FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center };
             fg.Children.Add(winTitleBox); body.Children.Add(fg);
             StackPanel au = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            au.Children.Add(Toggle(autostart, delegate (bool v) { autostart = v; })); au.Children.Add(new TextBlock { Text = "  Auto-start on launch", Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            au.Children.Add(Toggle(autostart, delegate (bool v) { autostart = v; })); au.Children.Add(new TextBlock { Text = "  Auto-start on launch", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             body.Children.Add(au);
             startBtn = Btn("▶  Start", Ui.AccentGrad(), Ui.Ink, true, delegate { ToggleRun(); }); startBtn.Margin = new Thickness(0, 16, 0, 0); startLbl = (TextBlock)startBtn.Child;
             body.Children.Add(startBtn);
@@ -1401,17 +1401,17 @@ namespace StarMaster {
             if (!c.Enabled) row.Opacity = 0.6;
             DockPanel d = new DockPanel { LastChildFill = false };
             StackPanel left = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand };
-            left.Children.Add(new TextBlock { Text = c.Label, Foreground = Ui.Text, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
-            left.Children.Add(new TextBlock { Text = Combo(c) + " · every " + c.Interval + "s", Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono });
+            left.Children.Add(new TextBlock { Text = c.Label, Foreground = Ui.Text, FontSize = 11.5, FontWeight = FontWeights.SemiBold });
+            left.Children.Add(new TextBlock { Text = Combo(c) + " · every " + c.Interval + "s", Foreground = Ui.Dim, FontSize = 10, FontFamily = Ui.Mono });
             left.MouseLeftButtonUp += delegate { EditKey(cc); };
             DockPanel.SetDock(left, Dock.Left); d.Children.Add(left);
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
             Border tg = Toggle(c.Enabled, delegate (bool v) { cc.Enabled = v; row.Opacity = v ? 1.0 : 0.6; }); tg.Margin = new Thickness(0, 0, 10, 0); right.Children.Add(tg);
             if (c.Locked) {
                 // built-in default: no delete button, just a lock glyph so it's clear why
-                right.Children.Add(new TextBlock { Text = "🔒", Foreground = Ui.Faint, FontSize = 12, Width = 22, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Built-in keystroke (can't be removed)" });
+                right.Children.Add(new TextBlock { Text = "🔒", Foreground = Ui.Faint, FontSize = 10.5, Width = 22, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Built-in keystroke (can't be removed)" });
             } else {
-                Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+                Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 9.5, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
                 del.MouseLeftButtonUp += delegate { commands.Remove(cc); RefreshCommands(); }; right.Children.Add(del);
             }
             DockPanel.SetDock(right, Dock.Right); d.Children.Add(right);
@@ -1461,9 +1461,9 @@ namespace StarMaster {
             body.Children.Add(r2);
             // button on its own line so it never overflows the (now narrower) card
             Border cp = Btn("Copy / Restore", Ui.Card2, Ui.Text, false, delegate { DoCopy(); }); cp.Padding = new Thickness(15, 8, 15, 8); cp.HorizontalAlignment = HorizontalAlignment.Left; cp.Margin = new Thickness(0, 0, 0, 12); body.Children.Add(cp);
-            bkStatus = new TextBlock { Foreground = Ui.Dim, FontSize = 11.5, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) }; body.Children.Add(bkStatus);
+            bkStatus = new TextBlock { Foreground = Ui.Dim, FontSize = 10, FontFamily = Ui.Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) }; body.Children.Add(bkStatus);
             DockPanel rb = new DockPanel { LastChildFill = false }; TextBlock rc = Caps("Recent backups"); DockPanel.SetDock(rc, Dock.Left); rb.Children.Add(rc);
-            Border openFld = new Border { Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Right, Child = new TextBlock { Text = "Open folder ↗", Foreground = Ui.Accent2, FontSize = 11 } };
+            Border openFld = new Border { Cursor = Cursors.Hand, HorizontalAlignment = HorizontalAlignment.Right, Child = new TextBlock { Text = "Open folder ↗", Foreground = Ui.Accent2, FontSize = 9.5 } };
             openFld.MouseLeftButtonUp += delegate { try { Directory.CreateDirectory(BackupOps.BackupsRoot); System.Diagnostics.Process.Start("explorer.exe", "\"" + BackupOps.BackupsRoot + "\""); } catch { } };
             DockPanel.SetDock(openFld, Dock.Right); rb.Children.Add(openFld); body.Children.Add(rb);
             bkChips = new StackPanel { Margin = new Thickness(0, 6, 0, 0) }; body.Children.Add(bkChips);
@@ -1481,8 +1481,8 @@ namespace StarMaster {
             if (cvChannel != null) { cvChannel.SetItems(chans, Pick(chans, cvChannel.Value)); CvRefresh(); }
             bkChips.Children.Clear();
             string[] snaps = BackupOps.Snapshots(); int shown = 0;
-            foreach (string s in snaps) { if (shown++ >= 4) break; bkChips.Children.Add(new TextBlock { Text = s, Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, Margin = new Thickness(0, 2, 0, 2) }); }
-            if (snaps.Length == 0) bkChips.Children.Add(new TextBlock { Text = "(none yet)", Foreground = Ui.Faint, FontSize = 11 });
+            foreach (string s in snaps) { if (shown++ >= 4) break; bkChips.Children.Add(new TextBlock { Text = s, Foreground = Ui.Dim, FontSize = 9.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 2, 0, 2) }); }
+            if (snaps.Length == 0) bkChips.Children.Add(new TextBlock { Text = "(none yet)", Foreground = Ui.Faint, FontSize = 9.5 });
         }
         string Pick(string[] arr, string want) { foreach (string a in arr) if (a == want) return want; return arr.Length > 0 ? arr[0] : ""; }
         void DoBackup() {
@@ -1560,7 +1560,7 @@ namespace StarMaster {
             ssLatest.Text = "(check)";
             ctl.Children.Add(ver);
             body.Children.Add(ctl);
-            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
+            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
 
             // ---- Name overrides: fills the rest of the tile (the card's StackPanel is re-hosted in a Grid so the list gets a star row) ----
             card.Child = null;
@@ -1573,15 +1573,15 @@ namespace StarMaster {
             DockPanel oh = new DockPanel { LastChildFill = false };
             Border ohb = new Border { BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 10, 0, 6), Margin = new Thickness(0, 12, 0, 0), Child = oh };
             StackPanel ohl = new StackPanel { Orientation = Orientation.Horizontal };
-            ohl.Children.Add(new TextBlock { Text = "NAME OVERRIDES", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            ovrCount = new TextBlock { Foreground = Ui.Faint, FontSize = 11, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center }; ohl.Children.Add(ovrCount);
+            ohl.Children.Add(new TextBlock { Text = "NAME OVERRIDES", Foreground = Ui.Dim, FontSize = 9.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            ovrCount = new TextBlock { Foreground = Ui.Faint, FontSize = 9.5, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center }; ohl.Children.Add(ovrCount);
             DockPanel.SetDock(ohl, Dock.Left); oh.Children.Add(ohl);
-            ovrStatus = new TextBlock { Foreground = Ui.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 0, 0, 0) };
+            ovrStatus = new TextBlock { Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 0, 0, 0) };
             DockPanel.SetDock(ovrStatus, Dock.Right); oh.Children.Add(ovrStatus);
             Grid.SetRow(ohb, 1); g.Children.Add(ohb);
             ovrPanel = new StackPanel();
             ScrollViewer sv = DarkScroll(ovrPanel); Grid.SetRow(sv, 2); g.Children.Add(sv);
-            Border add = new Border { Margin = new Thickness(0, 6, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = new TextBlock { Text = "+  Add override", Foreground = Ui.Dim, FontSize = 12.5, HorizontalAlignment = HorizontalAlignment.Center } };
+            Border add = new Border { Margin = new Thickness(0, 6, 0, 0), Padding = new Thickness(10), CornerRadius = new CornerRadius(11), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = new TextBlock { Text = "+  Add override", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center } };
             add.MouseLeftButtonUp += delegate { ShowOverrideGroups(); };
             Grid.SetRow(add, 3); g.Children.Add(add);
             card.Child = g;
@@ -1590,9 +1590,9 @@ namespace StarMaster {
         }
 
         TextBlock VerCell(Grid g, int row, string cap, Brush fg) {
-            TextBlock c = new TextBlock { Text = cap, Foreground = Ui.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            TextBlock c = new TextBlock { Text = cap, Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
             Grid.SetRow(c, row); g.Children.Add(c);
-            TextBlock v = new TextBlock { Foreground = fg, FontSize = 11.5, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            TextBlock v = new TextBlock { Foreground = fg, FontSize = 10, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
             Grid.SetRow(v, row); Grid.SetColumn(v, 1); g.Children.Add(v);
             return v;
         }
@@ -1624,7 +1624,7 @@ namespace StarMaster {
             ovrPanel.Children.Clear();
             ovrCount.Text = overrides.Count > 0 ? "· " + overrides.Count : "";
             if (overrides.Count == 0) {
-                ovrPanel.Children.Add(new TextBlock { Text = "None yet - e.g. shorten long ship names.", Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(2, 0, 2, 4), ToolTip = "Your renames are layered on top of StarStrings and re-applied automatically after every StarStrings update." });
+                ovrPanel.Children.Add(new TextBlock { Text = "None yet - e.g. shorten long ship names.", Foreground = Ui.Faint, FontSize = 10, Margin = new Thickness(2, 0, 2, 4), ToolTip = "Your renames are layered on top of StarStrings and re-applied automatically after every StarStrings update." });
                 return;
             }
             List<LocOverride> sorted = new List<LocOverride>(overrides);
@@ -1633,16 +1633,16 @@ namespace StarMaster {
         }
         UIElement OverrideRow(LocOverride o) {
             LocOverride oo = o;
-            Border row = new Border { Margin = new Thickness(0, 0, 0, 6), Padding = new Thickness(12, 7, 10, 7), CornerRadius = new CornerRadius(11), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            Border row = new Border { Margin = new Thickness(0, 0, 0, 5), Padding = new Thickness(11, 5, 9, 5), CornerRadius = new CornerRadius(11), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             DockPanel d = new DockPanel();
-            Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Remove - puts the original name back", Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            Border del = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Ui.Card2, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Remove - puts the original name back", Child = new TextBlock { Text = "✕", Foreground = Ui.Dim, FontSize = 9.5, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
             del.MouseLeftButtonUp += delegate { RemoveOverride(oo); };
             DockPanel.SetDock(del, Dock.Right); d.Children.Add(del);
-            Border grp = new Border { CornerRadius = new CornerRadius(6), Background = Ui.Card2, Padding = new Thickness(7, 2, 7, 2), Margin = new Thickness(8, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = o.Group, Foreground = Ui.Faint, FontSize = 10.5 } };
+            Border grp = new Border { CornerRadius = new CornerRadius(6), Background = Ui.Card2, Padding = new Thickness(7, 2, 7, 2), Margin = new Thickness(8, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = o.Group, Foreground = Ui.Faint, FontSize = 9.5 } };
             DockPanel.SetDock(grp, Dock.Right); d.Children.Add(grp);
             StackPanel left = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand, Background = Brushes.Transparent, ToolTip = "Click to edit  ·  " + o.Key };
-            left.Children.Add(new TextBlock { Text = o.Name, Foreground = Ui.Text, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-            TextBlock orig = new TextBlock { FontSize = 11.5, Foreground = Ui.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
+            left.Children.Add(new TextBlock { Text = o.Name, Foreground = Ui.Text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+            TextBlock orig = new TextBlock { FontSize = 10, Foreground = Ui.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
             orig.Inlines.Add(new Run("original  ")); orig.Inlines.Add(new Run(o.Original) { Foreground = Ui.Dim });
             left.Children.Add(orig);
             left.MouseLeftButtonUp += delegate { ShowRenameForm(oo.Group, oo.Key, oo.Original, oo); };
@@ -1663,24 +1663,31 @@ namespace StarMaster {
             if (ovrBusy) { Dispatcher.BeginInvoke(new Action(delegate { RunOverrides(reverts); }), DispatcherPriority.Background); return; }
             ovrBusy = true; SetOvrStatus("applying...", Ui.Dim);
             List<LocOverride> work = new List<LocOverride>();
-            foreach (LocOverride o in overrides) work.Add(new LocOverride { Group = o.Group, Key = o.Key, Original = o.Original, Name = o.Name });
+            foreach (LocOverride o in overrides) work.Add(new LocOverride { Group = o.Group, Key = o.Key, Original = o.Original, Name = o.Name, Applied = o.Applied });
             List<LocOverride> all = new List<LocOverride>();
             if (reverts != null) all.AddRange(reverts);
             all.AddRange(work);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
-                string res = null; Brush fg = Ui.Good; bool reconciled = false;
+                string res = null; Brush fg = Ui.Good; bool reconciled = false, wrote = false;
                 try {
                     bool bom; string text = ReadLoc(p, out bom);
                     reconciled = LocOverrides.Reconcile(text, work);
                     int missing = 0; foreach (LocOverride o in work) { string v; if (!LocOverrides.TryGet(text, o.Key, out v)) missing++; }
                     int n; string outText = LocOverrides.Apply(text, all, out n);
                     if (n > 0) File.WriteAllText(p, outText, new UTF8Encoding(bom));
+                    wrote = true;   // the file now holds every Name
                     res = n > 0 ? "✓ applied to " + ch + " - restart Star Citizen to see it" : (work.Count > 0 ? "✓ all applied (" + ch + ")" : "✓ original restored (" + ch + ")");
                     if (missing > 0) { res = missing + " name(s) not found in " + ch; fg = Ui.Warn; }
                 } catch (Exception ex) { res = "couldn't write global.ini: " + ex.Message; fg = Ui.DangerFg; }
                 Dispatcher.BeginInvoke(new Action(delegate {
                     ovrBusy = false;
-                    if (reconciled) { foreach (LocOverride w in work) { LocOverride o = FindOverride(w.Key); if (o != null) o.Original = w.Original; } SaveConfig(); RefreshOverrides(); }
+                    bool dirty = reconciled;
+                    foreach (LocOverride w in work) {
+                        LocOverride o = FindOverride(w.Key); if (o == null) continue;
+                        if (reconciled) o.Original = w.Original;
+                        if (wrote && o.Name == w.Name && o.Applied != w.Name) { o.Applied = w.Name; dirty = true; }   // remember what is in the file now (skip if the user edited it again meanwhile)
+                    }
+                    if (dirty) { SaveConfig(); RefreshOverrides(); }
                     SetOvrStatus(res, fg);
                 }));
             });
@@ -1708,21 +1715,21 @@ namespace StarMaster {
         // step 1: pick a group (only Ships today; more groups slot into LocOverrides.Groups)
         void ShowOverrideGroups() {
             StackPanel s = DialogShell("Add override", 420);
-            s.Children.Add(new TextBlock { Text = "What do you want to rename?", Foreground = Ui.Dim, FontSize = 13, Margin = new Thickness(0, 0, 0, 10) });
+            s.Children.Add(new TextBlock { Text = "What do you want to rename?", Foreground = Ui.Dim, FontSize = 11.5, Margin = new Thickness(0, 0, 0, 10) });
             foreach (string grp in LocOverrides.Groups) {
                 string gg = grp;
                 Border b = new Border { Padding = new Thickness(14, 11, 14, 11), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(11), Background = Ui.Inset, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Cursor = Cursors.Hand };
                 DockPanel d = new DockPanel();
-                TextBlock arr = new TextBlock { Text = "›", Foreground = Ui.Accent, FontSize = 18, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(arr, Dock.Right); d.Children.Add(arr);
+                TextBlock arr = new TextBlock { Text = "›", Foreground = Ui.Accent, FontSize = 15.5, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(arr, Dock.Right); d.Children.Add(arr);
                 StackPanel t = new StackPanel();
-                t.Children.Add(new TextBlock { Text = gg, Foreground = Ui.Text, FontSize = 14, FontWeight = FontWeights.SemiBold });
-                t.Children.Add(new TextBlock { Text = gg == "Ships" ? "Ship and vehicle names (fleet manager, hangars, HUD)" : "", Foreground = Ui.Faint, FontSize = 11.5 });
+                t.Children.Add(new TextBlock { Text = gg, Foreground = Ui.Text, FontSize = 12, FontWeight = FontWeights.SemiBold });
+                t.Children.Add(new TextBlock { Text = gg == "Ships" ? "Ship and vehicle names (fleet manager, hangars, HUD)" : "", Foreground = Ui.Faint, FontSize = 10 });
                 d.Children.Add(t); b.Child = d;
                 b.MouseEnter += delegate { b.BorderBrush = Ui.Accent; }; b.MouseLeave += delegate { b.BorderBrush = Ui.Line2; };
                 b.MouseLeftButtonUp += delegate { ShowGroupList(gg); };
                 s.Children.Add(b);
             }
-            s.Children.Add(new TextBlock { Text = "More groups (weapons, items...) can be added later.", Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 2, 0, 0) });
+            s.Children.Add(new TextBlock { Text = "More groups (weapons, items...) can be added later.", Foreground = Ui.Faint, FontSize = 10, Margin = new Thickness(0, 2, 0, 0) });
             StackPanel btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
             Border cancel = Btn("Cancel", Ui.Card2, Ui.Text, false, delegate { HideOverlay(); }); cancel.Padding = new Thickness(16, 8, 16, 8); btns.Children.Add(cancel);
             s.Children.Add(btns);
@@ -1734,7 +1741,7 @@ namespace StarMaster {
             string p = LocPath(); string ch = ssChannel.Value;
             if (p == null || !File.Exists(p)) { ShowAlert("StarStrings not installed", "There's no localization file for " + ch + " yet:\n\n" + p + "\n\nInstall StarStrings for this channel first - overrides are layered on top of it."); return; }
             StackPanel wait = DialogShell("Add override - " + group, 560);
-            wait.Children.Add(new TextBlock { Text = "Reading " + ch + " localization...", Foreground = Ui.Dim, FontSize = 13 });
+            wait.Children.Add(new TextBlock { Text = "Reading " + ch + " localization...", Foreground = Ui.Dim, FontSize = 11.5 });
             ShowWide(wait, 620);
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 List<LocEntry> items = null; string err = null;
@@ -1748,11 +1755,11 @@ namespace StarMaster {
         }
         void BuildGroupList(string group, List<LocEntry> items) {
             StackPanel s = DialogShell("Add override - " + group, 560);
-            TextBox search = FormTb(""); search.FontSize = 13.5;
-            TextBlock count = new TextBlock { Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 0, 0, 4) };
+            TextBox search = FormTb(""); search.FontSize = 11.5;
+            TextBlock count = new TextBlock { Foreground = Ui.Faint, FontSize = 10, Margin = new Thickness(0, 0, 0, 4) };
             DockPanel sh = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
             DockPanel.SetDock(count, Dock.Right); sh.Children.Add(count);
-            sh.Children.Add(new TextBlock { Text = "Search  (name or part of a name)", Foreground = Ui.Dim, FontSize = 11.5 });
+            sh.Children.Add(new TextBlock { Text = "Search  (name or part of a name)", Foreground = Ui.Dim, FontSize = 10 });
             s.Children.Add(sh); s.Children.Add(search);
             StackPanel list = new StackPanel();
             List<KeyValuePair<Border, string>> rows = new List<KeyValuePair<Border, string>>();
@@ -1761,10 +1768,10 @@ namespace StarMaster {
                 string original = ex != null ? ex.Original : e.Value;   // once applied, the file holds our override - show the remembered original
                 Border r = new Border { Padding = new Thickness(11, 7, 11, 7), CornerRadius = new CornerRadius(8), Cursor = Cursors.Hand, Background = Brushes.Transparent };
                 DockPanel d = new DockPanel();
-                if (ex != null) { TextBlock tag = new TextBlock { Text = "→ " + ex.Name, Foreground = Ui.Accent, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) }; DockPanel.SetDock(tag, Dock.Right); d.Children.Add(tag); }
+                if (ex != null) { TextBlock tag = new TextBlock { Text = "→ " + ex.Name, Foreground = Ui.Accent, FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) }; DockPanel.SetDock(tag, Dock.Right); d.Children.Add(tag); }
                 StackPanel t = new StackPanel();
-                t.Children.Add(new TextBlock { Text = original, Foreground = Ui.Text, FontSize = 13 });
-                t.Children.Add(new TextBlock { Text = e.Key, Foreground = Ui.Faint, FontSize = 10.5, FontFamily = Ui.Mono });
+                t.Children.Add(new TextBlock { Text = original, Foreground = Ui.Text, FontSize = 11.5 });
+                t.Children.Add(new TextBlock { Text = e.Key, Foreground = Ui.Faint, FontSize = 9.5, FontFamily = Ui.Mono });
                 d.Children.Add(t); r.Child = d;
                 r.MouseEnter += delegate { r.Background = Ui.Card2; }; r.MouseLeave += delegate { r.Background = Brushes.Transparent; };
                 r.MouseLeftButtonUp += delegate { ShowRenameForm(group, ee.Key, original, FindOverride(ee.Key)); };
@@ -1798,11 +1805,11 @@ namespace StarMaster {
         void ShowRenameForm(string group, string key, string original, LocOverride existing) {
             StackPanel s = DialogShell(existing != null ? "Edit override" : "Rename " + (group == "Ships" ? "ship" : group.ToLowerInvariant()), 520);
             s.Children.Add(FormLbl("Original name"));
-            s.Children.Add(new Border { Padding = new Thickness(8, 6, 8, 6), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Child = new TextBlock { Text = original, Foreground = Ui.Dim, FontSize = 13, TextWrapping = TextWrapping.Wrap } });
-            s.Children.Add(new TextBlock { Text = key, Foreground = Ui.Faint, FontSize = 10.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 4, 0, 0) });
+            s.Children.Add(new Border { Padding = new Thickness(8, 6, 8, 6), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Child = new TextBlock { Text = original, Foreground = Ui.Dim, FontSize = 11.5, TextWrapping = TextWrapping.Wrap } });
+            s.Children.Add(new TextBlock { Text = key, Foreground = Ui.Faint, FontSize = 9.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 4, 0, 0) });
             s.Children.Add(FormLbl("Override name"));
             TextBox tb = FormTb(existing != null ? existing.Name : original); s.Children.Add(tb);
-            TextBlock len = new TextBlock { Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(0, 6, 0, 0) }; s.Children.Add(len);
+            TextBlock len = new TextBlock { Foreground = Ui.Faint, FontSize = 10, Margin = new Thickness(0, 6, 0, 0) }; s.Children.Add(len);
             Action upd = delegate { int n = LocOverrides.Clean(tb.Text).Length; len.Text = n + " characters  ·  original " + original.Length + (n < original.Length ? "  (" + (original.Length - n) + " shorter)" : ""); };
             tb.TextChanged += delegate { upd(); }; upd();
             Action save = delegate {
@@ -1824,7 +1831,7 @@ namespace StarMaster {
         }
         void ShowWide(UIElement content, double maxW) { overlayCard.MaxWidth = maxW; ShowOverlay(content); }
         // a stacked label + wrapping mono value (for the half-width tile)
-        StackPanel BuildRow(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 8, 0, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 12.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap }; s.Children.Add(val); return s; }
+        StackPanel BuildRow(string cap, out TextBlock val, string v, Brush fg) { StackPanel s = new StackPanel { Margin = new Thickness(0, 8, 0, 0) }; s.Children.Add(Caps(cap)); val = new TextBlock { Text = v, Foreground = fg, FontSize = 11, FontFamily = Ui.Mono, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap }; s.Children.Add(val); return s; }
         void SSCheck(bool announce) {
             if (announce) ssLatest.Text = "checking...";
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
@@ -1846,7 +1853,7 @@ namespace StarMaster {
             ssStatus.Text = text; ssStatus.Foreground = fg; ssDot.Background = dot;
             ssBadgePill.Background = highlight ? (Brush)Ui.AccentGrad() : Brushes.Transparent;
             ssBadgePill.Padding = highlight ? new Thickness(11, 5, 11, 5) : new Thickness(0);
-            ssStatus.FontSize = highlight ? 13 : 12;
+            ssStatus.FontSize = highlight ? 11.5 : 10.5;
             ssStatus.FontWeight = highlight ? FontWeights.Bold : FontWeights.SemiBold;
         }
         void SetSsBtnEnabled(bool on) {
@@ -1958,7 +1965,7 @@ namespace StarMaster {
     // ===== shared widgets (static on MainWindow for AddKeyDialog reuse) =====
     public partial class MainWindow {
         public static Border Btn(string text, Brush bg, Brush fg, bool bold, Action onClick) {
-            TextBlock tb = new TextBlock { Text = text, Foreground = fg, FontSize = 13.5, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center };
+            TextBlock tb = new TextBlock { Text = text, Foreground = fg, FontSize = 11.5, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center };
             Border b = new Border { Background = bg, CornerRadius = new CornerRadius(10), Padding = new Thickness(13, 10, 13, 10), Cursor = Cursors.Hand, Child = tb, HorizontalAlignment = HorizontalAlignment.Stretch };
             if (bg == Ui.Card2) { b.BorderBrush = Ui.Line2; b.BorderThickness = new Thickness(1); }
             if (onClick != null) b.MouseLeftButtonUp += delegate { onClick(); };
@@ -1977,11 +1984,11 @@ namespace StarMaster {
         }
         UIElement Check(string text, bool on, Action<bool> changed) {
             StackPanel s = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 7) };
-            s.Children.Add(Toggle(on, changed)); s.Children.Add(new TextBlock { Text = "  " + text, Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            s.Children.Add(Toggle(on, changed)); s.Children.Add(new TextBlock { Text = "  " + text, Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
             return s;
         }
-        TextBox TextField(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(10, 7, 10, 7), FontSize = 12, FontFamily = Ui.Mono }; }
-        TextBlock Caps(string t) { return new TextBlock { Text = t.ToUpper(), Foreground = Ui.Faint, FontSize = 11 }; }
+        TextBox TextField(string v) { return new TextBox { Text = v, Background = Ui.Bg, Foreground = Ui.Text, CaretBrush = Ui.Accent, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Padding = new Thickness(10, 7, 10, 7), FontSize = 10.5, FontFamily = Ui.Mono }; }
+        TextBlock Caps(string t) { return new TextBlock { Text = t.ToUpper(), Foreground = Ui.Faint, FontSize = 9.5 }; }
         FrameworkElement Sp(int w) { return new Border { Width = w }; }
 
         // ---------- tray + lifecycle ----------
@@ -2078,8 +2085,8 @@ namespace StarMaster {
         public Dropdown(string[] items, string initial, double minW) {
             Background = Ui.Bg; BorderBrush = Ui.Line2; BorderThickness = new Thickness(1); CornerRadius = new CornerRadius(8); Padding = new Thickness(11, 7, 9, 7); Cursor = Cursors.Hand; MinWidth = minW; VerticalAlignment = VerticalAlignment.Center;
             DockPanel dp = new DockPanel();
-            TextBlock arr = new TextBlock { Text = " ▾", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(arr, Dock.Right); dp.Children.Add(arr);
-            label = new TextBlock { Foreground = Ui.Text, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center }; dp.Children.Add(label);
+            TextBlock arr = new TextBlock { Text = " ▾", Foreground = Ui.Dim, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(arr, Dock.Right); dp.Children.Add(arr);
+            label = new TextBlock { Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }; dp.Children.Add(label);
             Child = dp;
             list = new StackPanel();
             popup = new Popup { PlacementTarget = this, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true, Child = new Border { Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = list, MinWidth = minW } };
@@ -2094,7 +2101,7 @@ namespace StarMaster {
             Value = sel != null ? sel : "";
             foreach (string it in items) {
                 string cur = it;
-                Border row = new Border { Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = cur, Foreground = Ui.Text, FontSize = 12.5 } };
+                Border row = new Border { Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = cur, Foreground = Ui.Text, FontSize = 11 } };
                 row.MouseEnter += delegate { row.Background = Ui.B("#222c4a"); };
                 row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
                 row.MouseLeftButtonUp += delegate { Value = cur; label.Text = cur; popup.IsOpen = false; if (OnChange != null) OnChange(cur); };

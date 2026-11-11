@@ -118,6 +118,13 @@ namespace StarMaster {
             Check(rt != null && rt.Key == "k,P" && rt.Original == "A|B" && rt.Name == "N x", "ovr: config encode/decode round-trips (tabs cleaned)");
             Check(LocOverrides.Decode("garbage") == null, "ovr: bad config line ignored");
 
+            // v79: editing an override - the file still holds the OLD override, which must not become the original
+            LocOverride ed = new LocOverride { Group = "Ships", Key = "vehicle_NameRSI_Constellation_Mk5_Andromeda", Original = "RSI Constellation Mk V Centaurus", Name = "RSI Centaurus", Applied = "Connie Centaurus" };
+            System.Collections.Generic.List<LocOverride> el = new System.Collections.Generic.List<LocOverride>(); el.Add(ed);
+            Check(!LocOverrides.Reconcile(applied, el) && ed.Original == "RSI Constellation Mk V Centaurus", "ovr: edit - previously applied name is not a new original");
+            LocOverride legacy = LocOverrides.Decode("Ships\tk\tOrig\tNew");
+            Check(legacy != null && legacy.Applied == "New", "ovr: v77 4-field config line -> Applied = Name");
+
             Console.WriteLine(failed == 0 ? "OK  " + passed + " tests passed" : "" + failed + " FAILED, " + passed + " passed");
             return failed == 0 ? 0 : 1;
         }

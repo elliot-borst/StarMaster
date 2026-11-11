@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("80.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("80.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("81.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("81.0.0.0")]
 
 namespace StarMaster {
 
@@ -611,7 +611,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "80";
+        public const string Version = "81";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -768,11 +768,14 @@ namespace StarMaster {
             ver.Inlines.Add(new Run("Version " + Version) { Foreground = Ui.Accent2, FontSize = 11.5, FontWeight = FontWeights.SemiBold });
             ver.Inlines.Add(new Run("   released " + VersionDate) { Foreground = Ui.Faint, FontSize = 9.5 });
             secRow.Children.Add(ver);
-            secRow.Children.Add(new Border { Width = 1, Background = Ui.Line2, Margin = new Thickness(14, 9, 14, 9) });
-            secRow.Children.Add(LaunchToggleRow(startMinimized, "Start minimised", delegate (bool v) { startMinimized = v; }));
-            StackPanel sww = LaunchToggleRow(StartWithWindowsOn(), "Start with Windows", delegate (bool v) { SetStartWithWindows(v); });
-            sww.Margin = new Thickness(18, 0, 0, 0); secRow.Children.Add(sww);
             sec.Child = secRow; DockPanel.SetDock(sec, Dock.Left); d.Children.Add(sec);
+            // the two app-wide launch settings get their own pill (v81)
+            Border lp = HeaderPill(); lp.Margin = new Thickness(12, 0, 0, 0);
+            StackPanel lpRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            lpRow.Children.Add(LaunchToggleRow(startMinimized, "Start minimised", delegate (bool v) { startMinimized = v; }));
+            StackPanel sww = LaunchToggleRow(StartWithWindowsOn(), "Start with Windows", delegate (bool v) { SetStartWithWindows(v); });
+            sww.Margin = new Thickness(18, 0, 0, 0); lpRow.Children.Add(sww);
+            lp.Child = lpRow; DockPanel.SetDock(lp, Dock.Left); d.Children.Add(lp);
             // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
             Border scSec = HeaderPill(); scSec.Margin = new Thickness(12, 0, 0, 0); scSec.Padding = new Thickness(14, 0, 6, 0);
             StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };

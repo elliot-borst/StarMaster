@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("77.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("77.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("78.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("78.0.0.0")]
 
 namespace StarMaster {
 
@@ -611,7 +611,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "77";
+        public const string Version = "78";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1532,32 +1532,35 @@ namespace StarMaster {
         FrameworkElement StarStringsCard() {
             // v77: compacted (installed/latest side by side, controls on one row, one-line credit) so the
             // rest of the tile is free for the Name overrides list, which fills whatever height is left.
-            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "MrKraken community localization + your own name overrides");
-            head.Margin = new Thickness(0, 0, 0, 10);
-            StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint;
-            ssBadgePill = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(0), Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Top, Child = ssBadge };
-            DockPanel.SetDock(ssBadgePill, Dock.Right); head.Children.Add(ssBadgePill);
-            Grid info = new Grid();
-            info.ColumnDefinitions.Add(new ColumnDefinition()); info.ColumnDefinitions.Add(new ColumnDefinition());
-            StackPanel inst = BuildRow("Installed", out ssInstalled, ssInstalledBuild.Length > 0 ? ssInstalledBuild : "(not installed)", Ui.Text); inst.Margin = new Thickness(0, 0, 12, 0); info.Children.Add(inst);
-            StackPanel lat = BuildRow("Latest", out ssLatest, "(check)", Ui.Accent); lat.Margin = new Thickness(0); Grid.SetColumn(lat, 1); info.Children.Add(lat);
-            body.Children.Add(info);
-            StackPanel ctl = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 100); ctl.Children.Add(ssChannel); ctl.Children.Add(Sp(9));
-            ssChannel.OnChange = delegate (string v) { RefreshOverrides(); if (overrides.Count > 0) RunOverrides(null); };   // overrides go into the selected channel's global.ini
-            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 8, 14, 8); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
-            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { if (ssBtnEnabled) SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 8, 14, 8); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
-            body.Children.Add(ctl);
-            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
-            // full credit to MrKraken, the creator of StarStrings (one line now)
-            TextBlock credit = new TextBlock { Margin = new Thickness(0, 8, 0, 0), FontSize = 11, Foreground = Ui.Faint, TextTrimming = TextTrimming.CharacterEllipsis };
-            credit.Inlines.Add(new Run("By MrKraken - all credit to him · "));
+            StackPanel body; DockPanel head; Border card = CardShell(out body, out head, "◉", "StarStrings", "");
+            head.Margin = new Thickness(0, 0, 0, 12);
+            // subtitle doubles as the credit (v78): "by MrKraken · github.com/MrKraken/StarStrings" - full credit to him, on one line
+            TextBlock sub = (TextBlock)((StackPanel)head.Children[1]).Children[1];
+            sub.Inlines.Add(new Run("community localization by MrKraken · "));
             Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
             try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
             link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };
             link.Cursor = Cursors.Hand;
-            credit.Inlines.Add(link);
-            body.Children.Add(credit);
+            sub.Inlines.Add(link);
+            StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint;
+            ssBadgePill = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(0), Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Top, Child = ssBadge };
+            DockPanel.SetDock(ssBadgePill, Dock.Right); head.Children.Add(ssBadgePill);
+            // controls + a compact two-line Installed/Latest readout to their right (full build string in the tooltip)
+            DockPanel ctl = new DockPanel { LastChildFill = true };
+            ssChannel = new Dropdown(new string[] { "LIVE", "HOTFIX" }, ssChannelCfg.Length > 0 ? ssChannelCfg : "LIVE", 100); ctl.Children.Add(ssChannel); ctl.Children.Add(Sp(9));
+            ssChannel.OnChange = delegate (string v) { RefreshOverrides(); if (overrides.Count > 0) RunOverrides(null); };   // overrides go into the selected channel's global.ini
+            Border ck = Btn("↻ Check", Ui.Card2, Ui.Text, false, delegate { SSCheck(true); }); ck.Padding = new Thickness(14, 8, 14, 8); ctl.Children.Add(ck); ctl.Children.Add(Sp(9));
+            ssUpdateBtn = Btn("✓ Up to date", Ui.AccentGrad(), Ui.Ink, true, delegate { if (ssBtnEnabled) SSInstall(); }); ssUpdateBtn.Padding = new Thickness(14, 8, 14, 8); ssUpdateLbl = (TextBlock)ssUpdateBtn.Child; ctl.Children.Add(ssUpdateBtn);
+            foreach (UIElement el in ctl.Children) DockPanel.SetDock(el, Dock.Left);
+            Grid ver = new Grid { Margin = new Thickness(16, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            ver.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); ver.ColumnDefinitions.Add(new ColumnDefinition());
+            ver.RowDefinitions.Add(new RowDefinition()); ver.RowDefinitions.Add(new RowDefinition());
+            ssInstalled = VerCell(ver, 0, "Installed", Ui.Text); ssLatest = VerCell(ver, 1, "Latest", Ui.Accent);
+            ssInstalled.Text = "(not installed)"; if (ssInstalledBuild.Length > 0) SetBuildText(ssInstalled, ssInstalledBuild);
+            ssLatest.Text = "(check)";
+            ctl.Children.Add(ver);
+            body.Children.Add(ctl);
+            ssRunNote = new TextBlock { Text = "Star Citizen is running - close it to install/update.", Foreground = Ui.Warn, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed }; body.Children.Add(ssRunNote);
 
             // ---- Name overrides: fills the rest of the tile (the card's StackPanel is re-hosted in a Grid so the list gets a star row) ----
             card.Child = null;
@@ -1568,7 +1571,7 @@ namespace StarMaster {
             g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             g.Children.Add(body);
             DockPanel oh = new DockPanel { LastChildFill = false };
-            Border ohb = new Border { BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 12, 0, 8), Margin = new Thickness(0, 12, 0, 0), Child = oh };
+            Border ohb = new Border { BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 10, 0, 6), Margin = new Thickness(0, 12, 0, 0), Child = oh };
             StackPanel ohl = new StackPanel { Orientation = Orientation.Horizontal };
             ohl.Children.Add(new TextBlock { Text = "NAME OVERRIDES", Foreground = Ui.Dim, FontSize = 11, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
             ovrCount = new TextBlock { Foreground = Ui.Faint, FontSize = 11, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center }; ohl.Children.Add(ovrCount);
@@ -1584,6 +1587,21 @@ namespace StarMaster {
             card.Child = g;
             RefreshOverrides();
             return card;
+        }
+
+        TextBlock VerCell(Grid g, int row, string cap, Brush fg) {
+            TextBlock c = new TextBlock { Text = cap, Foreground = Ui.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            Grid.SetRow(c, row); g.Children.Add(c);
+            TextBlock v = new TextBlock { Foreground = fg, FontSize = 11.5, FontFamily = Ui.Mono, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            Grid.SetRow(v, row); Grid.SetColumn(v, 1); g.Children.Add(v);
+            return v;
+        }
+        // "SC LIVE Build (release-2026-10-09-292e6be)" -> "2026-10-09 · 292e6be" (full name in the tooltip)
+        static void SetBuildText(TextBlock tb, string build) {
+            if (tb == null) return;
+            Match m = Regex.Match(build ?? "", @"(\d{4}-\d{2}-\d{2})-([0-9a-fA-F]{5,})");
+            tb.Text = m.Success ? m.Groups[1].Value + " · " + m.Groups[2].Value : build;
+            tb.ToolTip = build;
         }
 
         // ---------- name overrides (v77): user renames layered on top of StarStrings' global.ini ----------
@@ -1606,7 +1624,7 @@ namespace StarMaster {
             ovrPanel.Children.Clear();
             ovrCount.Text = overrides.Count > 0 ? "· " + overrides.Count : "";
             if (overrides.Count == 0) {
-                ovrPanel.Children.Add(new TextBlock { Text = "None yet. Rename ships (e.g. shorter names that don't wrap in the ASOP fleet manager) - your renames are re-applied automatically after every StarStrings update.", Foreground = Ui.Faint, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, LineHeight = 16, Margin = new Thickness(2, 2, 2, 6) });
+                ovrPanel.Children.Add(new TextBlock { Text = "None yet - e.g. shorten long ship names.", Foreground = Ui.Faint, FontSize = 11.5, Margin = new Thickness(2, 0, 2, 4), ToolTip = "Your renames are layered on top of StarStrings and re-applied automatically after every StarStrings update." });
                 return;
             }
             List<LocOverride> sorted = new List<LocOverride>(overrides);
@@ -1814,7 +1832,7 @@ namespace StarMaster {
                 Dispatcher.BeginInvoke(new Action(delegate {
                     ssLatestInfo = info;
                     if (info == null) { ssLatest.Text = "(offline)"; SetSsBadge("offline", Ui.Dim, Ui.Faint, false); return; }
-                    ssLatest.Text = info.Build;
+                    SetBuildText(ssLatest, info.Build);
                     bool cur = ssInstalledBuild.Length > 0 && ssInstalledBuild == info.Build;
                     if (ssInstalledBuild.Length == 0) { ssUpdateLbl.Text = "↓ Install"; SetSsBadge("Not installed", Ui.Ink, Ui.Ink, true); }
                     else if (cur) { ssUpdateLbl.Text = "✓ Re-install"; SetSsBadge("Up to date", Ui.Good, Ui.Good, false); }
@@ -1847,7 +1865,7 @@ namespace StarMaster {
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                     string msg; bool ok = StarStrings.Install(zip, channelRoot, out msg);
                     Dispatcher.BeginInvoke(new Action(delegate {
-                        if (ok) { ssInstalledBuild = build; ssInstalled.Text = build; SetSsBadge("Installed - restart SC", Ui.Good, Ui.Good, false); ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); if (overrides.Count > 0) RunOverrides(null); }   // the install just overwrote global.ini - put the user's renames back on top
+                        if (ok) { ssInstalledBuild = build; SetBuildText(ssInstalled, build); SetSsBadge("Installed - restart SC", Ui.Good, Ui.Good, false); ssUpdateLbl.Text = "✓ Re-install"; SaveConfig(); if (overrides.Count > 0) RunOverrides(null); }   // the install just overwrote global.ini - put the user's renames back on top
                         else { SetSsBadge("failed: " + msg, Ui.DangerFg, Ui.Crit, false); }
                     }));
                 });

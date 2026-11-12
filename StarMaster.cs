@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("85.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("85.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("86.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("86.0.0.0")]
 
 namespace StarMaster {
 
@@ -659,7 +659,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "85";
+        public const string Version = "86";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1208,7 +1208,7 @@ namespace StarMaster {
             // HWiNFO status (the CPU TEMPERATURE source; watts come from Windows RAPL since v73). Shows install/run state + an action button.
             Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
-            hwIn.Children.Add(new TextBlock { Text = "HWiNFO", Foreground = Ui.Text, FontSize = 9.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            hwIn.Children.Add(SourceHeader("HWiNFO", new string[] { "CPU temperature" }, out hwChips));
             DockPanel hwTop = new DockPanel { LastChildFill = false };
             monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
             monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
@@ -1228,7 +1228,7 @@ namespace StarMaster {
             // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
             Border fpsBox = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(new TextBlock { Text = "PresentMon", Foreground = Ui.Text, FontSize = 9.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+            fpsIn.Children.Add(SourceHeader("PresentMon", new string[] { "FPS" }, out fpsChips));
             DockPanel fpsTop = new DockPanel { LastChildFill = false };
             monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
             monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
@@ -1334,10 +1334,12 @@ namespace StarMaster {
             else { FpsMon.Stop(); }
             UpdateFpsUi();
         }
-        void UpdateFpsUi() {
+        // v86: every exit path of the status logic ends here so the "provides" chips always match the status colour
+        void UpdateFpsUi() { UpdateFpsUiCore(); if (monFpsTxt != null) SetChips(fpsChips, monFpsTxt.Foreground); }
+        void UpdateFpsUiCore() {
             if (monFpsTxt == null) return;
             SetFpsTip("");
-            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Overlay FPS is off - turn on \"Show FPS\" above to use it."; return; }
+            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "Off - turn on \"Show FPS\" above to use it."; return; }
             bool access = FpsMon.PerfAccess();
             if (access && fpsPendingRelogin) { fpsPendingRelogin = false; SaveConfig(); }   // the sign-out/in took effect - clear the pending flag
             if (!access) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
@@ -1346,8 +1348,8 @@ namespace StarMaster {
                     monFpsBtn.Visibility = Visibility.Collapsed;
                     monFpsTxt.Text = "Almost there - sign out of Windows and back in (or restart the PC) once, then FPS works automatically.";
                 } else {
-                    monFpsBtn.Visibility = Visibility.Visible;
-                    monFpsTxt.Text = "Needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
+                    monFpsBtn.Visibility = Visibility.Visible; monFpsTxt.Foreground = Ui.Crit;
+                    monFpsTxt.Text = "Not working - needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
                     SetFpsTip("This grants FPS-capture access; it's separate from HWiNFO. After you approve it, sign out of Windows and back in once.");
                 }
                 return;
@@ -1358,7 +1360,7 @@ namespace StarMaster {
             }
             if (FpsMon.GotFrames) { string tn = FpsMon.TargetName; monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS" + (string.IsNullOrEmpty(tn) || tn == "<unknown>" ? "" : " (" + tn + ")"); return; }
             bool scRunning = ScRunning();
-            if (!scRunning) { monFpsTxt.Foreground = Ui.Dim; monFpsTxt.Text = "Ready - shows the FPS of whichever game is in front."; }
+            if (!scRunning) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Ready - shows the FPS of whichever game is in front."; }
             else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds."; SetFpsTip("If it stays here, another FPS/overlay tool (RTSS, MSI Afterburner, etc.) may be holding the capture - close it and toggle Show FPS off/on."); }
         }
         void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
@@ -1381,6 +1383,21 @@ namespace StarMaster {
                 else { string p = HwInfo.Exe(); if (p != null) System.Diagnostics.Process.Start(p); }   // start it (or bring it up to enable Shared Memory)
             } catch { }
         }
+        // v86: source box header - name + a chip per statistic this source provides, coloured like its status
+        // (green working/ready, yellow pending, red not working, faint off) so a blank overlay value is traceable
+        Border[] hwChips, fpsChips;
+        StackPanel SourceHeader(string name, string[] provides, out Border[] chips) {
+            StackPanel h = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+            h.Children.Add(new TextBlock { Text = name, Foreground = Ui.Text, FontSize = 10.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            h.Children.Add(new TextBlock { Text = "provides", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) });
+            chips = new Border[provides.Length];
+            for (int i = 0; i < provides.Length; i++) {
+                chips[i] = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = Ui.Faint, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = provides[i], Foreground = Ui.Faint, FontSize = 9.5, FontWeight = FontWeights.SemiBold } };
+                h.Children.Add(chips[i]);
+            }
+            return h;
+        }
+        void SetChips(Border[] chips, Brush c) { if (chips == null) return; foreach (Border b in chips) { b.BorderBrush = c; ((TextBlock)b.Child).Foreground = c; } }
         // a status pill: rounded label, coloured green when the requirement is met, yellow while it's still to do
         Border HwPill(string label, string tip) {
             TextBlock t = new TextBlock { Text = label, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center };
@@ -1394,7 +1411,8 @@ namespace StarMaster {
         }
         // Precise HWiNFO diagnosis + a clear fix for every distinct failure cause. AV-safe: the only actions are
         // opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
-        void UpdateHwUi() {
+        void UpdateHwUi() { UpdateHwUiCore(); if (monHwTxt != null) SetChips(hwChips, monHwTxt.Foreground); }
+        void UpdateHwUiCore() {
             if (monHwTxt == null) return;
             TextBlock lbl = (TextBlock)monHwBtn.Child;
             // Since v73 this panel is about CPU TEMPERATURE only - watts come from Windows' RAPL counter
@@ -1416,7 +1434,7 @@ namespace StarMaster {
                 monHwTip.Visibility = optTodo ? Visibility.Visible : Visibility.Collapsed;
                 return;
             }
-            monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Warn; monHwTip.Visibility = Visibility.Visible;
+            monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Crit; monHwTip.Visibility = Visibility.Visible;   // not providing CPU temperature -> red (v86)
             if (HwInfo.State == HwInfo.Connected) {
                 // shared memory is live but the CPU temp sensor is missing (hidden/disabled in HWiNFO, or an unusual sensor name)
                 monHwTxt.Text = "Connected, but no CPU temperature sensor found.";

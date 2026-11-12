@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("82.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("82.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("83.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("83.0.0.0")]
 
 namespace StarMaster {
 
@@ -64,6 +64,48 @@ namespace StarMaster {
             foreach (byte m in mods) Key(m, false);
             Key(key, false); System.Threading.Thread.Sleep(40); Key(key, true);
             for (int i = mods.Length - 1; i >= 0; i--) Key(mods[i], true);
+        }
+    }
+
+    // The modern Explorer folder picker (IFileOpenDialog + FOS_PICKFOLDERS) - v83. The ONE sanctioned OS dialog
+    // in the app: the user explicitly asked for a real Explorer window to choose the SC folder, so the path is
+    // always a real directory. (WinForms' FolderBrowserDialog is the old tree dialog on .NET Framework.)
+    static class FolderPicker {
+        [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FileOpenDialogCom { }
+        [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IFileOpenDialog {
+            [PreserveSig] int Show(IntPtr parent);
+            void SetFileTypes(uint c, IntPtr specs); void SetFileTypeIndex(uint i); void GetFileTypeIndex(out uint i);
+            void Advise(IntPtr sink, out uint cookie); void Unadvise(uint cookie);
+            void SetOptions(uint fos); void GetOptions(out uint fos);
+            void SetDefaultFolder(IShellItem si); void SetFolder(IShellItem si); void GetFolder(out IShellItem si); void GetCurrentSelection(out IShellItem si);
+            void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name); void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+            void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title); void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+            void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label); void GetResult(out IShellItem si);
+        }
+        [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IShellItem {
+            void BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv); void GetParent(out IShellItem si);
+            void GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+            void GetAttributes(uint mask, out uint attrs); void Compare(IShellItem si, uint hint, out int order);
+        }
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+        static extern void SHCreateItemFromParsingName(string path, IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IShellItem item);
+        const uint FOS_PICKFOLDERS = 0x20, FOS_FORCEFILESYSTEM = 0x40, FOS_PATHMUSTEXIST = 0x800, SIGDN_FILESYSPATH = 0x80058000;
+        // returns the chosen folder, or null if cancelled / unavailable
+        public static string Pick(IntPtr owner, string title, string start) {
+            try {
+                IFileOpenDialog d = (IFileOpenDialog)new FileOpenDialogCom();
+                d.SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+                d.SetTitle(title); d.SetOkButtonLabel("Select folder");
+                try {
+                    string s = start; while (!string.IsNullOrEmpty(s) && !Directory.Exists(s)) s = Path.GetDirectoryName(s);
+                    if (!string.IsNullOrEmpty(s)) { IShellItem si; SHCreateItemFromParsingName(s, IntPtr.Zero, typeof(IShellItem).GUID, out si); d.SetFolder(si); }
+                } catch { }
+                if (d.Show(owner) != 0) return null;   // 0x800704C7 = cancelled
+                IShellItem res; d.GetResult(out res); string path; res.GetDisplayName(SIGDN_FILESYSPATH, out path);
+                return path;
+            } catch { return null; }
         }
     }
 
@@ -617,7 +659,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "82";
+        public const string Version = "83";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -865,8 +907,13 @@ namespace StarMaster {
             StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
             scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center; scRoot.Padding = new Thickness(8, 4, 8, 4);
-            scRoot.LostFocus += delegate { RefreshChannels(); };
+            // v83: pick-only - the path comes from the Explorer folder picker, so it's always a real directory
+            scRoot.IsReadOnly = true; scRoot.Cursor = Cursors.Hand; scRoot.ToolTip = "Click to choose your Star Citizen folder";
+            scRoot.PreviewMouseLeftButtonUp += delegate (object s, MouseButtonEventArgs e) { e.Handled = true; PickScFolder(); };
             scRow.Children.Add(scRoot);
+            Border browse = Btn("Browse...", Ui.Card2, Ui.Text, false, delegate { PickScFolder(); });
+            browse.Padding = new Thickness(12, 4, 12, 4); browse.Margin = new Thickness(6, 0, 0, 0); browse.VerticalAlignment = VerticalAlignment.Center; ((TextBlock)browse.Child).FontSize = 10.5;
+            scRow.Children.Add(browse);
             scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
             updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; updBtn.Height = PillH; updBtn.Padding = new Thickness(16, 0, 16, 0); updBtn.CornerRadius = new CornerRadius(12); updBtnLbl.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);
             // hands-off update status line in the top row; shown instead of the Check button while an
@@ -1570,6 +1617,27 @@ namespace StarMaster {
             string[] snaps = BackupOps.Snapshots(); int shown = 0;
             foreach (string s in snaps) { if (shown++ >= 4) break; bkChips.Children.Add(new TextBlock { Text = s, Foreground = Ui.Dim, FontSize = 9.5, FontFamily = Ui.Mono, Margin = new Thickness(0, 2, 0, 2) }); }
             if (snaps.Length == 0) bkChips.Children.Add(new TextBlock { Text = "(none yet)", Foreground = Ui.Faint, FontSize = 9.5 });
+        }
+        // v83: choose the SC folder in Explorer. Accepts the root (has LIVE/HOTFIX...), and fixes up the common
+        // slip of picking a channel folder (...\StarCitizen\LIVE) to its parent. Anything else asks first.
+        void PickScFolder() {
+            string cur = scRoot.Text.Trim();
+            string p = FolderPicker.Pick(new WindowInteropHelper(this).Handle, "Choose your Star Citizen folder (the one containing LIVE / HOTFIX)", cur.Length > 0 ? cur : DefaultScRoot);
+            if (p == null) return;
+            if (BackupOps.DetectChannels(p).Length == 0) {
+                string parent = Path.GetDirectoryName(p.TrimEnd('\\'));
+                if (!string.IsNullOrEmpty(parent) && BackupOps.DetectChannels(parent).Length > 0) p = parent;   // picked LIVE itself
+                else {
+                    string chosen = p;
+                    ShowConfirm("No Star Citizen channels found", "This folder has no LIVE / HOTFIX / PTU channel folders:\n\n" + chosen + "\n\nThe usual location is\n" + DefaultScRoot + "\n\nUse it anyway?", "Use anyway", delegate { SetScFolder(chosen); });
+                    return;
+                }
+            }
+            SetScFolder(p);
+        }
+        void SetScFolder(string p) {
+            scRoot.Text = p; SaveConfig(); RefreshChannels(); RefreshOverrides();
+            if (overrides.Count > 0) RunOverrides(null);
         }
         string Pick(string[] arr, string want) { foreach (string a in arr) if (a == want) return want; return arr.Length > 0 ? arr[0] : ""; }
         void DoBackup() {

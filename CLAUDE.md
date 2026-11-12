@@ -1,6 +1,6 @@
 # StarMaster — Star Citizen helper app
 
-**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Four tools + a **fully hands-off GitHub self-updater** (v56). **Current version: 82.**
+**StarMaster is a Windows app the user is building up** as their personal Star Citizen toolkit — a single dependency-free program (needs only the .NET Framework Windows ships; **no NuGet/MSBuild/internet** to build). As of v6 the UI is **code-only WPF** (vector, auto-DPI, resizable) in an **Aurora dashboard** (cyan→violet on near-black). Four tools + a **fully hands-off GitHub self-updater** (v56). **Current version: 83.**
 
 **Repo:** `elliot-borst/StarMaster` — **public** (so the in-app updater reads Releases anonymously). Locked down: no collaborators, Issues/Projects/Discussions disabled. **MIT licensed** (`LICENSE`, added 2026-09-24) — a hard prerequisite for the Certum open-source code-signing certificate, see the `code-signing-plan` memory. Local `C:\GitHub\StarMaster`. Run Claude Code **from this folder**. The user's Star Citizen control *bindings* are a SEPARATE repo — **StarBinding** — not here.
 
@@ -45,7 +45,7 @@
 - Installer: `ISCC.exe` (Inno Setup 6 via winget at `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`) → `& "<that path>" installer.iss` → `StarMaster-Setup.exe` (build the exe first; it's embedded).
 
 ## Conventions / facts
-- **NO OS popups, ever.** Never use `MessageBox.Show` or a separate `Window`/`ShowDialog`. All messages/confirms/forms render in the in-app modal overlay (`BuildOverlay`; `ShowConfirm`/`ShowAlert`/`ShowKeyForm`/`ShowOverlay`). The keystroke editor and all confirms use it.
+- **NO OS popups, ever** - with ONE user-sanctioned exception (v83): the SC-folder **Explorer folder picker** (`FolderPicker`, user asked for a real Explorer window so the path is always a real directory). Nothing else. Never use `MessageBox.Show` or a separate `Window`/`ShowDialog`. All messages/confirms/forms render in the in-app modal overlay (`BuildOverlay`; `ShowConfirm`/`ShowAlert`/`ShowKeyForm`/`ShowOverlay`). The keystroke editor and all confirms use it.
 - **Config** = `config.txt` next to the exe (NOT committed). `key=value` (`autostart`, `focusguard`, `wintitle`, `starstrings_build/root/channel`, `mon_*` incl. `mon_hotkey_on`/`mon_hotkey`) + command rows `Label|Shift|Ctrl|Alt|Key|Interval|Enabled`. Interval clamped 1–3600 s. App seeds defaults on first run.
 - **Focus guard fails CLOSED** — blank title → sends nothing. SC's window title is `"Star Citizen "` (matches the default contains-check).
 - **Game input needs SCAN CODES** (`Native.Press`).

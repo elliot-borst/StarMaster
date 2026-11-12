@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("86.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("86.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("87.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("87.0.0.0")]
 
 namespace StarMaster {
 
@@ -659,7 +659,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "86";
+        public const string Version = "87";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -683,8 +683,7 @@ namespace StarMaster {
         bool cvDirty = false;             // user changed mips/pre-load but hasn't applied - CvRefresh leaves the controls alone so a background refresh can't silently revert the edits
         // system monitor (control card + the over-the-game OSD overlay)
         DispatcherTimer monTimer;
-        MonBar monCpuBar, monRamBar, monGpuBar, monVramBar;
-        TextBlock monCpuTxt, monRamTxt, monGpuTxt, monVramTxt;
+        StatTile[] statTiles;   // v87: the 9 overlay stats, each with its live value + source + status colour (replaced the 4 preview bars)
         MonWindow monWin; bool monOverlayOn = true, monLocked = false, monActiveOnly = false; double monOvX = 60, monOvY = 60;
         int monOvAlpha = 85, monTextAlpha = 100; string monOvColor = "0a0e18";   // box + text opacity (0-100) + box colour
         bool monColors = true;   // overlay colours: brand names + load tiers; off = all white
@@ -1201,12 +1200,9 @@ namespace StarMaster {
             }
             body.Children.Add(coR);
 
-            body.Children.Add(MetricRow("CPU", out monCpuBar, out monCpuTxt));
-            body.Children.Add(MetricRow("RAM", out monRamBar, out monRamTxt));
-            body.Children.Add(MetricRow("GPU", out monGpuBar, out monGpuTxt));
-            body.Children.Add(MetricRow("VRAM", out monVramBar, out monVramTxt));
+            body.Children.Add(StatGrid());
             // HWiNFO status (the CPU TEMPERATURE source; watts come from Windows RAPL since v73). Shows install/run state + an action button.
-            Border hwBox = new Border { Margin = new Thickness(0, 14, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            Border hwBox = new Border { Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 8, 12, 6), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel hwIn = new StackPanel();
             hwIn.Children.Add(SourceHeader("HWiNFO", new string[] { "CPU temperature" }, out hwChips));
             DockPanel hwTop = new DockPanel { LastChildFill = false };
@@ -1214,7 +1210,7 @@ namespace StarMaster {
             monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
             hwIn.Children.Add(hwTop);
             // setup checklist: one pill per requirement, green when done / yellow when still to do (status only - StarMaster can't tick HWiNFO's boxes without the shelved elevated helper)
-            WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 8, 0, 2) };
+            WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
             hwPills.Children.Add(hwPillInstall = HwPill("Installed", "HWiNFO is installed."));
             hwPills.Children.Add(hwPillSm = HwPill("Shared memory", "Shared Memory Support is active - how StarMaster reads the CPU temperature. HWiNFO -> Settings -> tick 'Shared Memory Support'."));
             hwPills.Children.Add(hwPillAuto = HwPill("Auto-start", "HWiNFO starts with Windows. HWiNFO -> Settings -> tick 'Auto Start'."));
@@ -1226,9 +1222,9 @@ namespace StarMaster {
             hwIn.Children.Add(monHwTip);
             hwBox.Child = hwIn; body.Children.Add(hwBox);
             // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
-            Border fpsBox = new Border { Margin = new Thickness(0, 10, 0, 0), Padding = new Thickness(12, 10, 12, 10), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            Border fpsBox = new Border { Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(SourceHeader("PresentMon", new string[] { "FPS" }, out fpsChips));
+            fpsIn.Children.Add(SourceHeader("PresentMon", new string[] { "FPS" }, out fpsChips));   // required for the FPS stat
             DockPanel fpsTop = new DockPanel { LastChildFill = false };
             monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
             monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
@@ -1238,15 +1234,72 @@ namespace StarMaster {
             fpsBox.Child = fpsIn; body.Children.Add(fpsBox);
             return card;
         }
-        FrameworkElement MetricRow(string label, out MonBar bar, out TextBlock val) {
-            DockPanel d = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-            TextBlock l = new TextBlock { Text = label, Foreground = Ui.Dim, FontSize = 11, FontFamily = Ui.Mono, Width = 46, VerticalAlignment = VerticalAlignment.Center };
-            DockPanel.SetDock(l, Dock.Left); d.Children.Add(l);
-            val = new TextBlock { Text = "--", Foreground = Ui.Text, FontSize = 11, FontFamily = Ui.Mono, Width = 180, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-            DockPanel.SetDock(val, Dock.Right); d.Children.Add(val);
-            bar = new MonBar(14) { VerticalAlignment = VerticalAlignment.Center };
-            d.Children.Add(bar);   // LastChildFill: the bar fills the middle
-            return d;
+        // ---- v87: overlay stats grid - every stat the overlay shows, in overlay order, with its live value,
+        // where it comes from, and a status colour (green = reading now, red = no reading, faint = turned off).
+        // Status is decided from the live sample each tick, so "green" means it really is working.
+        public class StatTile { public Border Root; public TextBlock Val, Src; public Border Dot; }
+        static readonly string[] StatNames = { "FPS", "CPU %", "GPU %", "CPU temp", "GPU temp", "RAM", "VRAM", "CPU watts", "GPU watts" };
+        FrameworkElement StatGrid() {
+            StackPanel s = new StackPanel();
+            s.Children.Add(new TextBlock { Text = "OVERLAY STATS", Foreground = Ui.Dim, FontSize = 9.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 2, 0, 6) });
+            Grid g = new Grid { Margin = new Thickness(-3, 0, -3, 0) };
+            for (int c = 0; c < 3; c++) g.ColumnDefinitions.Add(new ColumnDefinition());
+            for (int r = 0; r < 3; r++) g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            statTiles = new StatTile[StatNames.Length];
+            for (int i = 0; i < StatNames.Length; i++) {
+                StatTile st = new StatTile();
+                StackPanel inner = new StackPanel();
+                DockPanel top = new DockPanel();
+                st.Val = new TextBlock { Text = "--", Foreground = Ui.Text, FontSize = 12, FontWeight = FontWeights.SemiBold, FontFamily = Ui.Mono };
+                DockPanel.SetDock(st.Val, Dock.Right); top.Children.Add(st.Val);
+                top.Children.Add(new TextBlock { Text = StatNames[i], Foreground = Ui.Dim, FontSize = 10, VerticalAlignment = VerticalAlignment.Center });
+                inner.Children.Add(top);
+                StackPanel src = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 0, 0) };
+                st.Dot = new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+                src.Children.Add(st.Dot);
+                st.Src = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center };
+                src.Children.Add(st.Src);
+                inner.Children.Add(src);
+                st.Root = new Border { Margin = new Thickness(3), Padding = new Thickness(10, 6, 10, 6), CornerRadius = new CornerRadius(9), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Child = inner };
+                Grid.SetRow(st.Root, i / 3); Grid.SetColumn(st.Root, i % 3); g.Children.Add(st.Root);
+                statTiles[i] = st;
+            }
+            s.Children.Add(g);
+            return s;
+        }
+        // value + source + state: state 1 = working (green), 0 = no reading (red), -1 = turned off (faint), 2 = pending (yellow)
+        void SetStat(int i, string val, string src, int state) {
+            if (statTiles == null) return;
+            StatTile st = statTiles[i];
+            Brush c = state == 1 ? Ui.Good : state == 2 ? Ui.Warn : state == 0 ? Ui.Crit : Ui.Faint;
+            st.Val.Text = val; st.Val.Foreground = state == 1 ? Ui.Text : c;
+            st.Src.Text = src; st.Src.Foreground = state == 1 ? Ui.Dim : c;
+            st.Dot.Background = c;
+            st.Root.BorderBrush = state == 1 ? Ui.Line : c;
+            st.Root.ToolTip = state == 0 ? StatNames[i] + " isn't reading - see " + src + (src == "HWiNFO" || src == "PresentMon" ? " below." : ".") : null;
+        }
+        void UpdateStats(SysMon.Sample smp, int cpuWattsWin) {
+            // FPS: PresentMon - mirror its box (off / setup / ready / connected)
+            if (!monFpsOn) SetStat(0, "off", "PresentMon", -1);
+            else {
+                Brush fb = monFpsTxt != null ? monFpsTxt.Foreground : Ui.Faint;
+                int st = fb == Ui.Good ? 1 : fb == Ui.Warn ? 2 : fb == Ui.Crit ? 0 : -1;
+                SetStat(0, FpsMon.GotFrames && FpsMon.Fps > 0 ? FpsMon.Fps.ToString() : "--", "PresentMon", st);
+            }
+            bool cpuOk = smp.CpuTotal >= 0;
+            SetStat(1, cpuOk ? (int)(smp.CpuTotal + 0.5) + "%" : "--", "Windows", cpuOk ? 1 : 0);
+            SetStat(2, smp.GpuOk ? smp.GpuPct + "%" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
+            SetStat(3, smp.CpuTempC >= 0 ? smp.CpuTempC + "°C" : "--", "HWiNFO", smp.CpuTempC >= 0 ? 1 : 0);
+            bool gt = smp.GpuOk && smp.GpuTempC > 0;
+            SetStat(4, gt ? smp.GpuTempC + "°C" : "n/a", "NVIDIA driver", gt ? 1 : 0);
+            bool ram = smp.RamTotalGB > 0;
+            SetStat(5, ram ? smp.RamUsedGB.ToString("0.0") + "/" + smp.RamTotalGB.ToString("0") + "GB" : "--", "Windows", ram ? 1 : 0);
+            SetStat(6, smp.GpuOk ? smp.VramUsedGB.ToString("0.0") + "/" + smp.VramTotalGB.ToString("0") + "GB" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
+            // CPU watts: Windows' RAPL counter; HWiNFO only on boards that don't publish one
+            if (cpuWattsWin >= 0) SetStat(7, cpuWattsWin + "W", "Windows", 1);
+            else SetStat(7, smp.CpuPowerW >= 0 ? smp.CpuPowerW + "W" : "--", "HWiNFO", smp.CpuPowerW >= 0 ? 1 : 0);
+            bool gw = smp.GpuOk && smp.GpuPowerW >= 0;
+            SetStat(8, gw ? smp.GpuPowerW + "W" : "n/a", "NVIDIA driver", gw ? 1 : 0);
         }
         // Single source of truth for the OSD overlay's visibility. Called on launch, from every overlay-related
         // toggle/hotkey, from Restore()/OnClosing(), and each MonTick. Decides whether the overlay should be on
@@ -1339,18 +1392,18 @@ namespace StarMaster {
         void UpdateFpsUiCore() {
             if (monFpsTxt == null) return;
             SetFpsTip("");
-            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "Off - turn on \"Show FPS\" above to use it."; return; }
+            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "Off - turn on Show FPS above."; return; }
             bool access = FpsMon.PerfAccess();
             if (access && fpsPendingRelogin) { fpsPendingRelogin = false; SaveConfig(); }   // the sign-out/in took effect - clear the pending flag
             if (!access) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
                 monFpsTxt.Foreground = Ui.Warn;
                 if (fpsPendingRelogin) {   // already granted, just not applied yet
                     monFpsBtn.Visibility = Visibility.Collapsed;
-                    monFpsTxt.Text = "Almost there - sign out of Windows and back in (or restart the PC) once, then FPS works automatically.";
+                    monFpsTxt.Text = "Almost there - sign out and back in once.";
                 } else {
                     monFpsBtn.Visibility = Visibility.Visible; monFpsTxt.Foreground = Ui.Crit;
-                    monFpsTxt.Text = "Not working - needs a quick one-time setup (Windows asks for admin once - then it just works, no more prompts).";
-                    SetFpsTip("This grants FPS-capture access; it's separate from HWiNFO. After you approve it, sign out of Windows and back in once.");
+                    monFpsTxt.Text = "Not working - needs a one-time setup.";
+                    SetFpsTip("Windows asks for admin once; then sign out and back in.");
                 }
                 return;
             }
@@ -1360,8 +1413,8 @@ namespace StarMaster {
             }
             if (FpsMon.GotFrames) { string tn = FpsMon.TargetName; monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS" + (string.IsNullOrEmpty(tn) || tn == "<unknown>" ? "" : " (" + tn + ")"); return; }
             bool scRunning = ScRunning();
-            if (!scRunning) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Ready - shows the FPS of whichever game is in front."; }
-            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Star Citizen is running but no frames captured yet - give it a few seconds."; SetFpsTip("If it stays here, another FPS/overlay tool (RTSS, MSI Afterburner, etc.) may be holding the capture - close it and toggle Show FPS off/on."); }
+            if (!scRunning) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Ready - shows the FPS of the game in front."; }
+            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Game running - waiting for frames..."; SetFpsTip("Stuck? Close RTSS / Afterburner, then toggle Show FPS."); }
         }
         void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
         // one-time: add the user to Performance Log Users so PresentMon can capture without elevation thereafter
@@ -1389,7 +1442,7 @@ namespace StarMaster {
         StackPanel SourceHeader(string name, string[] provides, out Border[] chips) {
             StackPanel h = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
             h.Children.Add(new TextBlock { Text = name, Foreground = Ui.Text, FontSize = 10.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            h.Children.Add(new TextBlock { Text = "provides", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) });
+            h.Children.Add(new TextBlock { Text = "needed for", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) });
             chips = new Border[provides.Length];
             for (int i = 0; i < provides.Length; i++) {
                 chips[i] = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = Ui.Faint, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = provides[i], Foreground = Ui.Faint, FontSize = 9.5, FontWeight = FontWeights.SemiBold } };
@@ -1400,8 +1453,8 @@ namespace StarMaster {
         void SetChips(Border[] chips, Brush c) { if (chips == null) return; foreach (Border b in chips) { b.BorderBrush = c; ((TextBlock)b.Child).Foreground = c; } }
         // a status pill: rounded label, coloured green when the requirement is met, yellow while it's still to do
         Border HwPill(string label, string tip) {
-            TextBlock t = new TextBlock { Text = label, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center };
-            return new Border { CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1), BorderBrush = Ui.Warn, Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 6, 6), Child = t, ToolTip = tip, Tag = label };
+            TextBlock t = new TextBlock { Text = label, FontSize = 9, VerticalAlignment = VerticalAlignment.Center };
+            return new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = Ui.Warn, Padding = new Thickness(7, 1, 7, 1), Margin = new Thickness(0, 0, 5, 5), Child = t, ToolTip = tip, Tag = label };
         }
         void SetPill(Border pill, bool done) {
             if (pill == null) return;
@@ -1482,22 +1535,15 @@ namespace StarMaster {
             // only a fallback for boards that don't publish one.
             bool sm = HwInfo.ReadSensors();
             smp.CpuTempC = HwInfo.CpuTempC;
+            int cpuWattsWin = smp.CpuPowerW;   // what Windows gave, before any HWiNFO fallback (for the stats grid source)
             if (smp.CpuPowerW < 0) smp.CpuPowerW = HwInfo.CpuPowerW;
             // ~5s cadence, but refresh immediately when shared memory comes live or drops so "did my fix work?" feedback is instant
             if (++hwTick >= 5 || (sm && HwInfo.State != HwInfo.Connected) || (!sm && HwInfo.State == HwInfo.Connected)) { hwTick = 0; HwInfo.RefreshState(sm); }
             if (IsVisible) {
                 UpdateShaderCard();
                 if (hwTick == 0) UpdateHwUi();
-                // clean preview: 4 equal bars, each with just its primary value (full detail is in the overlay)
-                monCpuBar.Set(smp.CpuTotal); monCpuTxt.Text = (int)(smp.CpuTotal + 0.5) + " %";
                 UpdateFpsUi();
-                monRamBar.Set(smp.RamPct); monRamTxt.Text = smp.RamUsedGB.ToString("0.0") + " / " + smp.RamTotalGB.ToString("0") + " GB (" + smp.RamPct + "%)";
-                if (smp.GpuOk) {
-                    monGpuBar.Set(smp.GpuPct); monGpuTxt.Text = smp.GpuPct + " %";
-                    monVramBar.Set(smp.VramPct); monVramTxt.Text = smp.VramUsedGB.ToString("0.0") + " / " + smp.VramTotalGB.ToString("0") + " GB (" + smp.VramPct + "%)";
-                } else {
-                    monGpuBar.Set(0); monGpuTxt.Text = "n/a"; monVramBar.Set(0); monVramTxt.Text = "n/a";
-                }
+                UpdateStats(smp, cpuWattsWin);
             }
             if (overlay) monWin.Update(smp);
         }

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("87.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("87.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("88.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("88.0.0.0")]
 
 namespace StarMaster {
 
@@ -523,16 +523,21 @@ namespace StarMaster {
         // swap chains reports its busiest one. Nothing fresh => leave it; Stale turns the number into "--".
         static void PickTarget(Dictionary<string, Chain> chains) {
             int now = Environment.TickCount, fg = Native.ActivePid();
-            Chain best = null, bestPrev = null; List<string> dead = null;
+            Chain best = null, bestPrev = null, bestSc = null; List<string> dead = null;
             foreach (KeyValuePair<string, Chain> kv in chains) {
                 Chain c = kv.Value; int age = unchecked(now - c.LastTick);
                 if (age > 30000) { if (dead == null) dead = new List<string>(); dead.Add(kv.Key); continue; }
                 if (age > StaleMs) continue;
                 if (c.Pid == fg && (best == null || c.Fps > best.Fps)) best = c;
                 if (c.Pid == targetPid && (bestPrev == null || c.Fps > bestPrev.Fps)) bestPrev = c;
+                if (string.Equals(c.App, "StarCitizen.exe", StringComparison.OrdinalIgnoreCase) && (bestSc == null || c.Fps > bestSc.Fps)) bestSc = c;
             }
             if (dead != null) foreach (string k in dead) chains.Remove(k);
             if (best == null) best = bestPrev;
+            // v88: nothing in front and no previous game (e.g. StarMaster just restarted after a self-update while
+            // you sat on the desktop) - Star Citizen still counts if it's presenting. Before, the card said
+            // "waiting for frames" until you clicked into the game.
+            if (best == null) best = bestSc;
             if (best == null) return;
             targetPid = best.Pid; TargetName = best.App; fps = best.Fps;
             gotFrames = true; lastFrameTick = best.LastTick; Status = "running";
@@ -659,7 +664,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "87";
+        public const string Version = "88";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -1186,17 +1191,27 @@ namespace StarMaster {
             // box + text opacity sliders (10% steps)
             body.Children.Add(OpacityRow("Box Opacity", monOvAlpha, delegate (int v) { monOvAlpha = v; SetOverlayStyle(); }));
             body.Children.Add(OpacityRow("Text Opacity", monTextAlpha, delegate (int v) { monTextAlpha = v; SetOverlayStyle(); }));
-            // overlay background colour (swatches)
-            StackPanel coR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
-            coR.Children.Add(new TextBlock { Text = "Colour", Width = 64, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+            // overlay box colour (v88: "Box Colour" to match Box Opacity; wider swatches, each named underneath -
+            // the colours are deliberately dark (it's a backdrop), so the names do the distinguishing)
+            StackPanel coR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 16) };
+            coR.Children.Add(new TextBlock { Text = "Box Colour", Width = 96, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) });
             string[] swatches = { "0a0e18", "000000", "10131c", "141a2b", "0a1a14", "1a0e12", "140a1e", "20242e" };
-            List<Border> swBorders = new List<Border>();
-            foreach (string hx in swatches) {
-                string h = hx; bool selNow = string.Equals(h, monOvColor, StringComparison.OrdinalIgnoreCase);
-                Border sw = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(6), Background = Ui.B(h), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand, BorderBrush = selNow ? Ui.Accent : Ui.Line2, BorderThickness = new Thickness(selNow ? 2 : 1) };
-                swBorders.Add(sw);
-                sw.MouseLeftButtonUp += delegate { monOvColor = h; SetOverlayStyle(); foreach (Border b in swBorders) { b.BorderBrush = Ui.Line2; b.BorderThickness = new Thickness(1); } sw.BorderBrush = Ui.Accent; sw.BorderThickness = new Thickness(2); };
-                coR.Children.Add(sw);
+            string[] swNames = { "Navy", "Black", "Charcoal", "Slate", "Forest", "Wine", "Plum", "Graphite" };
+            List<Border> swBorders = new List<Border>(); List<TextBlock> swLabels = new List<TextBlock>();
+            for (int si = 0; si < swatches.Length; si++) {
+                string h = swatches[si]; bool selNow = string.Equals(h, monOvColor, StringComparison.OrdinalIgnoreCase);
+                StackPanel cell = new StackPanel { Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand, Background = Brushes.Transparent };
+                Border sw = new Border { Width = 48, Height = 26, CornerRadius = new CornerRadius(7), Background = Ui.B(h), BorderBrush = selNow ? Ui.Accent : Ui.Line2, BorderThickness = new Thickness(selNow ? 2 : 1) };
+                TextBlock nm = new TextBlock { Text = swNames[si], FontSize = 9, Foreground = selNow ? Ui.Accent : Ui.Faint, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 3, 0, 0) };
+                cell.Children.Add(sw); cell.Children.Add(nm);
+                swBorders.Add(sw); swLabels.Add(nm);
+                cell.MouseLeftButtonUp += delegate {
+                    monOvColor = h; SetOverlayStyle();
+                    foreach (Border b in swBorders) { b.BorderBrush = Ui.Line2; b.BorderThickness = new Thickness(1); }
+                    foreach (TextBlock l in swLabels) l.Foreground = Ui.Faint;
+                    sw.BorderBrush = Ui.Accent; sw.BorderThickness = new Thickness(2); nm.Foreground = Ui.Accent;
+                };
+                coR.Children.Add(cell);
             }
             body.Children.Add(coR);
 

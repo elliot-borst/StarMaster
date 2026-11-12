@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("84.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("84.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("85.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("85.0.0.0")]
 
 namespace StarMaster {
 
@@ -659,7 +659,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "84";
+        public const string Version = "85";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -913,7 +913,7 @@ namespace StarMaster {
             scRoot.FontFamily = Ui.Font; scRoot.FontSize = 11; scRoot.Foreground = Ui.Text;
             scRow.Children.Add(scRoot);
             Border browse = Btn("Browse...", Ui.Card2, Ui.Text, false, delegate { PickScFolder(); });
-            browse.Padding = new Thickness(12, 4, 12, 4); browse.Margin = new Thickness(12, 0, 0, 0); browse.VerticalAlignment = VerticalAlignment.Center; ((TextBlock)browse.Child).FontSize = 10.5;
+            browse.Padding = new Thickness(12, 4, 12, 4); browse.Margin = new Thickness(36, 0, 0, 0); browse.VerticalAlignment = VerticalAlignment.Center; ((TextBlock)browse.Child).FontSize = 10.5;
             scRow.Children.Add(browse);
             scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
             updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; updBtn.Height = PillH; updBtn.Padding = new Thickness(16, 0, 16, 0); updBtn.CornerRadius = new CornerRadius(12); updBtnLbl.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);

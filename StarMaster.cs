@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("91.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("91.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("92.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("92.0.0.0")]
 
 namespace StarMaster {
 
@@ -655,9 +655,11 @@ namespace StarMaster {
     // tiers / overlay white / brand colours) are frozen and identical in every theme.
     public class Theme {
         public string Name; public string Bg, Card, Card2, Line, Line2, Text, Dim, Faint, Accent, Accent2, Ink, Inset, GradA, GradB;
+        public string LogoA, LogoB;   // the logo tile's diagonal gradient (v92); the star is Ink
         public Theme(string name, string bg, string card, string card2, string line, string line2, string text, string dim, string faint, string accent, string accent2, string ink, string inset, string gradA, string gradB) {
             Name = name; Bg = bg; Card = card; Card2 = card2; Line = line; Line2 = line2; Text = text; Dim = dim; Faint = faint; Accent = accent; Accent2 = accent2; Ink = ink; Inset = inset; GradA = gradA; GradB = gradB;
         }
+        public Theme Logo(string a, string b) { LogoA = a; LogoB = b; return this; }
     }
     static class Ui {
         public static SolidColorBrush B(string hex) { SolidColorBrush b = new SolidColorBrush(C(hex)); b.Freeze(); return b; }
@@ -679,19 +681,20 @@ namespace StarMaster {
             TitleBg = M(), IconBg = M(), Hover = M(), Knob = M();   // title bar, card icon tiles, dropdown hover, toggle/slider knobs
         static readonly LinearGradientBrush grad = new LinearGradientBrush(Colors.White, Colors.White, 0);
         public static readonly LinearGradientBrush WinBg = new LinearGradientBrush(Colors.Black, Colors.Black, 90);
+        public static readonly LinearGradientBrush LogoGrad = new LinearGradientBrush(Colors.White, Colors.White, new Point(0, 0), new Point(1, 1));
         public static LinearGradientBrush AccentGrad() { return grad; }   // shared, so buttons/toggles follow the theme too
         public static readonly FontFamily Font = new FontFamily("Segoe UI"), Mono = new FontFamily("Consolas");
 
         public static readonly Theme[] Themes = {
             //          name             bg         card       card2      line       line2      text       dim        faint      accent     accent2    ink        inset      gradA      gradB
-            new Theme("Orchid",        "#110d13", "#19141c", "#211a25", "#2c2331", "#3d3245", "#efe6f0", "#a597ad", "#6e6377", "#e47ad0", "#f2b3e6", "#1c0f1b", "#140f17", "#ec8ada", "#d268c0"),
-            new Theme("Ultraviolet",   "#0e0c17", "#16131f", "#1e1a29", "#2a2440", "#3a3354", "#ece8f6", "#9a93ad", "#645d78", "#a98bff", "#ff8fc7", "#120d22", "#120f1b", "#b69cff", "#9a72ff"),
-            new Theme("Hot Magenta",   "#0f0f11", "#17171a", "#1f1f23", "#2a2a30", "#3a3a42", "#f1edf0", "#98939b", "#636068", "#ff3d8b", "#ffc2d9", "#1a0a12", "#121214", "#ff5c9d", "#f02a7c"),
-            new Theme("Rose Steel",    "#111215", "#181a1e", "#202227", "#2a2d33", "#3a3d45", "#e9e8ec", "#959399", "#64636a", "#f2779a", "#c9b8d6", "#1c0e13", "#141518", "#f689a8", "#e2668a"),
-            new Theme("Dusk",          "#140d14", "#1c131c", "#241926", "#33243a", "#45324a", "#f3e8ef", "#a5929f", "#6f5f6c", "#ff8fb0", "#ffb59c", "#1f0f15", "#170f17", "#ffa0bd", "#ff829f"),
-            new Theme("Quantum Amber", "#0e0f11", "#16181b", "#1d2024", "#2b2f34", "#3b4047", "#ece6da", "#968f82", "#5f5a51", "#ffb547", "#ffd59a", "#1a1206", "#121316", "#ffc463", "#f0a032"),
-            new Theme("Polaris",       "#0a1018", "#111a26", "#172232", "#223146", "#2f4360", "#e4eef7", "#8798ab", "#566679", "#7cc8f0", "#bfe6fa", "#06121c", "#0d1520", "#93d3f4", "#5fb6e6"),
-            new Theme("Aurora",        "#0b0e16", "#141a2b", "#171d33", "#232a45", "#323c5e", "#e6ecfb", "#94a0c2", "#646f93", "#79b0ff", "#a9c8ff", "#0a1228", "#0f1322", "#22d3ee", "#a855f7"),
+            new Theme("Orchid",        "#110d13", "#19141c", "#211a25", "#2c2331", "#3d3245", "#efe6f0", "#a597ad", "#6e6377", "#e47ad0", "#f2b3e6", "#1c0f1b", "#140f17", "#ec8ada", "#d268c0").Logo("#ff9fd8", "#9b7bff"),
+            new Theme("Ultraviolet",   "#0e0c17", "#16131f", "#1e1a29", "#2a2440", "#3a3354", "#ece8f6", "#9a93ad", "#645d78", "#a98bff", "#ff8fc7", "#120d22", "#120f1b", "#b69cff", "#9a72ff").Logo("#c9b2ff", "#7f5cff"),
+            new Theme("Hot Magenta",   "#0f0f11", "#17171a", "#1f1f23", "#2a2a30", "#3a3a42", "#f1edf0", "#98939b", "#636068", "#ff3d8b", "#ffc2d9", "#1a0a12", "#121214", "#ff5c9d", "#f02a7c").Logo("#ff8ab8", "#d81f6a"),
+            new Theme("Rose Steel",    "#111215", "#181a1e", "#202227", "#2a2d33", "#3a3d45", "#e9e8ec", "#959399", "#64636a", "#f2779a", "#c9b8d6", "#1c0e13", "#141518", "#f689a8", "#e2668a").Logo("#f9a7bd", "#b79ccf"),
+            new Theme("Dusk",          "#140d14", "#1c131c", "#241926", "#33243a", "#45324a", "#f3e8ef", "#a5929f", "#6f5f6c", "#ff8fb0", "#ffb59c", "#1f0f15", "#170f17", "#ffa0bd", "#ff829f").Logo("#ffb3c8", "#ff9b7a"),
+            new Theme("Quantum Amber", "#0e0f11", "#16181b", "#1d2024", "#2b2f34", "#3b4047", "#ece6da", "#968f82", "#5f5a51", "#ffb547", "#ffd59a", "#1a1206", "#121316", "#ffc463", "#f0a032").Logo("#ffd27a", "#f08a24"),
+            new Theme("Polaris",       "#0a1018", "#111a26", "#172232", "#223146", "#2f4360", "#e4eef7", "#8798ab", "#566679", "#7cc8f0", "#bfe6fa", "#06121c", "#0d1520", "#93d3f4", "#5fb6e6").Logo("#b4e4fa", "#4f9fe0"),
+            new Theme("Aurora",        "#0b0e16", "#141a2b", "#171d33", "#232a45", "#323c5e", "#e6ecfb", "#94a0c2", "#646f93", "#79b0ff", "#a9c8ff", "#0a1228", "#0f1322", "#22d3ee", "#a855f7").Logo("#22d3ee", "#a855f7"),
         };
         public static Theme Current = Themes[0];
         public static Theme FindTheme(string name) { foreach (Theme t in Themes) if (string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)) return t; return Themes[0]; }
@@ -704,13 +707,14 @@ namespace StarMaster {
             Bone.Color = text; Mauve.Color = Mix(dim, faint, 0.45); Knob.Color = text;
             TitleBg.Color = Mix(bg, Colors.Black, 0.3); IconBg.Color = Mix(card2, accent, 0.08); Hover.Color = Mix(card2, accent, 0.13);
             grad.GradientStops[0].Color = C(t.GradA); grad.GradientStops[1].Color = C(t.GradB);
+            LogoGrad.GradientStops[0].Color = C(t.LogoA ?? t.GradA); LogoGrad.GradientStops[1].Color = C(t.LogoB ?? t.GradB);
             WinBg.GradientStops[0].Color = Mix(bg, C(t.Card), 0.45); WinBg.GradientStops[1].Color = Mix(bg, Colors.Black, 0.15);
         }
     }
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "91";
+        public const string Version = "92";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -865,32 +869,17 @@ namespace StarMaster {
         // ---------- the StarMaster mark (v90 "Star lock"): targeting brackets, a ring, and a concave four-point star ----------
         // Same geometry as Make-Icon.ps1 (64-unit design space), so the window, tray and taskbar icons all match.
         static FrameworkElement LogoMark(double size) {
+            // v92 "H3": a rounded-square tile in the theme's logo gradient with one dark concave star - chosen because the
+            // v90 Star lock turned to mush at taskbar/tray size. Same geometry as Make-Icon.ps1.
             Canvas c = new Canvas { Width = 64, Height = 64 };
-            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M8 20V8h12M44 8h12v12M56 44v12H44M20 56H8V44"), Stroke = Ui.Mauve, StrokeThickness = 4.5,
-                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round });
-            Ellipse ring = new Ellipse { Width = 31, Height = 31, Fill = Ui.Card, Stroke = Ui.Bone, StrokeThickness = 3 };
-            Canvas.SetLeft(ring, 16.5); Canvas.SetTop(ring, 16.5); c.Children.Add(ring);
-            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M32 10Q35.8 28.2 54 32Q35.8 35.8 32 54Q28.2 35.8 10 32Q28.2 28.2 32 10Z"), Fill = Ui.Accent });
+            Rectangle tile = new Rectangle { Width = 60, Height = 60, RadiusX = 14, RadiusY = 14, Fill = Ui.LogoGrad };
+            Canvas.SetLeft(tile, 2); Canvas.SetTop(tile, 2); c.Children.Add(tile);
+            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M32 7Q36.5 27.5 57 32Q36.5 36.5 32 57Q27.5 36.5 7 32Q27.5 27.5 32 7Z"), Fill = Ui.Ink });
             return new Viewbox { Width = size, Height = size, Child = c, Stretch = Stretch.Uniform };
         }
-
-        // Tray mark (v91): the 16-32 px tray has no room for brackets, so it's just a bold ring + a big star that
-        // reaches the edge - same identity, legible at a glance.
-        static FrameworkElement TrayMark() {
-            Canvas c = new Canvas { Width = 64, Height = 64 };
-            Ellipse ring = new Ellipse { Width = 50, Height = 50, Fill = Ui.Card, Stroke = Ui.Bone, StrokeThickness = 6 };
-            Canvas.SetLeft(ring, 7); Canvas.SetTop(ring, 7); c.Children.Add(ring);
-            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M32 2Q36.6 27.4 62 32Q36.6 36.6 32 62Q27.4 36.6 2 32Q27.4 27.4 32 2Z"), Fill = Ui.Accent });
-            return c;
-        }
-        // App tile (taskbar / Alt-Tab): the full mark on a rounded tile in the theme's card colour.
-        static FrameworkElement AppTile() {
-            Grid g = new Grid { Width = 64, Height = 64 };
-            g.Children.Add(new Border { CornerRadius = new CornerRadius(13), Background = Ui.Card, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) });
-            FrameworkElement m = LogoMark(56); m.HorizontalAlignment = HorizontalAlignment.Center; m.VerticalAlignment = VerticalAlignment.Center; g.Children.Add(m);
-            return g;
-        }
-        static System.Windows.Media.Imaging.BitmapSource RenderMark(FrameworkElement el, int px) {
+        // Tray + taskbar (v92): the mark is already a self-contained tile, so both just render it.
+        static FrameworkElement TrayMark() { return LogoMark(64); }
+        static FrameworkElement AppTile() { return LogoMark(64); }        static System.Windows.Media.Imaging.BitmapSource RenderMark(FrameworkElement el, int px) {
             el.Measure(new Size(64, 64)); el.Arrange(new Rect(0, 0, 64, 64)); el.UpdateLayout();
             double dpi = 96.0 * px / 64.0;
             System.Windows.Media.Imaging.RenderTargetBitmap rt = new System.Windows.Media.Imaging.RenderTargetBitmap(px, px, dpi, dpi, PixelFormats.Pbgra32);
@@ -987,8 +976,8 @@ namespace StarMaster {
             DockPanel d = new DockPanel { LastChildFill = false };
             // v80: every top-bar pill is the same height (PillH) and the bar is slimmer - the launch toggles sit side by side
             const double PillH = 38;
-            Border logo = new Border { Width = PillH, Height = PillH, CornerRadius = new CornerRadius(11), Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
-            FrameworkElement hlogo = LogoMark(28); hlogo.HorizontalAlignment = HorizontalAlignment.Center; hlogo.VerticalAlignment = VerticalAlignment.Center;
+            Border logo = new Border { Width = PillH, Height = PillH, VerticalAlignment = VerticalAlignment.Center };
+            FrameworkElement hlogo = LogoMark(PillH); hlogo.HorizontalAlignment = HorizontalAlignment.Center; hlogo.VerticalAlignment = VerticalAlignment.Center;
             logo.Child = hlogo; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
             StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
             ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 18, FontWeight = FontWeights.Bold, LineHeight = 20, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });

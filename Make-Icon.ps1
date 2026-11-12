@@ -19,7 +19,30 @@ function Add-Quad($path, $x0, $y0, $qx, $qy, $x2, $y2) {
                     [single]($x2 + 2/3*($qx-$x2)), [single]($y2 + 2/3*($qy-$y2)), [single]$x2, [single]$y2)
 }
 
+function Draw-Small([int]$s) {
+    # v91: 16-32 px (Explorer small icons, the tray before the app redraws it) - no tile, no brackets: a bold ring
+    # and a star reaching the edge, the same TrayMark the app draws at runtime. Detail at this size is just noise.
+    $bmp = New-Object System.Drawing.Bitmap($s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb))
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.Clear([System.Drawing.Color]::Transparent)
+    $k = $s / 64.0
+    function Q([double]$u) { return [single]($u * $k) }
+    $rf = New-Object System.Drawing.SolidBrush((C 255 25 20 28)); $g.FillEllipse($rf, (Q 7), (Q 7), (Q 50), (Q 50)); $rf.Dispose()
+    $rp = New-Object System.Drawing.Pen((C 255 239 230 240), [single][Math]::Max(1.0, 6 * $k)); $g.DrawEllipse($rp, (Q 7), (Q 7), (Q 50), (Q 50)); $rp.Dispose()
+    $sp = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-Quad $sp (Q 32) (Q 2) (Q 36.6) (Q 27.4) (Q 62) (Q 32)
+    Add-Quad $sp (Q 62) (Q 32) (Q 36.6) (Q 36.6) (Q 32) (Q 62)
+    Add-Quad $sp (Q 32) (Q 62) (Q 27.4) (Q 36.6) (Q 2) (Q 32)
+    Add-Quad $sp (Q 2) (Q 32) (Q 27.4) (Q 27.4) (Q 32) (Q 2)
+    $sp.CloseFigure()
+    $sb = New-Object System.Drawing.SolidBrush((C 255 228 122 208)); $g.FillPath($sb, $sp); $sb.Dispose(); $sp.Dispose()
+    $g.Dispose(); return $bmp
+}
+
 function Draw-Icon([int]$s) {
+    if ($s -le 32) { return Draw-Small $s }
     $bmp = New-Object System.Drawing.Bitmap($s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb))
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -33,7 +56,7 @@ function Draw-Icon([int]$s) {
     if ($s -ge 32) { $tp = New-Object System.Drawing.Pen((C 255 61 50 69), [single][Math]::Max(1.0, $s / 128.0)); $g.DrawPath($tp, $tile); $tp.Dispose() }
 
     # map the 64-unit mark into the tile (a touch more margin on big sizes, edge-to-edge on 16 so it stays legible)
-    $fill = if ($s -le 24) { 0.98 } else { 0.84 }
+    $fill = 0.9
     $k = $s * $fill / 64.0; $o = ($s - 64 * $k) / 2.0
     function P([double]$u) { return [single]($o + $u * $k) }
 

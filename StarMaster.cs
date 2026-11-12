@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("90.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("90.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("91.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("91.0.0.0")]
 
 namespace StarMaster {
 
@@ -649,25 +649,68 @@ namespace StarMaster {
         }
     }
 
-    // ===== Aurora theme + widgets =====
+    // ===== colour themes (v91) + widgets =====
+    // Every themed colour is ONE shared, unfrozen brush; elements hold a reference to it, so ApplyTheme only has to
+    // change each brush's Color and the whole window repaints live - no rebuild. Semantic colours (status / load
+    // tiers / overlay white / brand colours) are frozen and identical in every theme.
+    public class Theme {
+        public string Name; public string Bg, Card, Card2, Line, Line2, Text, Dim, Faint, Accent, Accent2, Ink, Inset, GradA, GradB;
+        public Theme(string name, string bg, string card, string card2, string line, string line2, string text, string dim, string faint, string accent, string accent2, string ink, string inset, string gradA, string gradB) {
+            Name = name; Bg = bg; Card = card; Card2 = card2; Line = line; Line2 = line2; Text = text; Dim = dim; Faint = faint; Accent = accent; Accent2 = accent2; Ink = ink; Inset = inset; GradA = gradA; GradB = gradB;
+        }
+    }
     static class Ui {
-        public static SolidColorBrush B(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16))); b.Freeze(); return b; }
+        public static SolidColorBrush B(string hex) { SolidColorBrush b = new SolidColorBrush(C(hex)); b.Freeze(); return b; }
         public static SolidColorBrush B2(string hex) { hex = hex.TrimStart('#'); SolidColorBrush b = new SolidColorBrush(Color.FromArgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16), Convert.ToByte(hex.Substring(6, 2), 16))); b.Freeze(); return b; }
-        public static readonly Brush Warn = B("#ffd34d"), HotO = B("#ff9a3d"), Crit = B("#ff5d5d");   // load tiers
-        public static Brush Load(double p) { if (p >= 95) return Crit; if (p >= 90) return HotO; if (p >= 85) return Warn; return Text; }   // usage/mem %: white <85 -> yellow 85 -> orange 90 -> red 95
-        public static Brush LoadT(double t) { if (t >= 95) return Crit; if (t >= 88) return HotO; if (t >= 80) return Warn; return Text; }   // temperature: white <80 -> yellow 80 -> orange 88 -> red 95
-        // v90 "Orchid" palette: plum-black surfaces, bone text, orchid accent (was the cyan/violet "Aurora" set)
-        public static readonly Brush Bg = B("#110d13"), Card = B("#19141c"), Card2 = B("#211a25"), Line = B("#2c2331"), Line2 = B("#3d3245"),
-            Text = B("#efe6f0"), Dim = B("#a597ad"), Faint = B("#6e6377"), Accent = B("#e47ad0"), Accent2 = B("#f2b3e6"),
-            Good = B("#6fdc8c"), Ink = B("#1c0f1b"), Inset = B("#140f17"), Danger = B("#2e1519"), DangerFg = B("#ff8f80");
-        public static readonly Brush Bone = B("#efe6f0"), Mauve = B("#8b8592");   // logo ring + brackets
-        public static LinearGradientBrush AccentGrad() { LinearGradientBrush g = new LinearGradientBrush(Color.FromRgb(0xec, 0x8a, 0xda), Color.FromRgb(0xd2, 0x68, 0xc0), 0); g.Freeze(); return g; }   // orchid, a gentle left-to-right sheen
+        public static Color C(string hex) { hex = hex.TrimStart('#'); return Color.FromRgb(Convert.ToByte(hex.Substring(0, 2), 16), Convert.ToByte(hex.Substring(2, 2), 16), Convert.ToByte(hex.Substring(4, 2), 16)); }
+        static Color Mix(Color a, Color b, double t) { return Color.FromRgb((byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t)); }
+        static SolidColorBrush M() { return new SolidColorBrush(); }   // mutable - recoloured by ApplyTheme
+
+        // fixed (semantic) colours
+        public static readonly SolidColorBrush Warn = B("#ffd34d"), HotO = B("#ff9a3d"), Crit = B("#ff5d5d"), White = B("#ffffff");   // overlay load tiers + overlay text
+        public static readonly SolidColorBrush Good = B("#6fdc8c"), Danger = B("#2e1519"), DangerFg = B("#ff8f80");
+        public static Brush Load(double p) { if (p >= 95) return Crit; if (p >= 90) return HotO; if (p >= 85) return Warn; return White; }   // usage/mem %: white <85 -> yellow 85 -> orange 90 -> red 95
+        public static Brush LoadT(double t) { if (t >= 95) return Crit; if (t >= 88) return HotO; if (t >= 80) return Warn; return White; }   // temperature: white <80 -> yellow 80 -> orange 88 -> red 95
+
+        // themed colours (live)
+        public static readonly SolidColorBrush Bg = M(), Card = M(), Card2 = M(), Line = M(), Line2 = M(), Text = M(), Dim = M(), Faint = M(),
+            Accent = M(), Accent2 = M(), Ink = M(), Inset = M(),
+            Bone = M(), Mauve = M(),                       // logo ring + brackets
+            TitleBg = M(), IconBg = M(), Hover = M(), Knob = M();   // title bar, card icon tiles, dropdown hover, toggle/slider knobs
+        static readonly LinearGradientBrush grad = new LinearGradientBrush(Colors.White, Colors.White, 0);
+        public static readonly LinearGradientBrush WinBg = new LinearGradientBrush(Colors.Black, Colors.Black, 90);
+        public static LinearGradientBrush AccentGrad() { return grad; }   // shared, so buttons/toggles follow the theme too
         public static readonly FontFamily Font = new FontFamily("Segoe UI"), Mono = new FontFamily("Consolas");
+
+        public static readonly Theme[] Themes = {
+            //          name             bg         card       card2      line       line2      text       dim        faint      accent     accent2    ink        inset      gradA      gradB
+            new Theme("Orchid",        "#110d13", "#19141c", "#211a25", "#2c2331", "#3d3245", "#efe6f0", "#a597ad", "#6e6377", "#e47ad0", "#f2b3e6", "#1c0f1b", "#140f17", "#ec8ada", "#d268c0"),
+            new Theme("Ultraviolet",   "#0e0c17", "#16131f", "#1e1a29", "#2a2440", "#3a3354", "#ece8f6", "#9a93ad", "#645d78", "#a98bff", "#ff8fc7", "#120d22", "#120f1b", "#b69cff", "#9a72ff"),
+            new Theme("Hot Magenta",   "#0f0f11", "#17171a", "#1f1f23", "#2a2a30", "#3a3a42", "#f1edf0", "#98939b", "#636068", "#ff3d8b", "#ffc2d9", "#1a0a12", "#121214", "#ff5c9d", "#f02a7c"),
+            new Theme("Rose Steel",    "#111215", "#181a1e", "#202227", "#2a2d33", "#3a3d45", "#e9e8ec", "#959399", "#64636a", "#f2779a", "#c9b8d6", "#1c0e13", "#141518", "#f689a8", "#e2668a"),
+            new Theme("Dusk",          "#140d14", "#1c131c", "#241926", "#33243a", "#45324a", "#f3e8ef", "#a5929f", "#6f5f6c", "#ff8fb0", "#ffb59c", "#1f0f15", "#170f17", "#ffa0bd", "#ff829f"),
+            new Theme("Quantum Amber", "#0e0f11", "#16181b", "#1d2024", "#2b2f34", "#3b4047", "#ece6da", "#968f82", "#5f5a51", "#ffb547", "#ffd59a", "#1a1206", "#121316", "#ffc463", "#f0a032"),
+            new Theme("Polaris",       "#0a1018", "#111a26", "#172232", "#223146", "#2f4360", "#e4eef7", "#8798ab", "#566679", "#7cc8f0", "#bfe6fa", "#06121c", "#0d1520", "#93d3f4", "#5fb6e6"),
+            new Theme("Aurora",        "#0b0e16", "#141a2b", "#171d33", "#232a45", "#323c5e", "#e6ecfb", "#94a0c2", "#646f93", "#79b0ff", "#a9c8ff", "#0a1228", "#0f1322", "#22d3ee", "#a855f7"),
+        };
+        public static Theme Current = Themes[0];
+        public static Theme FindTheme(string name) { foreach (Theme t in Themes) if (string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)) return t; return Themes[0]; }
+        static Ui() { ApplyTheme(Themes[0]); }
+        public static void ApplyTheme(Theme t) {
+            Current = t;
+            Color bg = C(t.Bg), card2 = C(t.Card2), accent = C(t.Accent), dim = C(t.Dim), faint = C(t.Faint), text = C(t.Text);
+            Bg.Color = bg; Card.Color = C(t.Card); Card2.Color = card2; Line.Color = C(t.Line); Line2.Color = C(t.Line2);
+            Text.Color = text; Dim.Color = dim; Faint.Color = faint; Accent.Color = accent; Accent2.Color = C(t.Accent2); Ink.Color = C(t.Ink); Inset.Color = C(t.Inset);
+            Bone.Color = text; Mauve.Color = Mix(dim, faint, 0.45); Knob.Color = text;
+            TitleBg.Color = Mix(bg, Colors.Black, 0.3); IconBg.Color = Mix(card2, accent, 0.08); Hover.Color = Mix(card2, accent, 0.13);
+            grad.GradientStops[0].Color = C(t.GradA); grad.GradientStops[1].Color = C(t.GradB);
+            WinBg.GradientStops[0].Color = Mix(bg, C(t.Card), 0.45); WinBg.GradientStops[1].Color = Mix(bg, Colors.Black, 0.15);
+        }
     }
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "90";
+        public const string Version = "91";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -744,7 +787,7 @@ namespace StarMaster {
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true;
-            Background = new LinearGradientBrush(Color.FromRgb(0x17, 0x10, 0x19), Color.FromRgb(0x0e, 0x0a, 0x10), 90);
+            Background = Ui.WinBg;   // themed (v91)
 
             Grid root = new Grid { Margin = new Thickness(22, 12, 22, 22) };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -796,6 +839,7 @@ namespace StarMaster {
                 })); }, null, -1, false);
             } catch { }
             BuildTray();
+            RefreshAppIcons();   // themed taskbar + tray icons (v91)
             Closing += OnClosing;
             Loaded += delegate { CheckUpdate(true); SSCheck(false); if (overrides.Count > 0) RunOverrides(null); };   // re-assert name overrides (no write if the file already has them)
             // launch straight to the tray: the user setting, or the installer's --minimized relaunch after a
@@ -830,11 +874,57 @@ namespace StarMaster {
             return new Viewbox { Width = size, Height = size, Child = c, Stretch = Stretch.Uniform };
         }
 
+        // Tray mark (v91): the 16-32 px tray has no room for brackets, so it's just a bold ring + a big star that
+        // reaches the edge - same identity, legible at a glance.
+        static FrameworkElement TrayMark() {
+            Canvas c = new Canvas { Width = 64, Height = 64 };
+            Ellipse ring = new Ellipse { Width = 50, Height = 50, Fill = Ui.Card, Stroke = Ui.Bone, StrokeThickness = 6 };
+            Canvas.SetLeft(ring, 7); Canvas.SetTop(ring, 7); c.Children.Add(ring);
+            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M32 2Q36.6 27.4 62 32Q36.6 36.6 32 62Q27.4 36.6 2 32Q27.4 27.4 32 2Z"), Fill = Ui.Accent });
+            return c;
+        }
+        // App tile (taskbar / Alt-Tab): the full mark on a rounded tile in the theme's card colour.
+        static FrameworkElement AppTile() {
+            Grid g = new Grid { Width = 64, Height = 64 };
+            g.Children.Add(new Border { CornerRadius = new CornerRadius(13), Background = Ui.Card, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) });
+            FrameworkElement m = LogoMark(56); m.HorizontalAlignment = HorizontalAlignment.Center; m.VerticalAlignment = VerticalAlignment.Center; g.Children.Add(m);
+            return g;
+        }
+        static System.Windows.Media.Imaging.BitmapSource RenderMark(FrameworkElement el, int px) {
+            el.Measure(new Size(64, 64)); el.Arrange(new Rect(0, 0, 64, 64)); el.UpdateLayout();
+            double dpi = 96.0 * px / 64.0;
+            System.Windows.Media.Imaging.RenderTargetBitmap rt = new System.Windows.Media.Imaging.RenderTargetBitmap(px, px, dpi, dpi, PixelFormats.Pbgra32);
+            rt.Render(el); rt.Freeze(); return rt;
+        }
+        [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
+        [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
+        IntPtr trayHicon = IntPtr.Zero;
+        // Re-draw the taskbar (Window.Icon) and tray icons in the current theme. Rendering at runtime also means the
+        // running app never shows a stale icon from Windows' icon cache.
+        void RefreshAppIcons() {
+            try { Icon = RenderMark(AppTile(), 256); } catch { }
+            try {
+                if (trayIcon == null) return;
+                int px = Math.Max(16, GetSystemMetrics(49));   // SM_CXSMICON at this DPI (32 at 200%)
+                System.Windows.Media.Imaging.PngBitmapEncoder enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(RenderMark(TrayMark(), px)));
+                using (MemoryStream ms = new MemoryStream()) {
+                    enc.Save(ms); ms.Position = 0;
+                    using (System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(ms)) {
+                        IntPtr h = bmp.GetHicon();
+                        trayIcon.Icon = System.Drawing.Icon.FromHandle(h);
+                        if (trayHicon != IntPtr.Zero) DestroyIcon(trayHicon);
+                        trayHicon = h;
+                    }
+                }
+            } catch { }
+        }
+
         // ---------- custom title bar (v82) ----------
         const double TitleBarH = 34;
         Grid frame; Border frameBorder; TextBlock titleText, maxGlyph;
         UIElement TitleBar() {
-            Grid bar = new Grid { Background = Ui.B("#0c090e") };
+            Grid bar = new Grid { Background = Ui.TitleBg };
             bar.ColumnDefinitions.Add(new ColumnDefinition());
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             StackPanel left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
@@ -941,6 +1031,16 @@ namespace StarMaster {
             updateNoticeText = new TextBlock { Text = "", Foreground = Ui.Text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
             updateNotice.Children.Add(updateNoticeText);
             DockPanel.SetDock(updateNotice, Dock.Right); d.Children.Add(updateNotice);
+            // colour theme picker (v91) - switches live, no restart
+            Border thp = HeaderPill(); thp.Margin = new Thickness(0, 0, 12, 0); thp.Padding = new Thickness(14, 0, 6, 0);
+            StackPanel thr = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            thr.Children.Add(new TextBlock { Text = "Theme", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+            thr.Children.Add(new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(6), Background = Ui.Accent, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+            string[] tn = new string[Ui.Themes.Length]; for (int i = 0; i < tn.Length; i++) tn[i] = Ui.Themes[i].Name;
+            Dropdown th = new Dropdown(tn, Ui.Current.Name, 124); th.BorderThickness = new Thickness(0); th.Background = Brushes.Transparent;
+            th.OnChange = delegate (string v) { Ui.ApplyTheme(Ui.FindTheme(v)); RefreshAppIcons(); SaveConfig(); };
+            thr.Children.Add(th);
+            thp.Child = thr; DockPanel.SetDock(thp, Dock.Right); d.Children.Add(thp);
             return d;
         }
         Border HeaderPill() { return new Border { Height = 38, Padding = new Thickness(14, 0, 14, 0), CornerRadius = new CornerRadius(12), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }; }
@@ -1581,7 +1681,7 @@ namespace StarMaster {
             Border card = new Border { CornerRadius = new CornerRadius(15), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Padding = new Thickness(20, 18, 20, 18), VerticalAlignment = VerticalAlignment.Top };
             StackPanel s = new StackPanel();
             head = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 0, 0, 15) };
-            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.B("#251a29"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 14, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.IconBg, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 14, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
             DockPanel.SetDock(ic, Dock.Left); head.Children.Add(ic);
             StackPanel tt = new StackPanel { Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             tt.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
@@ -1953,11 +2053,12 @@ namespace StarMaster {
                         "<Setter Property='Width' Value='8'/><Setter Property='MinWidth' Value='8'/><Setter Property='Margin' Value='6,0,0,0'/>" +
                         "<Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'>" +
                         "<Track x:Name='PART_Track' IsDirectionReversed='True'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'>" +
-                        "<Border Background='#4a3b54' CornerRadius='4'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>" +
+                        "<Border Background='{DynamicResource SmThumb}' CornerRadius='4'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>" +
                         "</ControlTemplate></Setter.Value></Setter></Style>");
                 } catch { }
             }
             if (darkScrollStyle != null) sv.Resources.Add(typeof(ScrollBar), darkScrollStyle);
+            sv.Resources["SmThumb"] = Ui.Line2;   // themed thumb (v91)
             return sv;
         }
 
@@ -2224,7 +2325,7 @@ namespace StarMaster {
         // setState lets callers flip the switch's visuals programmatically (without firing `changed`) - used by the overlay show/hide hotkey to keep this switch in sync
         Border Toggle(bool on, Action<bool> changed, out Action<bool> setState) {
             Border track = new Border { Width = 40, Height = 22, CornerRadius = new CornerRadius(11), Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Background = on ? (Brush)Ui.AccentGrad() : Ui.Line2 };
-            Ellipse knob = new Ellipse { Width = 16, Height = 16, Fill = Ui.B("#efe6f0"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0), HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left };
+            Ellipse knob = new Ellipse { Width = 16, Height = 16, Fill = Ui.Knob, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0), HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left };
             track.Child = knob; bool[] st = { on };
             Action<bool> apply = delegate (bool v) { st[0] = v; track.Background = v ? (Brush)Ui.AccentGrad() : Ui.Line2; knob.HorizontalAlignment = v ? HorizontalAlignment.Right : HorizontalAlignment.Left; };
             track.MouseLeftButtonUp += delegate { apply(!st[0]); if (changed != null) changed(st[0]); };
@@ -2270,7 +2371,7 @@ namespace StarMaster {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (line.StartsWith("ovr=")) { LocOverride o = LocOverrides.Decode(line.Substring(4).TrimEnd('\r', '\n')); if (o != null) overrides.Add(o); continue; }   // before the '|' command-row test: a name may contain '|'
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "theme") Ui.ApplyTheme(Ui.FindTheme(v)); else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -2318,6 +2419,7 @@ namespace StarMaster {
                 sb.AppendLine("mon_textalpha=" + monTextAlpha);
                 sb.AppendLine("mon_hotkey_on=" + (monHotkeyOn ? "1" : "0"));
                 sb.AppendLine("mon_hotkey=" + monHotkey);
+                sb.AppendLine("theme=" + Ui.Current.Name);
                 sb.AppendLine("# name overrides: ovr=Group<TAB>Key<TAB>Original<TAB>Name");
                 foreach (LocOverride o in overrides) sb.AppendLine("ovr=" + LocOverrides.Encode(o));
                 sb.AppendLine("# commands: Label|Shift|Ctrl|Alt|Key|Interval|Enabled");
@@ -2351,7 +2453,7 @@ namespace StarMaster {
             foreach (string it in items) {
                 string cur = it;
                 Border row = new Border { Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = cur, Foreground = Ui.Text, FontSize = 11 } };
-                row.MouseEnter += delegate { row.Background = Ui.B("#2e2335"); };
+                row.MouseEnter += delegate { row.Background = Ui.Hover; };
                 row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
                 row.MouseLeftButtonUp += delegate { Value = cur; label.Text = cur; popup.IsOpen = false; if (OnChange != null) OnChange(cur); };
                 list.Children.Add(row);
@@ -2384,7 +2486,7 @@ namespace StarMaster {
             Canvas.SetTop(track, (h - 6) / 2); Canvas.SetLeft(track, 0); Children.Add(track);
             fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Accent };
             Canvas.SetTop(fill, (h - 6) / 2); Canvas.SetLeft(fill, 0); Children.Add(fill);
-            knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Ui.B("#efe6f0"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
+            knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Ui.Knob, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
             Canvas.SetTop(knob, (h - 16) / 2); Children.Add(knob);
             MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { drag = true; CaptureMouse(); ApplyX(e.GetPosition(this).X); };
             MouseMove += delegate (object o, MouseEventArgs e) { if (drag) ApplyX(e.GetPosition(this).X); };
@@ -2423,7 +2525,7 @@ namespace StarMaster {
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // col 0: FPS (collapses to 0 width when FPS is off)
             for (int c = 0; c < 5; c++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
-            fpsCell = new TextBlock { FontFamily = Ui.Mono, FontSize = 24, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 14, 0), Visibility = Visibility.Collapsed };
+            fpsCell = new TextBlock { FontFamily = Ui.Mono, FontSize = 24, FontWeight = FontWeights.SemiBold, Foreground = Ui.White, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 14, 0), Visibility = Visibility.Collapsed };
             Grid.SetRow(fpsCell, 0); Grid.SetRowSpan(fpsCell, 2); Grid.SetColumn(fpsCell, 0); g.Children.Add(fpsCell);
             cpuC = new TextBlock[5]; gpuC = new TextBlock[5];
             for (int c = 0; c < 5; c++) {
@@ -2436,7 +2538,7 @@ namespace StarMaster {
             SourceInitialized += delegate { Apply(); };
         }
         static TextBlock Cell(bool name) {
-            return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Ui.Text,
+            return new TextBlock { FontFamily = Ui.Mono, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Ui.White,
                 TextAlignment = name ? TextAlignment.Left : TextAlignment.Right, HorizontalAlignment = name ? HorizontalAlignment.Left : HorizontalAlignment.Right,
                 Margin = new Thickness(name ? 0 : 16, 1, 0, 1) };
         }
@@ -2449,24 +2551,24 @@ namespace StarMaster {
         }
         // name colour: white if colours off; else the chosen override colour, else the brand colour
         Brush NameBrush(string name, string overrideHex) {
-            if (!colors) return Ui.Text;
+            if (!colors) return Ui.White;
             if (!string.IsNullOrEmpty(overrideHex)) return Ui.B(overrideHex);
             return BrandColor(name);
         }
         // fill one row. With colour on: name=brand, %/temp/MEM=load tiers, W=white. Colour off: everything white.
         static void Set(TextBlock[] c, string name, Brush nameBrush, int pct, int temp, double memUsed, double memTot, int memPct, int watt, bool color) {
             c[0].Text = name; c[0].Foreground = nameBrush;
-            c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = color && pct >= 0 ? Ui.Load(pct) : Ui.Text;
-            c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = color ? Ui.LoadT(temp) : Ui.Text;
-            c[3].Text = memTot > 0 ? memUsed.ToString("0") + "GB" : ""; c[3].Foreground = color && memPct >= 0 ? Ui.Load(memPct) : Ui.Text;
+            c[1].Text = pct >= 0 ? pct + "%" : "n/a"; c[1].Foreground = color && pct >= 0 ? Ui.Load(pct) : Ui.White;
+            c[2].Text = temp >= 0 ? temp + "°C" : ""; c[2].Foreground = color ? Ui.LoadT(temp) : Ui.White;
+            c[3].Text = memTot > 0 ? memUsed.ToString("0") + "GB" : ""; c[3].Foreground = color && memPct >= 0 ? Ui.Load(memPct) : Ui.White;
             c[4].Text = watt >= 0 ? watt + "W" : "";
         }
         static Brush BrandColor(string n) {
-            if (n == null) return Ui.Text;
+            if (n == null) return Ui.White;
             if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#3b82ff");   // Intel = vivid blue (v90)
             if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#2fe06a");   // NVIDIA = vivid green (v90)
             if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff4040");   // AMD = vivid red (v90)
-            return Ui.Text;
+            return Ui.White;
         }
         // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"
         static string CleanName(string s) {

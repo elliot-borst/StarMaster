@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("83.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("83.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("84.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("84.0.0.0")]
 
 namespace StarMaster {
 
@@ -659,7 +659,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "83";
+        public const string Version = "84";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -905,14 +905,15 @@ namespace StarMaster {
             // shared SC-folder field (used by Backup + StarStrings; was duplicated in both cards)
             Border scSec = HeaderPill(); scSec.Margin = new Thickness(12, 0, 0, 0); scSec.Padding = new Thickness(14, 0, 6, 0);
             StackPanel scRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            scRow.Children.Add(new TextBlock { Text = "SC folder", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
-            scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.Width = 400; scRoot.VerticalAlignment = VerticalAlignment.Center; scRoot.Padding = new Thickness(8, 4, 8, 4);
+            scRow.Children.Add(new TextBlock { Text = "Star Citizen Directory", Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) });
+            scRoot = TextField(ssRootCfg.Length > 0 ? ssRootCfg : DefaultScRoot); scRoot.VerticalAlignment = VerticalAlignment.Center; scRoot.Padding = new Thickness(0);
             // v83: pick-only - the path comes from the Explorer folder picker, so it's always a real directory
-            scRoot.IsReadOnly = true; scRoot.Cursor = Cursors.Hand; scRoot.ToolTip = "Click to choose your Star Citizen folder";
-            scRoot.PreviewMouseLeftButtonUp += delegate (object s, MouseButtonEventArgs e) { e.Handled = true; PickScFolder(); };
+            // v84: plain display text (no box, not clickable) - Browse... is the way to change it
+            scRoot.IsReadOnly = true; scRoot.IsHitTestVisible = false; scRoot.Focusable = false; scRoot.Background = Brushes.Transparent; scRoot.BorderThickness = new Thickness(0);
+            scRoot.FontFamily = Ui.Font; scRoot.FontSize = 11; scRoot.Foreground = Ui.Text;
             scRow.Children.Add(scRoot);
             Border browse = Btn("Browse...", Ui.Card2, Ui.Text, false, delegate { PickScFolder(); });
-            browse.Padding = new Thickness(12, 4, 12, 4); browse.Margin = new Thickness(6, 0, 0, 0); browse.VerticalAlignment = VerticalAlignment.Center; ((TextBlock)browse.Child).FontSize = 10.5;
+            browse.Padding = new Thickness(12, 4, 12, 4); browse.Margin = new Thickness(12, 0, 0, 0); browse.VerticalAlignment = VerticalAlignment.Center; ((TextBlock)browse.Child).FontSize = 10.5;
             scRow.Children.Add(browse);
             scSec.Child = scRow; DockPanel.SetDock(scSec, Dock.Left); d.Children.Add(scSec);
             updBtn = Btn("↻  Check for updates", Ui.Card2, Ui.Text, false, delegate { if (portableUpdate != null) OpenPage(portableUpdate); else CheckUpdate(false); }); updBtn.VerticalAlignment = VerticalAlignment.Center; updBtnLbl = (TextBlock)updBtn.Child; updBtn.Height = PillH; updBtn.Padding = new Thickness(16, 0, 16, 0); updBtn.CornerRadius = new CornerRadius(12); updBtnLbl.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(updBtn, Dock.Right); d.Children.Add(updBtn);

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("88.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("88.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("89.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("89.0.0.0")]
 
 namespace StarMaster {
 
@@ -664,7 +664,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "88";
+        public const string Version = "89";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -690,7 +690,7 @@ namespace StarMaster {
         DispatcherTimer monTimer;
         StatTile[] statTiles;   // v87: the 9 overlay stats, each with its live value + source + status colour (replaced the 4 preview bars)
         MonWindow monWin; bool monOverlayOn = true, monLocked = false, monActiveOnly = false; double monOvX = 60, monOvY = 60;
-        int monOvAlpha = 85, monTextAlpha = 100; string monOvColor = "0a0e18";   // box + text opacity (0-100) + box colour
+        int monOvAlpha = 85, monTextAlpha = 100; string monOvColor = "000000";   // box + text opacity (0-100) + box colour
         bool monColors = true;   // overlay colours: brand names + load tiers; off = all white
         bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
@@ -1195,8 +1195,8 @@ namespace StarMaster {
             // the colours are deliberately dark (it's a backdrop), so the names do the distinguishing)
             StackPanel coR = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 16) };
             coR.Children.Add(new TextBlock { Text = "Box Colour", Width = 96, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) });
-            string[] swatches = { "0a0e18", "000000", "10131c", "141a2b", "0a1a14", "1a0e12", "140a1e", "20242e" };
-            string[] swNames = { "Navy", "Black", "Charcoal", "Slate", "Forest", "Wine", "Plum", "Graphite" };
+            string[] swatches = { "000000", "0a0e18", "10131c", "141a2b", "0a1a14", "1a0e12", "140a1e", "20242e" };
+            string[] swNames = { "Black", "Navy", "Charcoal", "Slate", "Forest", "Wine", "Plum", "Graphite" };
             List<Border> swBorders = new List<Border>(); List<TextBlock> swLabels = new List<TextBlock>();
             for (int si = 0; si < swatches.Length; si++) {
                 string h = swatches[si]; bool selNow = string.Equals(h, monOvColor, StringComparison.OrdinalIgnoreCase);
@@ -2402,7 +2402,7 @@ namespace StarMaster {
             UseLayoutRounding = true;
             ShowActivated = false;   // never steal foreground when Show()n - else "Only show over SC" would show->activate->(SC no longer foreground)->hide in a 1s flicker loop, fighting Discord's overlay
             ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.WidthAndHeight; WindowStartupLocation = WindowStartupLocation.Manual;
-            box = new Border { Background = Ui.B2("#d80a0e18"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
+            box = new Border { Background = Ui.B2("#d8000000"), CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 11, 16, 12) };   // no border (just the rounded background)
             StackPanel s = new StackPanel();
             // 2 rows (CPU+RAM, GPU+VRAM). Col 0 = the FPS counter (spans both rows, vertically centred, no "FPS" label - keeps the overlay slim); cols 1-5 = Name | % | C | MEM | W. Auto columns => CPU and GPU line up; each cell coloured independently.
             Grid g = new Grid();
@@ -2467,7 +2467,7 @@ namespace StarMaster {
                 if (boxAlpha < 0) boxAlpha = 0; if (boxAlpha > 100) boxAlpha = 100;
                 byte a = (byte)(boxAlpha * 255 / 100);
                 byte hit = a < 1 ? (byte)1 : a;   // keep the background just barely opaque so it stays draggable at 0%
-                box.Background = Ui.B2(hit.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "0a0e18" : rgb.TrimStart('#')));
+                box.Background = Ui.B2(hit.ToString("x2") + (string.IsNullOrEmpty(rgb) ? "000000" : rgb.TrimStart('#')));
                 if (textAlpha < 0) textAlpha = 0; if (textAlpha > 100) textAlpha = 100;
                 if (content != null) content.Opacity = textAlpha / 100.0;
             } catch { }

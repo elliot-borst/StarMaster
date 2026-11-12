@@ -1,82 +1,70 @@
-# Generates StarMaster.ico (multi-resolution: 16/32/48/64/128/256) from the
-# "Aurora sparkle-star on a dark tile" design (cyan->violet gradient), GDI+ offline.
+# Generates StarMaster.ico (multi-resolution: 16/24/32/48/64/128/256), GDI+ offline.
+# v90 "Star lock" mark on a plum tile, Orchid palette: mauve targeting brackets, a bone ring and an orchid
+# concave four-point star. Same 64-unit geometry as MainWindow.LogoMark so the window, tray and taskbar match.
 Add-Type -AssemblyName System.Drawing
 $d = $PSScriptRoot
 $icoPath = Join-Path $d 'StarMaster.ico'
 
+function C([int]$a,[int]$r,[int]$g,[int]$b) { return [System.Drawing.Color]::FromArgb($a,$r,$g,$b) }
 function New-RoundRect([single]$x,[single]$y,[single]$w,[single]$h,[single]$r) {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
     $dia = 2 * $r
-    $p.AddArc($x, $y, $dia, $dia, 180, 90)
-    $p.AddArc($x + $w - $dia, $y, $dia, $dia, 270, 90)
-    $p.AddArc($x + $w - $dia, $y + $h - $dia, $dia, $dia, 0, 90)
-    $p.AddArc($x, $y + $h - $dia, $dia, $dia, 90, 90)
-    $p.CloseFigure()
-    return $p
+    $p.AddArc($x, $y, $dia, $dia, 180, 90); $p.AddArc($x + $w - $dia, $y, $dia, $dia, 270, 90)
+    $p.AddArc($x + $w - $dia, $y + $h - $dia, $dia, $dia, 0, 90); $p.AddArc($x, $y + $h - $dia, $dia, $dia, 90, 90)
+    $p.CloseFigure(); return $p
 }
-
-# 4-point sparkle: outer points on the axes (R), inner points on the diagonals (r)
-function New-Star([single]$cx,[single]$cy,[single]$ro,[single]$ri) {
-    $pts = New-Object 'System.Drawing.PointF[]' 8
-    $pts[0] = New-Object System.Drawing.PointF($cx,         ($cy-$ro))
-    $pts[1] = New-Object System.Drawing.PointF(($cx+$ri),   ($cy-$ri))
-    $pts[2] = New-Object System.Drawing.PointF(($cx+$ro),   $cy)
-    $pts[3] = New-Object System.Drawing.PointF(($cx+$ri),   ($cy+$ri))
-    $pts[4] = New-Object System.Drawing.PointF($cx,         ($cy+$ro))
-    $pts[5] = New-Object System.Drawing.PointF(($cx-$ri),   ($cy+$ri))
-    $pts[6] = New-Object System.Drawing.PointF(($cx-$ro),   $cy)
-    $pts[7] = New-Object System.Drawing.PointF(($cx-$ri),   ($cy-$ri))
-    return $pts
+# quadratic (p0, q, p2) as the cubic GDI+ wants
+function Add-Quad($path, $x0, $y0, $qx, $qy, $x2, $y2) {
+    $path.AddBezier([single]$x0, [single]$y0, [single]($x0 + 2/3*($qx-$x0)), [single]($y0 + 2/3*($qy-$y0)),
+                    [single]($x2 + 2/3*($qx-$x2)), [single]($y2 + 2/3*($qy-$y2)), [single]$x2, [single]$y2)
 }
-function C([int]$a,[int]$r,[int]$g,[int]$b) { return [System.Drawing.Color]::FromArgb($a,$r,$g,$b) }
 
 function Draw-Icon([int]$s) {
-    $sc = $s / 256.0
     $bmp = New-Object System.Drawing.Bitmap($s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb))
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # dark Aurora tile
-    $m = 12 * $sc; $rw = 232 * $sc; $rr = 54 * $sc
-    $path = New-RoundRect $m $m $rw $rw $rr
-    $rectF = New-Object System.Drawing.RectangleF($m, $m, $rw, $rw)
-    $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rectF, (C 255 22 26 48), (C 255 11 14 22), ([System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal))
-    $g.FillPath($bg, $path)
-    $bpen = New-Object System.Drawing.Pen((C 255 50 60 94), ([single][Math]::Max(1.0, 3 * $sc)))
-    $g.DrawPath($bpen, $path)
-    if ($s -ge 32) {
-        $ip = New-RoundRect (30*$sc) (30*$sc) (196*$sc) (196*$sc) (38*$sc)
-        $ipen = New-Object System.Drawing.Pen((C 255 44 58 102), ([single][Math]::Max(1.0, 2 * $sc)))
-        $g.DrawPath($ipen, $ip); $ip.Dispose(); $ipen.Dispose()
+    # plum tile (rounded square), hairline edge on the larger sizes
+    $m = [single]($s * 0.03); $w = [single]($s - 2 * $m); $rad = [single]($s * 0.2)
+    $tile = New-RoundRect $m $m $w $w $rad
+    $tb = New-Object System.Drawing.SolidBrush((C 255 25 20 28)); $g.FillPath($tb, $tile); $tb.Dispose()
+    if ($s -ge 32) { $tp = New-Object System.Drawing.Pen((C 255 61 50 69), [single][Math]::Max(1.0, $s / 128.0)); $g.DrawPath($tp, $tile); $tp.Dispose() }
+
+    # map the 64-unit mark into the tile (a touch more margin on big sizes, edge-to-edge on 16 so it stays legible)
+    $fill = if ($s -le 24) { 0.98 } else { 0.84 }
+    $k = $s * $fill / 64.0; $o = ($s - 64 * $k) / 2.0
+    function P([double]$u) { return [single]($o + $u * $k) }
+
+    # brackets
+    $bp = New-Object System.Drawing.Pen((C 255 139 133 146), [single][Math]::Max(1.2, 4.5 * $k))
+    $bp.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $bp.EndCap = [System.Drawing.Drawing2D.LineCap]::Round; $bp.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    foreach ($seg in @(@(8,20, 8,8, 20,8), @(44,8, 56,8, 56,20), @(56,44, 56,56, 44,56), @(20,56, 8,56, 8,44))) {
+        $pts = [System.Drawing.PointF[]]@((New-Object System.Drawing.PointF((P $seg[0]),(P $seg[1]))), (New-Object System.Drawing.PointF((P $seg[2]),(P $seg[3]))), (New-Object System.Drawing.PointF((P $seg[4]),(P $seg[5]))))
+        $g.DrawLines($bp, $pts)
     }
+    $bp.Dispose()
 
-    $cx = 128 * $sc; $cy = 132 * $sc; $ro = 82 * $sc; $ri = 27 * $sc
+    # ring (filled with the panel colour so the star sits on a disc)
+    $rr = 15.5; $rx = P (32 - $rr); $rw = [single](2 * $rr * $k)
+    $rf = New-Object System.Drawing.SolidBrush((C 255 25 20 28)); $g.FillEllipse($rf, $rx, $rx, $rw, $rw); $rf.Dispose()
+    $rp = New-Object System.Drawing.Pen((C 255 239 230 240), [single][Math]::Max(1.0, 3 * $k)); $g.DrawEllipse($rp, $rx, $rx, $rw, $rw); $rp.Dispose()
 
-    # cyan glow behind the star
-    $glow = New-Star $cx $cy ($ro * 1.3) ($ri * 1.55)
-    $gb = New-Object System.Drawing.SolidBrush((C 70 34 211 238))
-    $g.FillPolygon($gb, $glow)
+    # concave four-point star (orchid)
+    $sp = New-Object System.Drawing.Drawing2D.GraphicsPath
+    Add-Quad $sp (P 32) (P 10) (P 35.8) (P 28.2) (P 54) (P 32)
+    Add-Quad $sp (P 54) (P 32) (P 35.8) (P 35.8) (P 32) (P 54)
+    Add-Quad $sp (P 32) (P 54) (P 28.2) (P 35.8) (P 10) (P 32)
+    Add-Quad $sp (P 10) (P 32) (P 28.2) (P 28.2) (P 32) (P 10)
+    $sp.CloseFigure()
+    $sb = New-Object System.Drawing.SolidBrush((C 255 228 122 208)); $g.FillPath($sb, $sp); $sb.Dispose(); $sp.Dispose()
 
-    # main sparkle, cyan -> violet diagonal gradient
-    $star = New-Star $cx $cy $ro $ri
-    $sbRect = New-Object System.Drawing.RectangleF(([single]($cx-$ro)), ([single]($cy-$ro)), ([single](2*$ro)), ([single](2*$ro)))
-    $sbrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($sbRect, (C 255 34 211 238), (C 255 168 85 247), ([System.Drawing.Drawing2D.LinearGradientMode]::ForwardDiagonal))
-    $g.FillPolygon($sbrush, $star)
-
-    # small accent sparkle, top-right
-    if ($s -ge 32) {
-        $mini = New-Star (190*$sc) (74*$sc) (22*$sc) (6*$sc)
-        $mb = New-Object System.Drawing.SolidBrush((C 235 201 225 255))
-        $g.FillPolygon($mb, $mini); $mb.Dispose()
-    }
-
-    $g.Dispose(); $bg.Dispose(); $bpen.Dispose(); $gb.Dispose(); $sbrush.Dispose(); $path.Dispose()
+    $g.Dispose(); $tile.Dispose()
     return $bmp
 }
 
-$sizes = @(256,128,64,48,32,16)
+$sizes = @(256,128,64,48,32,24,16)
 $pngs = @()
 foreach ($s in $sizes) {
     $bmp = Draw-Icon $s

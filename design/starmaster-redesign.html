@@ -1,0 +1,222 @@
+<title>StarMaster Redesign Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: palette round - short brief, then one band per pink/purple palette (recoloured Star lock logo + swatches + a
+   faithful slice of the real dashboard), then the overlay (fixed: white FPS, vivid brand names), then how to pick.
+   Single dark look on purpose: every option is a dark gaming UI. */
+:root {
+  --page: #0c0b0e; --ink: #ece8ef; --mute: #9b94a3; --faint: #5f5966; --rule: #26232b;
+  --display: "Bahnschrift", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Segoe UI", "Barlow", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font-family: var(--body); line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 52px; }
+.eyebrow { font-family: var(--display); letter-spacing: .14em; text-transform: uppercase; font-size: 13px; color: var(--mute); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(32px, 5vw, 52px); line-height: 1; margin: 6px 0 0; text-wrap: balance; }
+.lead { color: var(--mute); max-width: 70ch; margin: 12px 0 0; }
+.lead b { color: var(--ink); font-weight: 600; }
+
+.opt { --bg:#000; --surface:#111; --surface2:#181818; --line:#2a2a2a; --text:#eee; --dim:#999; --accent:#fff; --accent2:#888; --good:#6fdc8c; --warn:#ffc857; --bad:#ff6248;
+  border-top: 1px solid var(--rule); padding-top: 30px; display: grid; gap: 20px; }
+.opt-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.opt-num { font-family: var(--mono); color: var(--faint); font-size: 14px; }
+.opt h2 { font-family: var(--display); font-size: 32px; font-weight: 700; margin: 0; letter-spacing: .02em; color: var(--accent); }
+.opt .mood { color: var(--mute); margin: 0; flex-basis: 100%; max-width: 72ch; }
+.opt-grid { display: grid; grid-template-columns: minmax(0, 290px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .opt-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.brand { display: grid; gap: 14px; }
+.logo-stage { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 22px 18px; display: grid; justify-items: center; gap: 14px; }
+.logo-stage .big svg { width: 124px; height: 124px; display: block; }
+.sizes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.hdr { display: flex; align-items: center; gap: 8px; }
+.hdr .tile { width: 32px; height: 32px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); display: grid; place-items: center; }
+.hdr b { font-family: var(--display); letter-spacing: .06em; text-transform: uppercase; font-size: 15px; color: var(--text); }
+.tray { background: #202020; border-radius: 6px; padding: 6px 8px; display: flex; gap: 8px; align-items: center; }
+.tray i { width: 16px; height: 16px; border-radius: 3px; background: #555; display: block; }
+.palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sw { display: grid; grid-template-columns: 26px minmax(0,1fr); gap: 8px; align-items: center; }
+.sw i { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(255,255,255,.12); display: block; }
+.sw b { display: block; font-size: 12px; font-weight: 600; color: var(--ink); }
+.sw code { font-family: var(--mono); font-size: 10.5px; color: var(--mute); }
+
+.mock { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; color: var(--text); min-width: 0; }
+.m-title { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 11px; color: var(--dim); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 65%, #000); }
+.m-title svg { width: 14px; height: 14px; }
+.m-title .caps { margin-left: auto; letter-spacing: 14px; }
+.m-body { padding: 14px; display: grid; gap: 12px; }
+.m-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.m-logo { width: 34px; height: 34px; border-radius: 9px; background: var(--surface2); border: 1px solid var(--line); display: grid; place-items: center; }
+.m-logo svg { width: 26px; height: 26px; }
+.m-name { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: .04em; text-transform: uppercase; line-height: 1; color: var(--accent); }
+.m-name small { display: block; font-family: var(--body); text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 10px; color: var(--dim); margin-top: 3px; }
+.pill { height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); font-size: 11px; color: var(--dim); white-space: nowrap; }
+.pill b { color: var(--accent2); font-weight: 600; }
+.tog { width: 26px; height: 14px; border-radius: 7px; background: var(--accent); position: relative; }
+.tog::after { content: ""; position: absolute; right: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); }
+.m-cards { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 640px) { .m-cards { grid-template-columns: minmax(0, 1fr); } .m-title .caps { display: none; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 9px; align-content: start; min-width: 0; }
+.card-h { display: flex; align-items: center; gap: 8px; }
+.card-h .ic { width: 22px; height: 22px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--line); display: grid; place-items: center; color: var(--accent); font-size: 11px; }
+.card-h h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.card-h .st { margin-left: auto; font-size: 10.5px; color: var(--good); display: flex; align-items: center; gap: 5px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn { font-size: 11px; padding: 5px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); }
+.btn.primary { background: var(--accent); color: var(--bg); border-color: transparent; font-weight: 600; }
+.caps-l { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.ovr { border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+.ovr b { display: block; font-size: 11.5px; font-weight: 600; }
+.ovr span { font-size: 10px; color: var(--dim); }
+.add { border: 1px dashed var(--line); border-radius: 9px; padding: 5px; text-align: center; font-size: 10.5px; color: var(--dim); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; background: color-mix(in srgb, var(--surface) 55%, var(--bg)); min-width: 0; }
+.stat .r1 { display: flex; justify-content: space-between; gap: 4px; font-size: 9.5px; color: var(--dim); }
+.stat .r1 b { font-family: var(--mono); color: var(--text); font-size: 10.5px; }
+.stat .r2 { font-size: 9px; display: flex; align-items: center; gap: 4px; color: var(--dim); margin-top: 2px; }
+.stat .r2 .dot { color: var(--good); }
+.stat.warn { border-color: var(--warn); } .stat.warn .r2, .stat.warn .r2 .dot, .stat.warn b { color: var(--warn) !important; }
+.stat.bad { border-color: var(--bad); } .stat.bad .r2, .stat.bad .r2 .dot, .stat.bad b { color: var(--bad) !important; }
+.slider { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); }
+.slider .tr { flex: 1; height: 5px; border-radius: 3px; background: var(--line); position: relative; }
+.slider .tr::before { content: ""; position: absolute; inset: 0 25% 0 0; border-radius: 3px; background: var(--accent); }
+.slider .tr::after { content: ""; position: absolute; left: 75%; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--text); }
+
+.verdict { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
+.verdict div { font-size: 13.5px; color: var(--mute); }
+.verdict h4 { margin: 0 0 4px; font-family: var(--display); font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); font-weight: 600; }
+
+.overlay-sec { border-top: 1px solid var(--rule); padding-top: 30px; display: grid; gap: 14px; }
+.overlay-sec h2 { font-family: var(--display); font-size: 26px; margin: 0; }
+.game { border-radius: 12px; border: 1px solid var(--rule); padding: 18px; background: radial-gradient(120% 140% at 80% 0%, #2a1c33 0%, #15111a 45%, #0b0b0e 100%); }
+.osd { display: inline-grid; grid-template-columns: repeat(6, auto); column-gap: 13px; align-items: center; background: #000; border-radius: 10px; padding: 8px 13px; font-family: var(--mono); font-size: 13px; color: #fff; font-variant-numeric: tabular-nums; }
+.osd .fps { grid-row: span 2; font-size: 24px; font-weight: 700; padding-right: 4px; }
+.osd .amd { color: #ff4040; } .osd .nv { color: #2fe06a; } .osd .hot { color: #ffcf5c; }
+footer { border-top: 1px solid var(--rule); padding-top: 24px; color: var(--mute); max-width: 72ch; }
+footer b { color: var(--ink); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">StarMaster · palette round · logo locked</div>
+    <h1>Pinks and purples, five palettes</h1>
+    <p class="lead">The <b>Star lock</b> logo is locked in (brackets, ring and star). It's recoloured below to suit each palette: the star takes the accent, the ring the second colour, and the brackets a quiet neutral. The mock under each one is a slice of the real dashboard: header pills, StarStrings overrides, the overlay settings and the stats grid with a working, a pending and a broken tile.</p>
+  </header>
+  <div id="opts"></div>
+  <section class="overlay-sec">
+    <h2>The in-game overlay stays the same in every palette</h2>
+    <p class="lead">White FPS, names coloured by brand in the vivid shades (AMD red, NVIDIA green, Intel blue), so it reads over any game. Your override names and colours still win.</p>
+    <div class="game"><div class="osd">
+      <span class="fps">112</span><span class="amd">9800X3D</span><span>41%</span><span>52°C</span><span>38GB</span><span>86W</span>
+      <span class="nv">RTX5090</span><span>93%</span><span class="hot">88°C</span><span>15GB</span><span>358W</span></div></div>
+  </section>
+  <footer>Reply with a number, e.g. <b>"3"</b>, or a mix like <b>"3's accent with 1's backgrounds"</b>. I'll then roll it across the app: every card, the header, the custom title bar, the tray and taskbar icons, and the installer.</footer>
+</div>
+
+<script>
+const cstar = (c, R, k, fill) => `<path d="M${c} ${c - R}Q${c + k} ${c - k} ${c + R} ${c}Q${c + k} ${c + k} ${c} ${c + R}Q${c - k} ${c + k} ${c - R} ${c}Q${c - k} ${c - k} ${c} ${c - R}Z" fill="${fill}"/>`;
+// the locked Star lock mark: brackets, ring (filled with the palette's background), star
+const logo = (o) => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <path d="M8 20V8h12M44 8h12v12M56 44v12H44M20 56H8V44" fill="none" stroke="${o.logo.br}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="15.5" fill="${o.tok.surface}" stroke="${o.logo.ring}" stroke-width="3"/>${cstar(32, 22, 3.8, o.logo.star)}</svg>`;
+
+const OPTS = [
+  { name: "Orchid", logo: { star: "#e47ad0", ring: "#efe6f0", br: "#8b8592" },
+    mood: "A soft orchid pink on plum-black, with bone-white as the second colour. The direct successor to the Amber & bone logo you liked, with the amber swapped for pink. Elegant rather than loud.",
+    tok: { bg:"#110d13", surface:"#19141c", surface2:"#211a25", line:"#33293a", text:"#efe6f0", dim:"#9e91a6", accent:"#e47ad0", accent2:"#efe6f0", good:"#6fdc8c", warn:"#ffc857", bad:"#ff6248" },
+    roles: [["Plum black","#110d13","background"],["Panel","#19141c","cards"],["Orchid","#e47ad0","accent, star"],["Bone","#efe6f0","text, ring"],["Mauve grey","#8b8592","brackets, muted"],["Line","#33293a","borders"]],
+    why: ["Closest to the logo you picked, so the mark and app feel designed together", "Pink is used sparingly (buttons, toggles, star), so it stays classy", "Bone text is warmer and easier on the eyes than pure white"],
+    watch: "Orchid on plum is gentle; if you want more punch, see 2." },
+  { name: "Hot Magenta", logo: { star: "#ff3d8b", ring: "#ffc2d9", br: "#6e6a73" },
+    mood: "A vivid magenta on near-neutral graphite, with blush pink as the second colour. High energy and very 'gaming peripheral', but the neutral background keeps it from turning into a candy shop.",
+    tok: { bg:"#0f0f11", surface:"#17171a", surface2:"#1f1f23", line:"#2f2e34", text:"#f1edf0", dim:"#98939b", accent:"#ff3d8b", accent2:"#ffc2d9", good:"#6fdc8c", warn:"#ffc857", bad:"#ff7a3d" },
+    roles: [["Graphite","#0f0f11","background"],["Panel","#17171a","cards"],["Magenta","#ff3d8b","accent, star"],["Blush","#ffc2d9","second colour, ring"],["Steel","#6e6a73","brackets"],["Chalk","#f1edf0","text"]],
+    why: ["The boldest and most recognisable at a glance", "Graphite backgrounds keep the pink feeling deliberate, not decorative", "Strong contrast on buttons and toggles"],
+    watch: "Magenta sits near red, so errors shift to orange-red to stay distinct." },
+  { name: "Ultraviolet", logo: { star: "#a98bff", ring: "#ff8fc7", br: "#7a7488" },
+    mood: "Violet as the main colour with a pink second colour, on deep indigo-black. Purple-led and cosmic. The star is violet and the ring pink, so both colours live in the logo.",
+    tok: { bg:"#0e0c17", surface:"#16131f", surface2:"#1e1a29", line:"#2e2840", text:"#ece8f6", dim:"#9a93ad", accent:"#a98bff", accent2:"#ff8fc7", good:"#6fdc8c", warn:"#ffc857", bad:"#ff6248" },
+    roles: [["Deep space","#0e0c17","background"],["Panel","#16131f","cards"],["Violet","#a98bff","accent, star"],["Pink","#ff8fc7","second colour, ring"],["Dusk grey","#7a7488","brackets"],["Starlight","#ece8f6","text"]],
+    why: ["Uses both colours you mentioned, each with a clear job", "Violet is calmer than pink for big areas like toggles and sliders", "Very 'space' without being another blue app"],
+    watch: "Keep the two accents apart (violet for controls, pink for highlights), or it drifts back toward the generic gradient look." },
+  { name: "Rosé Steel", logo: { star: "#f2779a", ring: "#c9b8d6", br: "#7d8088" },
+    mood: "A dusty rose accent on cool steel grey, with lavender as the second colour. The most grown-up option: pink as a refined highlight on an otherwise industrial UI.",
+    tok: { bg:"#111215", surface:"#181a1e", surface2:"#202227", line:"#30333a", text:"#e9e8ec", dim:"#959399", accent:"#f2779a", accent2:"#c9b8d6", good:"#6fdc8c", warn:"#ffc857", bad:"#ff6248" },
+    roles: [["Steel","#111215","background"],["Panel","#181a1e","cards"],["Rosé","#f2779a","accent, star"],["Lavender","#c9b8d6","second colour, ring"],["Gunmetal","#7d8088","brackets"],["Frost","#e9e8ec","text"]],
+    why: ["Neutral greys keep the tool feeling utilitarian", "Rosé is distinctive without shouting", "Lavender ring ties the purple in quietly"],
+    watch: "The subtlest of the five; the pink only shows where it matters." },
+  { name: "Dusk", logo: { star: "#ff8fb0", ring: "#ffb59c", br: "#86788e" },
+    mood: "A sunset take: candy pink with a peach second colour on a warm plum background. Warm, friendly and a little retro-futurist, like a Hurston sunset.",
+    tok: { bg:"#140d14", surface:"#1c131c", surface2:"#241926", line:"#382838", text:"#f3e8ef", dim:"#a5929f", accent:"#ff8fb0", accent2:"#ffb59c", good:"#7ad99a", warn:"#ffd06a", bad:"#ff5e5e" },
+    roles: [["Dusk plum","#140d14","background"],["Panel","#1c131c","cards"],["Candy","#ff8fb0","accent, star"],["Peach","#ffb59c","second colour, ring"],["Haze","#86788e","brackets"],["Cream","#f3e8ef","text"]],
+    why: ["The warmest and most characterful palette", "Peach keeps a little of the amber warmth you liked", "Soft enough for long sessions"],
+    watch: "Least 'serious' of the five, which suits a personal toolkit." }
+];
+
+const mock = (o) => `
+  <div class="mock" style="${Object.entries(o.tok).map(([k,v]) => `--${k}:${v}`).join(";")}">
+    <div class="m-title">${logo(o)}<span>StarMaster v89</span><span class="caps">–▢✕</span></div>
+    <div class="m-body">
+      <div class="m-head">
+        <div class="m-logo">${logo(o)}</div>
+        <div class="m-name">StarMaster<small>Star Citizen Toolkit</small></div>
+        <span class="pill"><b>Version 89</b> released 2026-11-12</span>
+        <span class="pill"><span class="tog"></span>Start with Windows</span>
+      </div>
+      <div class="m-cards">
+        <div class="card">
+          <div class="card-h"><span class="ic">◉</span><h3>StarStrings</h3><span class="st"><i class="dot"></i>Up to date</span></div>
+          <div class="btns"><span class="btn">LIVE ▾</span><span class="btn">Check</span><span class="btn primary">Re-install</span></div>
+          <div class="caps-l">Name overrides · 3</div>
+          <div class="ovr"><b>RSI Centaurus</b><span>original  RSI Constellation Mk V Centaurus</span></div>
+          <div class="ovr"><b>Kruger Alpha Wolf</b><span>original  Kruger L-22 Alpha Wolf</span></div>
+          <div class="add">+  Add override</div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="ic">▦</span><h3>System Monitor</h3></div>
+          <div class="slider">Box Opacity<span class="tr"></span>75%</div>
+          <div class="caps-l">Overlay stats</div>
+          <div class="stats">
+            <div class="stat"><div class="r1">FPS<b>112</b></div><div class="r2"><i class="dot"></i>PresentMon</div></div>
+            <div class="stat"><div class="r1">CPU %<b>41%</b></div><div class="r2"><i class="dot"></i>Windows</div></div>
+            <div class="stat"><div class="r1">GPU %<b>93%</b></div><div class="r2"><i class="dot"></i>NVIDIA</div></div>
+            <div class="stat bad"><div class="r1">CPU temp<b>--</b></div><div class="r2"><i class="dot"></i>HWiNFO</div></div>
+            <div class="stat warn"><div class="r1">GPU temp<b>88°C</b></div><div class="r2"><i class="dot"></i>NVIDIA</div></div>
+            <div class="stat"><div class="r1">VRAM<b>15/32GB</b></div><div class="r2"><i class="dot"></i>NVIDIA</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+document.getElementById("opts").outerHTML = `<div style="display:grid;gap:52px">${OPTS.map((o, i) => `
+  <section class="opt" style="--accent:${o.tok.accent}; --line:${o.tok.line}; --bg:${o.tok.bg}; --surface2:${o.tok.surface2}; --text:${o.tok.text}">
+    <div class="opt-head"><span class="opt-num">Option ${i + 1}</span><h2>${o.name}</h2><p class="mood">${o.mood}</p></div>
+    <div class="opt-grid">
+      <div class="brand">
+        <div class="logo-stage">
+          <div class="big">${logo(o)}</div>
+          <div class="sizes">
+            <div class="hdr"><div class="tile">${logo(o).replace("<svg", '<svg width="24" height="24"')}</div><b>StarMaster</b></div>
+            <div class="tray">${logo(o).replace("<svg", '<svg width="16" height="16"')}<i></i><i></i></div>
+          </div>
+        </div>
+        <div class="palette">${o.roles.map(r => `<div class="sw"><i style="background:${r[1]}"></i><div><b>${r[0]}</b><code>${r[1]} · ${r[2]}</code></div></div>`).join("")}</div>
+      </div>
+      ${mock(o)}
+    </div>
+    <div class="verdict">
+      <div><h4>Why it works</h4>${o.why[0]}.</div>
+      <div><h4>Also</h4>${o.why[1]}. ${o.why[2]}.</div>
+      <div><h4>Watch out</h4>${o.watch}</div>
+    </div>
+  </section>`).join("")}</div>`;
+</script>

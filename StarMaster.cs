@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("89.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("89.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("90.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("90.0.0.0")]
 
 namespace StarMaster {
 
@@ -244,7 +244,8 @@ namespace StarMaster {
 
         public class Sample {
             public double CpuTotal; public string CpuName = "CPU"; public int CpuTempC = -1, CpuPowerW = -1;
-            public string CpuNameColor, GpuNameColor;   // override colour (hex) for the name; null = use brand colour
+            public string CpuNameColor, GpuNameColor;
+            public string CpuBrand, GpuBrand;   // the DETECTED names, kept when the display name is overridden so the brand colour still applies (v90)   // override colour (hex) for the name; null = use brand colour
             public double RamUsedGB, RamTotalGB; public int RamPct;
             public bool GpuOk; public string GpuName = "GPU";
             public int GpuPct, GpuTempC, GpuPowerW, GpuCoreMhz, GpuMemMhz, VramPct;
@@ -533,11 +534,11 @@ namespace StarMaster {
                 if (string.Equals(c.App, "StarCitizen.exe", StringComparison.OrdinalIgnoreCase) && (bestSc == null || c.Fps > bestSc.Fps)) bestSc = c;
             }
             if (dead != null) foreach (string k in dead) chains.Remove(k);
-            if (best == null) best = bestPrev;
-            // v88: nothing in front and no previous game (e.g. StarMaster just restarted after a self-update while
-            // you sat on the desktop) - Star Citizen still counts if it's presenting. Before, the card said
-            // "waiting for frames" until you clicked into the game.
+            // v88/v90: nothing presenting in front (e.g. StarMaster itself is the active window) -> Star Citizen
+            // wins if it's presenting, ahead of whatever app was last in front (that once reported "1 FPS
+            // (DeviceMaster.exe)" while you looked at StarMaster). Then the previous target as before.
             if (best == null) best = bestSc;
+            if (best == null) best = bestPrev;
             if (best == null) return;
             targetPid = best.Pid; TargetName = best.App; fps = best.Fps;
             gotFrames = true; lastFrameTick = best.LastTick; Status = "running";
@@ -655,16 +656,18 @@ namespace StarMaster {
         public static readonly Brush Warn = B("#ffd34d"), HotO = B("#ff9a3d"), Crit = B("#ff5d5d");   // load tiers
         public static Brush Load(double p) { if (p >= 95) return Crit; if (p >= 90) return HotO; if (p >= 85) return Warn; return Text; }   // usage/mem %: white <85 -> yellow 85 -> orange 90 -> red 95
         public static Brush LoadT(double t) { if (t >= 95) return Crit; if (t >= 88) return HotO; if (t >= 80) return Warn; return Text; }   // temperature: white <80 -> yellow 80 -> orange 88 -> red 95
-        public static readonly Brush Bg = B("#0b0e16"), Card = B("#141a2b"), Card2 = B("#171d33"), Line = B("#232a45"), Line2 = B("#323c5e"),
-            Text = B("#e6ecfb"), Dim = B("#94a0c2"), Faint = B("#646f93"), Accent = B("#79b0ff"), Accent2 = B("#a9c8ff"),
-            Good = B("#5fe0c0"), Ink = B("#0a1228"), Inset = B("#0f1322"), Danger = B("#2a1722"), DangerFg = B("#ff9bb8");
-        public static LinearGradientBrush AccentGrad() { LinearGradientBrush g = new LinearGradientBrush(Color.FromRgb(0x22, 0xd3, 0xee), Color.FromRgb(0xa8, 0x55, 0xf7), 0); g.Freeze(); return g; }
+        // v90 "Orchid" palette: plum-black surfaces, bone text, orchid accent (was the cyan/violet "Aurora" set)
+        public static readonly Brush Bg = B("#110d13"), Card = B("#19141c"), Card2 = B("#211a25"), Line = B("#2c2331"), Line2 = B("#3d3245"),
+            Text = B("#efe6f0"), Dim = B("#a597ad"), Faint = B("#6e6377"), Accent = B("#e47ad0"), Accent2 = B("#f2b3e6"),
+            Good = B("#6fdc8c"), Ink = B("#1c0f1b"), Inset = B("#140f17"), Danger = B("#2e1519"), DangerFg = B("#ff8f80");
+        public static readonly Brush Bone = B("#efe6f0"), Mauve = B("#8b8592");   // logo ring + brackets
+        public static LinearGradientBrush AccentGrad() { LinearGradientBrush g = new LinearGradientBrush(Color.FromRgb(0xec, 0x8a, 0xda), Color.FromRgb(0xd2, 0x68, 0xc0), 0); g.Freeze(); return g; }   // orchid, a gentle left-to-right sheen
         public static readonly FontFamily Font = new FontFamily("Segoe UI"), Mono = new FontFamily("Consolas");
     }
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "89";
+        public const string Version = "90";
         public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -741,7 +744,7 @@ namespace StarMaster {
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true;
-            Background = new LinearGradientBrush(Color.FromRgb(0x12, 0x16, 0x2a), Color.FromRgb(0x0b, 0x0e, 0x16), 90);
+            Background = new LinearGradientBrush(Color.FromRgb(0x17, 0x10, 0x19), Color.FromRgb(0x0e, 0x0a, 0x10), 90);
 
             Grid root = new Grid { Margin = new Thickness(22, 12, 22, 22) };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -815,17 +818,28 @@ namespace StarMaster {
             MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
         }
 
+        // ---------- the StarMaster mark (v90 "Star lock"): targeting brackets, a ring, and a concave four-point star ----------
+        // Same geometry as Make-Icon.ps1 (64-unit design space), so the window, tray and taskbar icons all match.
+        static FrameworkElement LogoMark(double size) {
+            Canvas c = new Canvas { Width = 64, Height = 64 };
+            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M8 20V8h12M44 8h12v12M56 44v12H44M20 56H8V44"), Stroke = Ui.Mauve, StrokeThickness = 4.5,
+                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round });
+            Ellipse ring = new Ellipse { Width = 31, Height = 31, Fill = Ui.Card, Stroke = Ui.Bone, StrokeThickness = 3 };
+            Canvas.SetLeft(ring, 16.5); Canvas.SetTop(ring, 16.5); c.Children.Add(ring);
+            c.Children.Add(new System.Windows.Shapes.Path { Data = Geometry.Parse("M32 10Q35.8 28.2 54 32Q35.8 35.8 32 54Q28.2 35.8 10 32Q28.2 28.2 32 10Z"), Fill = Ui.Accent });
+            return new Viewbox { Width = size, Height = size, Child = c, Stretch = Stretch.Uniform };
+        }
+
         // ---------- custom title bar (v82) ----------
         const double TitleBarH = 34;
         Grid frame; Border frameBorder; TextBlock titleText, maxGlyph;
         UIElement TitleBar() {
-            Grid bar = new Grid { Background = Ui.B("#0a0d17") };
+            Grid bar = new Grid { Background = Ui.B("#0c090e") };
             bar.ColumnDefinitions.Add(new ColumnDefinition());
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             StackPanel left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
-            Polygon star = new Polygon { Fill = Ui.AccentGrad(), Width = 15, Height = 15, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
-            star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
-            left.Children.Add(star);
+            FrameworkElement tlogo = LogoMark(18); tlogo.VerticalAlignment = VerticalAlignment.Center;
+            left.Children.Add(tlogo);
             titleText = new TextBlock { Text = Title, Foreground = Ui.Dim, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
             left.Children.Add(titleText);
             bar.Children.Add(left);
@@ -884,9 +898,8 @@ namespace StarMaster {
             // v80: every top-bar pill is the same height (PillH) and the bar is slimmer - the launch toggles sit side by side
             const double PillH = 38;
             Border logo = new Border { Width = PillH, Height = PillH, CornerRadius = new CornerRadius(11), Background = Ui.Card2, BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
-            Polygon star = new Polygon { Fill = Ui.AccentGrad(), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(0.85, 0.85) };
-            star.Points = new PointCollection(new Point[] { new Point(12, 1), new Point(15.5, 8.5), new Point(23, 12), new Point(15.5, 15.5), new Point(12, 23), new Point(8.5, 15.5), new Point(1, 12), new Point(8.5, 8.5) });
-            logo.Child = star; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
+            FrameworkElement hlogo = LogoMark(28); hlogo.HorizontalAlignment = HorizontalAlignment.Center; hlogo.VerticalAlignment = VerticalAlignment.Center;
+            logo.Child = hlogo; DockPanel.SetDock(logo, Dock.Left); d.Children.Add(logo);
             StackPanel ttl = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
             ttl.Children.Add(new TextBlock { Text = "StarMaster", Foreground = Ui.Accent, FontSize = 18, FontWeight = FontWeights.Bold, LineHeight = 20, LineStackingStrategy = LineStackingStrategy.BlockLineHeight });
             ttl.Children.Add(new TextBlock { Text = "Star Citizen Toolkit", Foreground = Ui.Dim, FontSize = 9.5 });
@@ -1544,6 +1557,7 @@ namespace StarMaster {
             // process and must never block the 1s tick.
             if (monFpsOn && FpsMon.Running && FpsMon.MsSinceActivity > 15000 && (ScRunning() || FpsMon.TargetAlive()))
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); });
+            smp.CpuBrand = smp.CpuName; smp.GpuBrand = smp.GpuName;
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
             // CPU temperature still needs HWiNFO - Tctl/Tdie sits behind ring-0 on AMD. Watts no longer do:
             // SysMon.Read has already filled CpuPowerW from Windows' own RAPL counter, so HWiNFO's copy is
@@ -1567,7 +1581,7 @@ namespace StarMaster {
             Border card = new Border { CornerRadius = new CornerRadius(15), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Padding = new Thickness(20, 18, 20, 18), VerticalAlignment = VerticalAlignment.Top };
             StackPanel s = new StackPanel();
             head = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 0, 0, 15) };
-            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.B("#16203a"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 14, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            Border ic = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Background = Ui.B("#251a29"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1), Child = new TextBlock { Text = icon, FontSize = 14, Foreground = Ui.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
             DockPanel.SetDock(ic, Dock.Left); head.Children.Add(ic);
             StackPanel tt = new StackPanel { Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             tt.Children.Add(new TextBlock { Text = title, Foreground = Ui.Text, FontSize = 13.5, FontWeight = FontWeights.SemiBold });
@@ -1939,7 +1953,7 @@ namespace StarMaster {
                         "<Setter Property='Width' Value='8'/><Setter Property='MinWidth' Value='8'/><Setter Property='Margin' Value='6,0,0,0'/>" +
                         "<Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'>" +
                         "<Track x:Name='PART_Track' IsDirectionReversed='True'><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'>" +
-                        "<Border Background='#3a4670' CornerRadius='4'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>" +
+                        "<Border Background='#4a3b54' CornerRadius='4'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>" +
                         "</ControlTemplate></Setter.Value></Setter></Style>");
                 } catch { }
             }
@@ -2210,7 +2224,7 @@ namespace StarMaster {
         // setState lets callers flip the switch's visuals programmatically (without firing `changed`) - used by the overlay show/hide hotkey to keep this switch in sync
         Border Toggle(bool on, Action<bool> changed, out Action<bool> setState) {
             Border track = new Border { Width = 40, Height = 22, CornerRadius = new CornerRadius(11), Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Background = on ? (Brush)Ui.AccentGrad() : Ui.Line2 };
-            Ellipse knob = new Ellipse { Width = 16, Height = 16, Fill = Ui.B("#cdd6de"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0), HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left };
+            Ellipse knob = new Ellipse { Width = 16, Height = 16, Fill = Ui.B("#efe6f0"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, 0), HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left };
             track.Child = knob; bool[] st = { on };
             Action<bool> apply = delegate (bool v) { st[0] = v; track.Background = v ? (Brush)Ui.AccentGrad() : Ui.Line2; knob.HorizontalAlignment = v ? HorizontalAlignment.Right : HorizontalAlignment.Left; };
             track.MouseLeftButtonUp += delegate { apply(!st[0]); if (changed != null) changed(st[0]); };
@@ -2337,7 +2351,7 @@ namespace StarMaster {
             foreach (string it in items) {
                 string cur = it;
                 Border row = new Border { Padding = new Thickness(12, 8, 12, 8), Cursor = Cursors.Hand, Child = new TextBlock { Text = cur, Foreground = Ui.Text, FontSize = 11 } };
-                row.MouseEnter += delegate { row.Background = Ui.B("#222c4a"); };
+                row.MouseEnter += delegate { row.Background = Ui.B("#2e2335"); };
                 row.MouseLeave += delegate { row.Background = Brushes.Transparent; };
                 row.MouseLeftButtonUp += delegate { Value = cur; label.Text = cur; popup.IsOpen = false; if (OnChange != null) OnChange(cur); };
                 list.Children.Add(row);
@@ -2370,7 +2384,7 @@ namespace StarMaster {
             Canvas.SetTop(track, (h - 6) / 2); Canvas.SetLeft(track, 0); Children.Add(track);
             fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Accent };
             Canvas.SetTop(fill, (h - 6) / 2); Canvas.SetLeft(fill, 0); Children.Add(fill);
-            knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Ui.B("#cdd6de"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
+            knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Ui.B("#efe6f0"), BorderBrush = Ui.Line2, BorderThickness = new Thickness(1) };
             Canvas.SetTop(knob, (h - 16) / 2); Children.Add(knob);
             MouseLeftButtonDown += delegate (object o, MouseButtonEventArgs e) { drag = true; CaptureMouse(); ApplyX(e.GetPosition(this).X); };
             MouseMove += delegate (object o, MouseEventArgs e) { if (drag) ApplyX(e.GetPosition(this).X); };
@@ -2429,9 +2443,9 @@ namespace StarMaster {
         public void SetColors(bool v) { colors = v; }
         public void Update(SysMon.Sample s) {
             if (s.Fps >= 0) { fpsCell.Text = (s.Fps > 0 ? s.Fps.ToString() : "--"); fpsCell.Visibility = Visibility.Visible; } else fpsCell.Visibility = Visibility.Collapsed;
-            Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, colors);
-            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, colors);
-            else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, colors);
+            Set(cpuC, CleanName(s.CpuName), NameBrush(s.CpuBrand ?? s.CpuName, s.CpuNameColor), (int)(s.CpuTotal + 0.5), s.CpuTempC, s.RamUsedGB, s.RamTotalGB, s.RamPct, s.CpuPowerW, colors);
+            if (s.GpuOk) Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuBrand ?? s.GpuName, s.GpuNameColor), s.GpuPct, s.GpuTempC, s.VramUsedGB, s.VramTotalGB, s.VramPct, s.GpuPowerW, colors);
+            else Set(gpuC, CleanName(s.GpuName), NameBrush(s.GpuBrand ?? s.GpuName, s.GpuNameColor), -1, -1, 0, 0, -1, -1, colors);
         }
         // name colour: white if colours off; else the chosen override colour, else the brand colour
         Brush NameBrush(string name, string overrideHex) {
@@ -2449,9 +2463,9 @@ namespace StarMaster {
         }
         static Brush BrandColor(string n) {
             if (n == null) return Ui.Text;
-            if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#5bbcff");   // Intel = blue
-            if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#76e0a1");   // NVIDIA = green
-            if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff6b7d");   // AMD = red
+            if (n.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Arc", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#3b82ff");   // Intel = vivid blue (v90)
+            if (n.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("GeForce", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#2fe06a");   // NVIDIA = vivid green (v90)
+            if (n.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Ryzen", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) >= 0) return Ui.B("#ff4040");   // AMD = vivid red (v90)
             return Ui.Text;
         }
         // keep the brand, trim only redundant words: "NVIDIA GeForce RTX 5090" -> "NVIDIA RTX 5090", "AMD Ryzen 7 9800X3D 8-Core Processor" -> "AMD Ryzen 7 9800X3D"

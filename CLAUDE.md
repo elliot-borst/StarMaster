@@ -151,3 +151,10 @@
 Multiple per-window keystroke profiles; back up the VoiceAttack profile; **sign `StarMaster-Setup.exe`** (kills SmartScreen warning). *Done: v2 updater + dark UI + high-DPI; v3 StarStrings + single window + scan codes; v4 Auto Accept + tray; v5 resizable; v6 WPF Aurora dashboard rewrite; v56 hands-off silent auto-update; v72 per-monitor-V2 DPI (no more blurry-at-boot).*
 
 > This file is the app's handoff doc — a fresh Claude Code session opened in this folder has everything it needs to continue.
+## GitHub issues: assign the owner
+
+Every issue created on this repo is **assigned to the owner, `elliot-borst`, the moment it is created**
+(owner rule, 2026-11-13), by every agent and every scheduled run: `gh issue create --assignee elliot-borst …`,
+or with the plain API put `"assignees":["elliot-borst"]` in the create body. If you pick up or reopen an
+issue that has no assignee, add it (`gh issue edit <n> --add-assignee elliot-borst`). A 10-minute sweep
+(ServerStack `tools/assign-issues-to-owner.sh`) catches any that slip through; don't rely on it.

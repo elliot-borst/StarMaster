@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("92.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("92.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("93.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("93.0.0.0")]
 
 namespace StarMaster {
 
@@ -258,9 +258,9 @@ namespace StarMaster {
         static bool gpuReady; static IntPtr gpuDev = IntPtr.Zero; static string gpuName = "GPU";
         static string cpuName = "CPU";
         // CPU package watts, driver-free (v73): Windows' own "Energy Meter" counter set publishes the CPU's
-        // RAPL energy sensors - the same sensor HWiNFO reads, minus the kernel driver. Instances are named
+        // RAPL energy sensors - the same sensor LibreHardwareMonitor reads, minus the driver. Instances are named
         // like "RAPL_Package0_PKG" and the counter is in milliwatts. Not every board exposes it, so this
-        // stays optional: raplPkg is left null and MonTick falls back to HWiNFO's copy.
+        // stays optional: raplPkg is left null. (Elevated, MonTick prefers LibreHardwareMonitor's Package sensor.)
         // (The old "% Processor Performance" CPU-MHz counters lived here; the overlay dropped MHz in v59 and
         // the card in v38, so they were two PDH reads a second feeding a value nothing displayed.)
         static System.Diagnostics.PerformanceCounter raplPkg;
@@ -351,7 +351,8 @@ namespace StarMaster {
     }
 
     // ===== FPS via Intel PresentMon (MIT, open-source). Injection-free (ETW) so it's anti-cheat-safe. =====
-    // PresentMon self-elevates (--restart_as_admin = one UAC prompt); StarMaster stays non-elevated and tails the CSV it writes.
+    // Built in (v93): downloaded on first use to %LOCALAPPDATA%\StarMaster, run hidden as our child (so it inherits
+    // StarMaster's elevation - the ETW capture needs admin, or membership of Performance Log Users), CSV tailed.
     public static class FpsMon {
         const string PmUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.4.1/PresentMon-2.4.1-x64.exe";
         const string MsCol = "msBetweenPresents";
@@ -383,19 +384,11 @@ namespace StarMaster {
         class Chain { public int Pid; public string App; public Queue<double> Win = new Queue<double>(); public double WinMs; public int Fps, LastTick; }
         public static string PmPath() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster", "PresentMon.exe"); }
 
-        // Is the current user in "Performance Log Users"? If so, PresentMon can capture without elevation - no per-session UAC.
-        public static bool PerfAccess() {
+        // Can PresentMon capture? Elevated (v93's normal mode, via the admin task), or a user already in
+        // "Performance Log Users" (the pre-v93 one-time setup - still honoured for anyone who did it).
+        public static bool Access() {
+            if (Elevate.IsAdmin()) return true;
             try { return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(new SecurityIdentifier(WellKnownSidType.BuiltinPerformanceLoggingUsersSid, null)); } catch { return true; }
-        }
-        // one-time: add this user to "Performance Log Users" (elevated -> single UAC). Returns net.exe exit code (0 added, 2 already a member, else fail/declined).
-        public static int GrantPerfAccess() {
-            try {
-                string g = new SecurityIdentifier(WellKnownSidType.BuiltinPerformanceLoggingUsersSid, null).Translate(typeof(NTAccount)).ToString();
-                int bs = g.IndexOf('\\'); if (bs >= 0) g = g.Substring(bs + 1);
-                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c net localgroup \"" + g + "\" \"" + WindowsIdentity.GetCurrent().Name + "\" /add");
-                psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-                System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi); p.WaitForExit(); return p.ExitCode;
-            } catch { return -1; }   // includes the user declining the UAC prompt
         }
 
         static bool EnsurePm() {
@@ -412,7 +405,7 @@ namespace StarMaster {
 
         // PresentMon produces NO stdout when our process has no console (a GUI app), so we run it via `cmd ... > file`
         // (cmd gives it a console) and tail the file. That file is UTF-16LE, so the reader decodes accordingly.
-        // Always non-elevated - the Performance Log Users group (one-time GrantPerfAccess) grants the ETW privilege.
+        // Runs with StarMaster's own rights (elevated since v93 -> the ETW privilege comes with it).
         // v76: captures EVERY process (it used to pass --process_name StarCitizen.exe, so no other game ever showed
         // an FPS) and the reader reports whichever one is in the foreground - so it works for any game.
         public static void Start() {
@@ -445,8 +438,19 @@ namespace StarMaster {
                 using (System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi)) p.WaitForExit(3000);
             } catch { }
         }
+        // Only OUR copy (matched by path). Now that StarMaster runs elevated it could kill another tool's elevated
+        // PresentMon too (DeviceMaster runs one under its own session name) - so match the exe, not the name.
         static void KillProc() {
-            try { foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName("PresentMon")) { try { if (!p.HasExited) { p.Kill(); p.WaitForExit(1500); } } catch { } } } catch { }
+            string mine = PmPath();
+            try {
+                foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName("PresentMon")) {
+                    try {
+                        string fn = null; try { fn = p.MainModule.FileName; } catch { }
+                        if (fn == null || !string.Equals(Path.GetFullPath(fn), mine, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!p.HasExited) { p.Kill(); p.WaitForExit(1500); }
+                    } catch { } finally { p.Dispose(); }
+                }
+            } catch { }
         }
         static void CleanOldCsvs() {
             try { foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-fps-*.csv")) { try { File.Delete(f); } catch { } } } catch { }
@@ -545,110 +549,6 @@ namespace StarMaster {
         }
     }
 
-    // ===== HWiNFO integration: reads the CPU TEMPERATURE from HWiNFO's shared memory (it does the ring-0 work; we just read).
-    // Optional, and since v73 only for temperature - CPU watts come from Windows' own RAPL counter in SysMon, no HWiNFO needed.
-    // Tctl/Tdie has no user-mode source on AMD (it is behind SMN/PCI-config access), which is why this stays the one thing we can't self-serve. =====
-    public static class HwInfo {
-        public const string DownloadUrl = "https://www.hwinfo.com/download/";
-        public const int NotInstalled = 0, NotRunning = 1, NoSharedMem = 2, Connected = 3;
-        public static int CpuTempC = -1, CpuPowerW = -1;
-        public static int State = NotInstalled;
-        public static bool AccessDenied;   // MMF exists but we couldn't open it (usually an elevation mismatch)
-        public static bool Autorun, StartMin, SmEnabled, MinMain, MinClose;   // from HWiNFO64.INI (StartMin = MinimalizeSensors)
-        static string exe; static bool located;
-
-        public static string Exe() { if (!located) Locate(); return exe; }
-
-        static void Locate() {
-            located = true;
-            try {
-                string[] keys = { @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1", @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1" };
-                foreach (string k in keys) {
-                    object il = Microsoft.Win32.Registry.GetValue(k, "InstallLocation", null);
-                    if (il != null) { string p = Path.Combine(il.ToString(), "HWiNFO64.exe"); if (File.Exists(p)) { exe = p; break; } }
-                    object di = Microsoft.Win32.Registry.GetValue(k, "DisplayIcon", null);
-                    if (di != null) { string p = di.ToString().Split(',')[0].Trim('"'); if (File.Exists(p)) { exe = p; break; } }
-                }
-                if (exe == null) {
-                    string pf = Environment.GetEnvironmentVariable("ProgramW6432"); if (string.IsNullOrEmpty(pf)) pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                    string p = Path.Combine(pf, "HWiNFO64", "HWiNFO64.exe"); if (File.Exists(p)) exe = p;
-                }
-                if (exe != null) ReadIni();
-            } catch { }
-        }
-        static void ReadIni() {
-            try {
-                string ini = Path.Combine(Path.GetDirectoryName(exe), "HWiNFO64.INI");
-                if (!File.Exists(ini)) return;
-                bool sm = false, ar = false, mn = false, mw = false, mc = false;   // read into locals so an absent/removed key reads as off (not a stale true)
-                foreach (string line in File.ReadAllLines(ini)) {
-                    string l = line.Trim();
-                    if (l.StartsWith("SensorsSM=")) sm = l.EndsWith("1");
-                    else if (l.StartsWith("Autorun=")) ar = l.EndsWith("1");
-                    else if (l.StartsWith("MinimalizeMainWnd=")) mw = l.EndsWith("1");
-                    else if (l.StartsWith("MinimalizeSensorsClose=")) mc = l.EndsWith("1");
-                    else if (l.StartsWith("MinimalizeSensors=")) mn = l.EndsWith("1");
-                }
-                SmEnabled = sm; Autorun = ar; StartMin = mn; MinMain = mw; MinClose = mc;
-            } catch { }
-        }
-        static bool ProcRunning() {
-            try { return System.Diagnostics.Process.GetProcessesByName("HWiNFO64").Length > 0 || System.Diagnostics.Process.GetProcessesByName("HWiNFO32").Length > 0; } catch { return false; }
-        }
-        // learn the exe path from a running HWiNFO when the registry lookup missed it (portable / non-standard installs)
-        static void LocateFromProcess() {
-            try {
-                foreach (string n in new string[] { "HWiNFO64", "HWiNFO32" })
-                    foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName(n)) {
-                        try { string fn = p.MainModule.FileName; if (!string.IsNullOrEmpty(fn) && File.Exists(fn)) { exe = fn; return; } } catch { } finally { p.Dispose(); }
-                    }
-            } catch { }
-        }
-
-        // fast (call every tick): read CPU temp/watts from shared memory. Returns true if shared memory is live.
-        public static bool ReadSensors() {
-            CpuTempC = -1; CpuPowerW = -1; AccessDenied = false;
-            try {
-                using (MemoryMappedFile mmf = MemoryMappedFile.OpenExisting("Global\\HWiNFO_SENS_SM2", MemoryMappedFileRights.Read))
-                using (MemoryMappedViewAccessor a = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read)) {
-                    int roff = a.ReadInt32(32), rsize = a.ReadInt32(36), rnum = a.ReadInt32(40);   // packed SM2 header
-                    if (rsize < 200 || rsize > 8192 || rnum < 1 || rnum > 100000 || roff < 1) { roff = a.ReadInt32(36); rsize = a.ReadInt32(40); rnum = a.ReadInt32(44); }
-                    if (rsize < 200 || rsize > 8192 || rnum < 1 || rnum > 100000 || roff < 1) return true;
-                    byte[] lbl = new byte[128]; int tRank = 99, pRank = 99;
-                    for (int i = 0; i < rnum; i++) {
-                        long b = roff + (long)i * rsize;
-                        int type = a.ReadInt32(b);                       // 1 = temperature, 5 = power
-                        if (type != 1 && type != 5) continue;
-                        a.ReadArray(b + 12, lbl, 0, 128);
-                        int z = Array.IndexOf(lbl, (byte)0); if (z < 0) z = 128;
-                        string lo = Encoding.Default.GetString(lbl, 0, z);
-                        if (lo.IndexOf("CPU", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                        double v = a.ReadDouble(b + 284);               // Value (current); szUnit[16]@268 precedes it
-                        if (type == 1 && v > 5 && v < 150) { int r = lo.IndexOf("Tctl") >= 0 ? 0 : (lo.IndexOf("Die") >= 0 ? 1 : 2); if (r < tRank) { tRank = r; CpuTempC = (int)(v + 0.5); } }
-                        else if (type == 5 && v > 0.3 && v < 600 && lo.IndexOf("Power") >= 0) { int r = lo.IndexOf("Package") >= 0 ? 0 : (lo.IndexOf("PPT") >= 0 ? 1 : 2); if (r < pRank) { pRank = r; CpuPowerW = (int)(v + 0.5); } }
-                    }
-                    return true;
-                }
-            }
-            catch (UnauthorizedAccessException) { AccessDenied = true; return false; }   // MMF exists but we lack rights (elevation mismatch)
-            catch { return false; }   // shared memory not present => HWiNFO not running (or SM off / 12-hour limit expired)
-        }
-
-        // heavier (call occasionally): classify overall state + refresh the INI-derived flags for a precise diagnosis.
-        // Re-validates the cached path every call so an install/uninstall mid-session is detected without a restart.
-        public static void RefreshState(bool smActive) {
-            if (exe != null && !File.Exists(exe)) { exe = null; SmEnabled = false; Autorun = false; StartMin = false; }   // uninstalled since we looked
-            if (exe == null) { located = false; Locate(); }   // (re)try registry + Program Files while we have no exe (catches an install mid-session)
-            if (exe == null) LocateFromProcess();              // portable / non-registry install: learn it from a running process
-            if (exe != null) ReadIni();                        // keep SmEnabled/Autorun/StartMin current so the SM-off vs 12h-limit split is right
-            if (smActive) { State = Connected; return; }
-            bool running = ProcRunning();
-            if (exe == null && !running) State = NotInstalled;
-            else if (!running) State = NotRunning;
-            else State = NoSharedMem;
-        }
-    }
-
     // ===== colour themes (v91) + widgets =====
     // Every themed colour is ONE shared, unfrozen brush; elements hold a reference to it, so ApplyTheme only has to
     // change each brush's Color and the whole window repaints live - no rebuild. Semantic colours (status / load
@@ -714,8 +614,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "92";
-        public const string VersionDate = "2026-11-12";   // bump alongside Version at release time
+        public const string Version = "93";
+        public const string VersionDate = "2026-11-23";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -746,9 +646,8 @@ namespace StarMaster {
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
         TextBox monCpuNameBox, monGpuNameBox;
         bool monFpsOn = true; TextBlock monFpsTxt, monFpsTip; Border monFpsBtn;
-        bool fpsPendingRelogin = false;   // group-add done, waiting for the user to sign out/in for it to take effect
-        TextBlock monHwTxt, monHwTip; Border monHwBtn; int hwTick = 99;
-        Border hwPillInstall, hwPillSm, hwPillAuto, hwPillMinW, hwPillMinS, hwPillMinC;   // at-a-glance setup checklist (green=done / yellow=to do)
+        // CPU sensors box (v93: LibreHardwareMonitor, replaced HWiNFO) - status line + one-time admin setup button + tip
+        TextBlock monSenTxt, monSenTip; Border monSenBtn; bool sensorSetupBusy; int cpuTempNow = -1; int senTick = 99; bool pawnIoNow;
         // overlay show/hide global hotkey (RegisterHotKey - works while SC has focus; no injection, EAC-safe)
         bool monHotkeyOn = true; string monHotkey = "Right";
         Dropdown monHotkeyDrop; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
@@ -817,7 +716,7 @@ namespace StarMaster {
             Deactivated += delegate { if (titleText != null) titleText.Foreground = Ui.Faint; };
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) }; timer.Tick += Tick;
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate { SysMon.Init(); });   // NVML init is slow - do it off the UI thread
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { SysMon.Init(); if (Elevate.IsAdmin()) InitCpuSensors(); });   // NVML init is slow - do it off the UI thread (LibreHardwareMonitor only reads when elevated)
             // Normal priority, NOT DispatcherTimer's Background default (v73): a Background tick is only
             // delivered once nothing else is queued, so the overlay skipped seconds and looked frozen exactly
             // when it needed to be right - the machine flat out under a game.
@@ -1285,7 +1184,7 @@ namespace StarMaster {
             body.Children.Add(NameOverrideRow("CPU name", monCpuNameBox, monCpuNameCol, delegate (string h) { monCpuNameCol = h; }));
             monGpuNameBox = TextField(monGpuName); monGpuNameBox.IsEnabled = monNameOvr; monGpuNameBox.TextChanged += delegate { monGpuName = monGpuNameBox.Text; };
             body.Children.Add(NameOverrideRow("GPU name", monGpuNameBox, monGpuNameCol, delegate (string h) { monGpuNameCol = h; }));
-            // FPS via PresentMon (reads frames via ETW). The Show-FPS toggle; PresentMon's health/status lives in its own box at the bottom (mirrors the HWiNFO box).
+            // FPS via PresentMon (reads frames via ETW). The Show-FPS toggle; PresentMon's health/status lives in its own box at the bottom (mirrors the CPU sensors box).
             StackPanel fp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
             fp.Children.Add(Toggle(monFpsOn, delegate (bool v) { ToggleFps(v); }));
             fp.Children.Add(new TextBlock { Text = "  Show FPS", Foreground = Ui.Text, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
@@ -1318,32 +1217,24 @@ namespace StarMaster {
             body.Children.Add(coR);
 
             body.Children.Add(StatGrid());
-            // HWiNFO status (the CPU TEMPERATURE source; watts come from Windows RAPL since v73). Shows install/run state + an action button.
-            Border hwBox = new Border { Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 8, 12, 6), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
-            StackPanel hwIn = new StackPanel();
-            hwIn.Children.Add(SourceHeader("HWiNFO", new string[] { "CPU temperature" }, out hwChips));
-            DockPanel hwTop = new DockPanel { LastChildFill = false };
-            monHwBtn = Btn("Get HWiNFO", Ui.Card2, Ui.Text, false, delegate { HwAction(); }); monHwBtn.Padding = new Thickness(12, 6, 12, 6); DockPanel.SetDock(monHwBtn, Dock.Right); hwTop.Children.Add(monHwBtn);
-            monHwTxt = new TextBlock { Text = "Checking HWiNFO...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monHwTxt, Dock.Left); hwTop.Children.Add(monHwTxt);
-            hwIn.Children.Add(hwTop);
-            // setup checklist: one pill per requirement, green when done / yellow when still to do (status only - StarMaster can't tick HWiNFO's boxes without the shelved elevated helper)
-            WrapPanel hwPills = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-            hwPills.Children.Add(hwPillInstall = HwPill("Installed", "HWiNFO is installed."));
-            hwPills.Children.Add(hwPillSm = HwPill("Shared memory", "Shared Memory Support is active - how StarMaster reads the CPU temperature. HWiNFO -> Settings -> tick 'Shared Memory Support'."));
-            hwPills.Children.Add(hwPillAuto = HwPill("Auto-start", "HWiNFO starts with Windows. HWiNFO -> Settings -> tick 'Auto Start'."));
-            hwPills.Children.Add(hwPillMinW = HwPill("Min. window", "Main window starts minimized. HWiNFO -> Settings -> tick 'Minimize Main Window on Startup'."));
-            hwPills.Children.Add(hwPillMinS = HwPill("Min. sensors", "Sensors window starts minimized. HWiNFO -> Settings -> tick 'Minimize Sensors on Startup'."));
-            hwPills.Children.Add(hwPillMinC = HwPill("Min. on close", "Closing goes to the tray instead of quitting. HWiNFO -> Settings -> tick 'Minimize Sensors instead of closing'."));
-            hwIn.Children.Add(hwPills);
-            monHwTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
-            hwIn.Children.Add(monHwTip);
-            hwBox.Child = hwIn; body.Children.Add(hwBox);
-            // PresentMon status (the FPS source). Same behaviour as the HWiNFO box: state line + contextual action button + tip.
+            // CPU sensors (v93): LibreHardwareMonitor, built in - replaced the HWiNFO box. Status line + the one-time
+            // admin setup button (installs PawnIO + the admin start task; one UAC prompt, covers FPS too) + tip.
+            Border senBox = new Border { Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
+            StackPanel senIn = new StackPanel();
+            senIn.Children.Add(SourceHeader("CPU sensors · built in", new string[] { "CPU temperature" }, out senChips));
+            DockPanel senTop = new DockPanel { LastChildFill = false };
+            monSenBtn = Btn("Set up (one time)", Ui.Card2, Ui.Text, false, delegate { SetupSensors(); }); monSenBtn.Padding = new Thickness(12, 6, 12, 6); monSenBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monSenBtn, Dock.Right); senTop.Children.Add(monSenBtn);
+            monSenTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monSenTxt, Dock.Left); senTop.Children.Add(monSenTxt);
+            senIn.Children.Add(senTop);
+            monSenTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+            senIn.Children.Add(monSenTip);
+            senBox.Child = senIn; body.Children.Add(senBox);
+            // PresentMon status (the FPS source). Same behaviour as the sensors box: state line + contextual action button + tip.
             Border fpsBox = new Border { Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
             StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(SourceHeader("PresentMon", new string[] { "FPS" }, out fpsChips));   // required for the FPS stat
+            fpsIn.Children.Add(SourceHeader("PresentMon · built in", new string[] { "FPS" }, out fpsChips));   // required for the FPS stat
             DockPanel fpsTop = new DockPanel { LastChildFill = false };
-            monFpsBtn = Btn("Enable FPS (one-time setup)", Ui.Card2, Ui.Text, false, delegate { EnableFpsAccess(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
+            monFpsBtn = Btn("Set up (one time)", Ui.Card2, Ui.Text, false, delegate { SetupSensors(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
             monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
             fpsIn.Children.Add(fpsTop);
             monFpsTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
@@ -1393,9 +1284,10 @@ namespace StarMaster {
             st.Src.Text = src; st.Src.Foreground = state == 1 ? Ui.Dim : c;
             st.Dot.Background = c;
             st.Root.BorderBrush = state == 1 ? Ui.Line : c;
-            st.Root.ToolTip = state == 0 ? StatNames[i] + " isn't reading - see " + src + (src == "HWiNFO" || src == "PresentMon" ? " below." : ".") : null;
+            st.Root.ToolTip = state == 0 ? StatNames[i] + " isn't reading - see " + (src == SenSrc ? "CPU sensors below." : src == "PresentMon" ? "PresentMon below." : src + ".") : null;
         }
-        void UpdateStats(SysMon.Sample smp, int cpuWattsWin) {
+        const string SenSrc = "LibreHardwareMonitor";
+        void UpdateStats(SysMon.Sample smp, int cpuWattsLhm) {
             // FPS: PresentMon - mirror its box (off / setup / ready / connected)
             if (!monFpsOn) SetStat(0, "off", "PresentMon", -1);
             else {
@@ -1406,15 +1298,15 @@ namespace StarMaster {
             bool cpuOk = smp.CpuTotal >= 0;
             SetStat(1, cpuOk ? (int)(smp.CpuTotal + 0.5) + "%" : "--", "Windows", cpuOk ? 1 : 0);
             SetStat(2, smp.GpuOk ? smp.GpuPct + "%" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
-            SetStat(3, smp.CpuTempC >= 0 ? smp.CpuTempC + "°C" : "--", "HWiNFO", smp.CpuTempC >= 0 ? 1 : 0);
+            SetStat(3, smp.CpuTempC >= 0 ? smp.CpuTempC + "°C" : "--", SenSrc, smp.CpuTempC >= 0 ? 1 : 0);
             bool gt = smp.GpuOk && smp.GpuTempC > 0;
             SetStat(4, gt ? smp.GpuTempC + "°C" : "n/a", "NVIDIA driver", gt ? 1 : 0);
             bool ram = smp.RamTotalGB > 0;
             SetStat(5, ram ? smp.RamUsedGB.ToString("0.0") + "/" + smp.RamTotalGB.ToString("0") + "GB" : "--", "Windows", ram ? 1 : 0);
             SetStat(6, smp.GpuOk ? smp.VramUsedGB.ToString("0.0") + "/" + smp.VramTotalGB.ToString("0") + "GB" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
-            // CPU watts: Windows' RAPL counter; HWiNFO only on boards that don't publish one
-            if (cpuWattsWin >= 0) SetStat(7, cpuWattsWin + "W", "Windows", 1);
-            else SetStat(7, smp.CpuPowerW >= 0 ? smp.CpuPowerW + "W" : "--", "HWiNFO", smp.CpuPowerW >= 0 ? 1 : 0);
+            // CPU watts: LibreHardwareMonitor's Package sensor when it reads (elevated), else Windows' RAPL counter
+            if (cpuWattsLhm >= 0) SetStat(7, cpuWattsLhm + "W", SenSrc, 1);
+            else SetStat(7, smp.CpuPowerW >= 0 ? smp.CpuPowerW + "W" : "--", "Windows", smp.CpuPowerW >= 0 ? 1 : 0);
             bool gw = smp.GpuOk && smp.GpuPowerW >= 0;
             SetStat(8, gw ? smp.GpuPowerW + "W" : "n/a", "NVIDIA driver", gw ? 1 : 0);
         }
@@ -1510,18 +1402,12 @@ namespace StarMaster {
             if (monFpsTxt == null) return;
             SetFpsTip("");
             if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "Off - turn on Show FPS above."; return; }
-            bool access = FpsMon.PerfAccess();
-            if (access && fpsPendingRelogin) { fpsPendingRelogin = false; SaveConfig(); }   // the sign-out/in took effect - clear the pending flag
-            if (!access) {   // user not in Performance Log Users -> FPS can't capture without this one-time setup
-                monFpsTxt.Foreground = Ui.Warn;
-                if (fpsPendingRelogin) {   // already granted, just not applied yet
-                    monFpsBtn.Visibility = Visibility.Collapsed;
-                    monFpsTxt.Text = "Almost there - sign out and back in once.";
-                } else {
-                    monFpsBtn.Visibility = Visibility.Visible; monFpsTxt.Foreground = Ui.Crit;
-                    monFpsTxt.Text = "Not working - needs a one-time setup.";
-                    SetFpsTip("Windows asks for admin once; then sign out and back in.");
-                }
+            if (!FpsMon.Access()) {   // not elevated (and not in Performance Log Users) -> the ETW capture can't start
+                bool canSetup = RunningFromInstallDir() && !sensorSetupBusy;
+                monFpsBtn.Visibility = canSetup ? Visibility.Visible : Visibility.Collapsed;
+                monFpsTxt.Foreground = sensorSetupBusy ? Ui.Warn : Ui.Crit;
+                monFpsTxt.Text = sensorSetupBusy ? "Setting up..." : "Not working - needs the one-time admin setup.";
+                SetFpsTip(canSetup ? "Same setup as CPU sensors above - one Windows prompt covers both." : sensorSetupBusy ? "" : "Run the installed StarMaster (or this copy as administrator) for FPS.");
                 return;
             }
             monFpsBtn.Visibility = Visibility.Collapsed;
@@ -1534,28 +1420,9 @@ namespace StarMaster {
             else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Game running - waiting for frames..."; SetFpsTip("Stuck? Close RTSS / Afterburner, then toggle Show FPS."); }
         }
         void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
-        // one-time: add the user to Performance Log Users so PresentMon can capture without elevation thereafter
-        void EnableFpsAccess() {
-            if (monFpsTxt != null) monFpsTxt.Text = "requesting admin (one time)...";
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
-                int r = FpsMon.GrantPerfAccess();
-                Dispatcher.BeginInvoke(new Action(delegate {
-                    if (r == 0 || r == 2) { fpsPendingRelogin = true; SaveConfig(); ShowAlert("FPS enabled", "Done! Sign out and back in (or restart the PC) once, and the frame-rate overlay will work every session automatically - no more prompts."); }
-                    else ShowAlert("Setup not completed", "Couldn't enable FPS access (the admin prompt may have been declined). Click \"Enable FPS\" and choose Yes to try again.");
-                    UpdateFpsUi();
-                }));
-            });
-        }
-        // launch/get HWiNFO depending on detected state
-        void HwAction() {
-            try {
-                if (HwInfo.State == HwInfo.NotInstalled) System.Diagnostics.Process.Start(HwInfo.DownloadUrl);
-                else { string p = HwInfo.Exe(); if (p != null) System.Diagnostics.Process.Start(p); }   // start it (or bring it up to enable Shared Memory)
-            } catch { }
-        }
         // v86: source box header - name + a chip per statistic this source provides, coloured like its status
         // (green working/ready, yellow pending, red not working, faint off) so a blank overlay value is traceable
-        Border[] hwChips, fpsChips;
+        Border[] senChips, fpsChips;
         StackPanel SourceHeader(string name, string[] provides, out Border[] chips) {
             StackPanel h = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
             h.Children.Add(new TextBlock { Text = name, Foreground = Ui.Text, FontSize = 10.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
@@ -1568,71 +1435,64 @@ namespace StarMaster {
             return h;
         }
         void SetChips(Border[] chips, Brush c) { if (chips == null) return; foreach (Border b in chips) { b.BorderBrush = c; ((TextBlock)b.Child).Foreground = c; } }
-        // a status pill: rounded label, coloured green when the requirement is met, yellow while it's still to do
-        Border HwPill(string label, string tip) {
-            TextBlock t = new TextBlock { Text = label, FontSize = 9, VerticalAlignment = VerticalAlignment.Center };
-            return new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = Ui.Warn, Padding = new Thickness(7, 1, 7, 1), Margin = new Thickness(0, 0, 5, 5), Child = t, ToolTip = tip, Tag = label };
+
+        // ---- CPU sensors box (v93) ----
+        void UpdateSensorUi() { UpdateSensorUiCore(); if (monSenTxt != null) SetChips(senChips, monSenTxt.Foreground); }
+        void SetSen(Brush c, string text, string tip, bool button) {
+            monSenTxt.Foreground = c; monSenTxt.Text = text;
+            monSenTip.Text = tip; monSenTip.Visibility = tip.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            monSenBtn.Visibility = button ? Visibility.Visible : Visibility.Collapsed;
         }
-        void SetPill(Border pill, bool done) {
-            if (pill == null) return;
-            Brush c = done ? Ui.Good : Ui.Warn;
-            pill.BorderBrush = c;
-            TextBlock t = (TextBlock)pill.Child; t.Foreground = c; t.Text = (done ? "✓ " : "") + (string)pill.Tag;   // tick prefix when done
-        }
-        // Precise HWiNFO diagnosis + a clear fix for every distinct failure cause. AV-safe: the only actions are
-        // opening the download page / launching HWiNFO (no elevation, no INI/registry/task writes).
-        void UpdateHwUi() { UpdateHwUiCore(); if (monHwTxt != null) SetChips(hwChips, monHwTxt.Foreground); }
-        void UpdateHwUiCore() {
-            if (monHwTxt == null) return;
-            TextBlock lbl = (TextBlock)monHwBtn.Child;
-            // Since v73 this panel is about CPU TEMPERATURE only - watts come from Windows' RAPL counter
-            // whether HWiNFO is there or not, so they must not gate any of the states below.
-            bool haveTemp = HwInfo.CpuTempC >= 0;
-            // refresh the checklist pills (green=done / yellow=to do)
-            SetPill(hwPillInstall, HwInfo.State != HwInfo.NotInstalled);
-            SetPill(hwPillSm, HwInfo.State == HwInfo.Connected);   // shared memory is live
-            SetPill(hwPillAuto, HwInfo.Autorun);
-            SetPill(hwPillMinW, HwInfo.MinMain);
-            SetPill(hwPillMinS, HwInfo.StartMin);
-            SetPill(hwPillMinC, HwInfo.MinClose);
-            if (HwInfo.State == HwInfo.Connected && haveTemp) {
-                // fully working
-                monHwTxt.Text = "Connected - CPU " + HwInfo.CpuTempC + " °C";
-                monHwTxt.Foreground = Ui.Good; monHwBtn.Visibility = Visibility.Collapsed;
-                bool optTodo = !HwInfo.Autorun || !HwInfo.MinMain || !HwInfo.StartMin || !HwInfo.MinClose;
-                monHwTip.Text = optTodo ? "The yellow items above are optional - tick them in HWiNFO -> Settings so it's always ready." : "";
-                monHwTip.Visibility = optTodo ? Visibility.Visible : Visibility.Collapsed;
+        void UpdateSensorUiCore() {
+            if (monSenTxt == null) return;
+            if (sensorSetupBusy) { SetSen(Ui.Warn, "Setting up - approve the Windows prompt...", "", false); return; }
+            const string setupTip = "One Windows prompt: installs the PawnIO sensor driver (signed, open source) and lets StarMaster start with admin rights from then on - no more prompts. Also turns on FPS.";
+            if (!Elevate.IsAdmin()) {
+                if (RunningFromInstallDir()) SetSen(Ui.Crit, "Not working - needs a one-time admin setup.", setupTip, true);
+                else SetSen(Ui.Warn, "Needs admin rights for CPU temperature.", "This isn't the installed copy - run it as administrator, or use the installed StarMaster.", false);
                 return;
             }
-            monHwBtn.Visibility = Visibility.Visible; monHwTxt.Foreground = Ui.Crit; monHwTip.Visibility = Visibility.Visible;   // not providing CPU temperature -> red (v86)
-            if (HwInfo.State == HwInfo.Connected) {
-                // shared memory is live but the CPU temp sensor is missing (hidden/disabled in HWiNFO, or an unusual sensor name)
-                monHwTxt.Text = "Connected, but no CPU temperature sensor found.";
-                lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "In HWiNFO, make sure the CPU temperature sensor (Tctl/Tdie) isn't hidden or disabled (right-click a sensor to show it), and you're on a recent version.";
-            } else if (HwInfo.State == HwInfo.NotInstalled) {
-                monHwTxt.Text = "Not set up - optional, adds CPU temperature.";
-                lbl.Text = "Get HWiNFO";
-                monHwTip.Text = "Click Get HWiNFO, install & run it, then tick the yellow items in HWiNFO -> Settings.";
-            } else if (HwInfo.State == HwInfo.NotRunning) {
-                monHwTxt.Text = "HWiNFO is installed but not running.";
-                lbl.Text = "Start HWiNFO";
-                monHwTip.Text = "Click Start HWiNFO. No readings once it's up? Tick the yellow items in HWiNFO -> Settings.";
-            } else if (HwInfo.AccessDenied) {
-                monHwTxt.Text = "HWiNFO is running, but StarMaster can't read its data.";
-                lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "Admin mismatch: run HWiNFO and StarMaster the same way - both normal, or both as administrator.";
-            } else if (!HwInfo.SmEnabled) {
-                // running, shared memory switched off in settings
-                monHwTxt.Text = "HWiNFO is running, but Shared Memory is off.";
-                lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "Turn it on: in HWiNFO -> Settings (gear) -> tick 'Shared Memory Support' -> OK. StarMaster picks it up within a few seconds.";
-            } else {
-                // running, shared memory ticked in the INI but not actually publishing -> HWiNFO Free's 12-hour auto-off
-                monHwTxt.Text = "Shared Memory is enabled but not active.";
-                lbl.Text = "Open HWiNFO";
-                monHwTip.Text = "HWiNFO Free turns Shared Memory off after 12 hours. Fix: in HWiNFO untick and re-tick 'Shared Memory Support', or just restart HWiNFO.";
-            }
+            if (!pawnIoNow) { SetSen(Ui.Crit, "Not working - the PawnIO sensor driver isn't installed.", "Set up installs it (no further prompts - StarMaster already has admin rights).", true); return; }
+            if (SensorState.Failed) { SetSen(Ui.Crit, "Sensor library failed to start.", SensorState.Error, false); return; }
+            if (!SensorState.Ready) { SetSen(Ui.Faint, "Starting sensors...", "", false); return; }
+            if (cpuTempNow >= 0) { SetSen(Ui.Good, "Connected - CPU " + cpuTempNow + " °C", "", false); return; }
+            SetSen(Ui.Crit, "No CPU temperature sensor found.", "LibreHardwareMonitor doesn't recognise this CPU's temperature sensor yet.", false);
+        }
+        // One-time setup: download PawnIO (non-elevated, hash-checked), then ONE UAC prompt for the elevated
+        // helper (StarMaster.exe --elevated-setup), which installs PawnIO silently + registers the admin task.
+        // Then hand over to the elevated instance. Already elevated (e.g. PawnIO was removed) -> do it in-process.
+        void SetupSensors() {
+            if (sensorSetupBusy) return;
+            sensorSetupBusy = true; UpdateSensorUi(); UpdateFpsUi();
+            string exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            bool admin = Elevate.IsAdmin();
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                string pawn = null; int r;
+                if (!Elevate.PawnIoInstalled()) pawn = Elevate.DownloadPawnIo();
+                if (!Elevate.PawnIoInstalled() && pawn == null) r = -2;
+                else r = admin ? Elevate.RunSetup(null, pawn, exe) : Elevate.RunSetupElevated(exe, pawn);
+                if (admin && (r & Elevate.OkPawnIo) != 0) InitCpuSensors();   // reopen now the driver exists
+                Dispatcher.BeginInvoke(new Action(delegate {
+                    sensorSetupBusy = false; pawnIoNow = Elevate.PawnIoInstalled();
+                    if (r == -2) ShowAlert("Setup not completed", "StarMaster " + Elevate.LastError + ". Check your connection and click Set up again.");
+                    else if (r == -1) ShowAlert("Setup not completed", "The Windows prompt was declined. Click Set up and choose Yes to try again.");
+                    else if ((r & Elevate.ErrOtherUser) != 0) ShowAlert("Needs an administrator account", "Windows elevated a different account, so the setup can't apply to yours. Sign in with an administrator account and run the setup there.");
+                    else if ((r & Elevate.ErrPawnIo) != 0) ShowAlert("Setup not completed", "The PawnIO sensor driver didn't install. Try Set up again; if it keeps failing, install PawnIO from pawnio.eu.");
+                    else if ((r & Elevate.ErrTask) != 0) ShowAlert("Setup partly done", "PawnIO is installed, but StarMaster couldn't register its admin start task, so it can't read the sensors without running as administrator. Try Set up again.");
+                    else if (!admin) { HandOverToElevated(); return; }
+                    UpdateSensorUi(); UpdateFpsUi();
+                }));
+            });
+        }
+        // swap this (non-elevated) instance for the elevated one: start the task, then quit. The new instance waits
+        // for our single-instance mutex to be released ("handover" in the hop file).
+        void HandOverToElevated() {
+            string dir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            Elevate.WriteHop(dir, "handover" + (IsVisible ? "" : " --minimized"));
+            if (!Elevate.RunTask()) { ShowAlert("Almost done", "Setup finished. Quit StarMaster from the tray and start it again to switch on CPU temperature and FPS."); return; }
+            exiting = true;
+            if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
+            System.Windows.Application.Current.Shutdown();
         }
         void MonTick(object s, EventArgs e) {
             ApplyOverlay();   // keep the overlay's visibility in sync (active-only foreground tracking + the tray "only while the game runs" rule)
@@ -1648,23 +1508,31 @@ namespace StarMaster {
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); });
             smp.CpuBrand = smp.CpuName; smp.GpuBrand = smp.GpuName;
             if (monNameOvr) { if (!string.IsNullOrEmpty(monCpuName)) smp.CpuName = monCpuName; if (!string.IsNullOrEmpty(monGpuName)) smp.GpuName = monGpuName; smp.CpuNameColor = monCpuNameCol; smp.GpuNameColor = monGpuNameCol; }
-            // CPU temperature still needs HWiNFO - Tctl/Tdie sits behind ring-0 on AMD. Watts no longer do:
-            // SysMon.Read has already filled CpuPowerW from Windows' own RAPL counter, so HWiNFO's copy is
-            // only a fallback for boards that don't publish one.
-            bool sm = HwInfo.ReadSensors();
-            smp.CpuTempC = HwInfo.CpuTempC;
-            int cpuWattsWin = smp.CpuPowerW;   // what Windows gave, before any HWiNFO fallback (for the stats grid source)
-            if (smp.CpuPowerW < 0) smp.CpuPowerW = HwInfo.CpuPowerW;
-            // ~5s cadence, but refresh immediately when shared memory comes live or drops so "did my fix work?" feedback is instant
-            if (++hwTick >= 5 || (sm && HwInfo.State != HwInfo.Connected) || (!sm && HwInfo.State == HwInfo.Connected)) { hwTick = 0; HwInfo.RefreshState(sm); }
+            // CPU temperature (+ package watts) from LibreHardwareMonitor - real values only when elevated with
+            // PawnIO installed; -1 otherwise, which the overlay shows as "--". Watts fall back to Windows' RAPL counter.
+            int t, w; ReadCpuSensors(out t, out w);
+            smp.CpuTempC = t; cpuTempNow = t;
+            if (w >= 0) smp.CpuPowerW = w;
+            if (++senTick >= 5) { senTick = 0; pawnIoNow = Elevate.PawnIoInstalled(); }   // registry read, ~5 s cadence (catches an install/uninstall mid-session)
             if (IsVisible) {
                 UpdateShaderCard();
-                if (hwTick == 0) UpdateHwUi();
+                UpdateSensorUi();
                 UpdateFpsUi();
-                UpdateStats(smp, cpuWattsWin);
+                UpdateStats(smp, w);
             }
             if (overlay) monWin.Update(smp);
         }
+        // kept in its own method so a missing lib\ DLL fails here (caught) rather than when MonTick is compiled
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void ReadCpuSensors(out int t, out int w) { t = -1; w = -1; try { ReadCpuSensorsCore(out t, out w); } catch { } }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void ReadCpuSensorsCore(out int t, out int w) { CpuSensors.Read(out t, out w); }
+        public static void InitCpuSensors() { try { InitCpuSensorsCore(); } catch (Exception ex) { SensorState.Failed = true; SensorState.Error = "lib\\ DLLs missing or broken: " + ex.Message; } }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void InitCpuSensorsCore() { CpuSensors.Init(); }
+        public static void CloseCpuSensors() { try { CloseCpuSensorsCore(); } catch { } }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void CloseCpuSensorsCore() { CpuSensors.Close(); }
 
         Border CardShell(out StackPanel body, out DockPanel head, string icon, string title, string sub) {
             Border card = new Border { CornerRadius = new CornerRadius(15), Background = Ui.Card, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Padding = new Thickness(20, 18, 20, 18), VerticalAlignment = VerticalAlignment.Top };
@@ -1877,7 +1745,7 @@ namespace StarMaster {
             sub.Inlines.Add(new Run("community localization by MrKraken · "));
             Hyperlink link = new Hyperlink(new Run("github.com/MrKraken/StarStrings")) { Foreground = Ui.Accent, TextDecorations = null };
             try { link.NavigateUri = new Uri("https://github.com/MrKraken/StarStrings"); } catch { }
-            link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { try { System.Diagnostics.Process.Start(e.Uri.AbsoluteUri); } catch { } };
+            link.RequestNavigate += delegate (object s, RequestNavigateEventArgs e) { Elevate.OpenUrl(e.Uri.AbsoluteUri); };
             link.Cursor = Cursors.Hand;
             sub.Inlines.Add(link);
             StackPanel ssBadge = StatusBadge(out ssDot, out ssStatus, "not checked", Ui.Dim); ssDot.Background = Ui.Faint;
@@ -2281,7 +2149,7 @@ namespace StarMaster {
             updateNotice.Visibility = Visibility.Visible;
             if (updBtn != null) updBtn.Visibility = Visibility.Collapsed;
         }
-        void OpenPage(Updater.Info info) { try { System.Diagnostics.Process.Start(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); } catch { } }
+        void OpenPage(Updater.Info info) { Elevate.OpenUrl(info != null && info.PageUrl != null ? info.PageUrl : Updater.ReleasesPage); }
         // start-with-Windows is managed in-app (per-user HKCU Run key - the silent installer can't ask)
         const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         static bool StartWithWindowsOn() {
@@ -2295,7 +2163,7 @@ namespace StarMaster {
                 }
             } catch { }
         }
-        static bool RunningFromInstallDir() {
+        internal static bool RunningFromInstallDir() {
             try { string i = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StarMaster"); string e = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location); return string.Equals(Path.GetFullPath(e).TrimEnd('\\'), Path.GetFullPath(i).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } catch { return false; }
     }
 
@@ -2360,7 +2228,7 @@ namespace StarMaster {
                     string ln = line.Trim(); if (ln.Length == 0 || ln.StartsWith("#")) continue;
                     if (line.StartsWith("ovr=")) { LocOverride o = LocOverrides.Decode(line.Substring(4).TrimEnd('\r', '\n')); if (o != null) overrides.Add(o); continue; }   // before the '|' command-row test: a name may contain '|'
                     if (ln.IndexOf('|') >= 0) { string[] f = ln.Split('|'); if (f.Length >= 7) { Cmd c = new Cmd(); c.Label = f[0]; c.Shift = f[1] == "1"; c.Ctrl = f[2] == "1"; c.Alt = f[3] == "1"; c.Key = f[4]; int iv; int.TryParse(f[5], out iv); c.Interval = iv < 1 ? 1 : (iv > 3600 ? 3600 : iv); c.Enabled = f[6] == "1"; commands.Add(c); } }
-                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "fps_relogin") fpsPendingRelogin = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "theme") Ui.ApplyTheme(Ui.FindTheme(v)); else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
+                    else if (ln.IndexOf('=') > 0) { string[] kv = ln.Split(new char[] { '=' }, 2); string k = kv[0].Trim().ToLower(), v = kv[1].Trim(); if (k == "autostart") autostart = v == "1"; else if (k == "focusguard") focusGuard = v == "1"; else if (k == "startminimized") startMinimized = v == "1"; else if (k == "wintitle") winTitleField = v; else if (k == "starstrings_build") ssInstalledBuild = v; else if (k == "starstrings_root") ssRootCfg = v; else if (k == "starstrings_channel") ssChannelCfg = v; else if (k == "lastcheck") { long t; if (long.TryParse(v, out t) && t > 0 && t <= DateTime.MaxValue.Ticks) lastUpdateCheck = new DateTime(t); } else if (k == "mon_overlay") monOverlayOn = v == "1"; else if (k == "mon_lock") monLocked = v == "1"; else if (k == "mon_activeonly") monActiveOnly = v == "1"; else if (k == "mon_ovx") { int x; if (int.TryParse(v, out x)) monOvX = x; } else if (k == "mon_ovy") { int y; if (int.TryParse(v, out y)) monOvY = y; } else if (k == "mon_ovalpha") { int a; if (int.TryParse(v, out a)) monOvAlpha = a; } else if (k == "mon_ovcolor") { if (v.Length > 0) monOvColor = v; } else if (k == "mon_colors") monColors = v == "1"; else if (k == "mon_nameovr") monNameOvr = v == "1"; else if (k == "mon_cpuname") monCpuName = v; else if (k == "mon_gpuname") monGpuName = v; else if (k == "mon_cpunamecol") { if (v.Length > 0) monCpuNameCol = v; } else if (k == "mon_gpunamecol") { if (v.Length > 0) monGpuNameCol = v; } else if (k == "mon_fps") monFpsOn = v == "1"; else if (k == "mon_textalpha") { int t; if (int.TryParse(v, out t)) monTextAlpha = t; } else if (k == "theme") Ui.ApplyTheme(Ui.FindTheme(v)); else if (k == "mon_hotkey_on") monHotkeyOn = v == "1"; else if (k == "mon_hotkey") { if (v.Length > 0) monHotkey = v; } }
                 }
             } catch { }
             // Always-present locked defaults: back-fill any that are missing (incl. for users upgrading from a pre-v4 config that only had Wipe Visor) and mark existing ones locked so they can't be deleted.
@@ -2404,7 +2272,6 @@ namespace StarMaster {
                 sb.AppendLine("mon_cpunamecol=" + monCpuNameCol);
                 sb.AppendLine("mon_gpunamecol=" + monGpuNameCol);
                 sb.AppendLine("mon_fps=" + (monFpsOn ? "1" : "0"));
-                sb.AppendLine("fps_relogin=" + (fpsPendingRelogin ? "1" : "0"));
                 sb.AppendLine("mon_textalpha=" + monTextAlpha);
                 sb.AppendLine("mon_hotkey_on=" + (monHotkeyOn ? "1" : "0"));
                 sb.AppendLine("mon_hotkey=" + monHotkey);
@@ -2608,12 +2475,37 @@ namespace StarMaster {
             // alone would be WORSE than before: no bitmap-stretching, but WPF would still lay out at the
             // stale start-up system DPI, i.e. a half-size window instead of a blurry one.
             try { AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false); } catch { }
-            foreach (string a in args) if (string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)) MinimizedArg = true;
+            HookLibResolve();
+            string exe = System.Reflection.Assembly.GetExecutingAssembly().Location, exeDir = Path.GetDirectoryName(exe);
+            // the elevated half of the one-time sensor setup (v93): no UI, no single-instance mutex - just do it and exit
+            if (args.Length >= 2 && args[0] == Elevate.SetupArg) { Environment.ExitCode = Elevate.RunSetup(args[1], args.Length >= 3 ? args[2] : null, exe); return; }
+            bool viaTask = false, handover = false;
+            foreach (string a in args) {
+                if (string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)) MinimizedArg = true;
+                else if (a == Elevate.ViaTaskArg) viaTask = true;
+            }
+            if (viaTask) {   // started by the admin task: our real arguments came via the hop file
+                foreach (string a in Elevate.ReadHop(exeDir).Split(' ')) {
+                    if (string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase)) MinimizedArg = true;
+                    else if (a == "handover") handover = true;
+                }
+            } else if (!Elevate.IsAdmin() && MainWindow.RunningFromInstallDir()) {
+                // The hop (v93): once the setup has registered the admin task, every normal launch of the installed
+                // copy (Start menu, Start-with-Windows, the updater's relaunch) just runs the task - which starts
+                // StarMaster elevated with no UAC prompt - and exits. No task yet -> carry on unelevated.
+                Elevate.WriteHop(exeDir, MinimizedArg ? "--minimized" : "");
+                if (Elevate.RunTask()) return;
+                Elevate.ReadHop(exeDir);   // (clears the file)
+            }
             // sweep installers left in %TEMP% by earlier auto-updates (the one that just ran us may
             // still be executing - its delete fails quietly and succeeds on the launch after)
             try { foreach (string f in Directory.GetFiles(Path.GetTempPath(), "StarMaster-Setup-*.exe")) { try { File.Delete(f); } catch { } } } catch { }
             bool createdNew;
             mtx = new System.Threading.Mutex(true, MutexName, out createdNew);
+            // handing over from the unelevated copy that ran the setup: it quits right after starting us, so wait for it
+            if (!createdNew && handover) {
+                try { createdNew = mtx.WaitOne(15000); } catch (System.Threading.AbandonedMutexException) { createdNew = true; }
+            }
             if (!createdNew) {                                  // already running
                 // A --minimized launch means "start in the background" - it must never pull the live instance
                 // to the foreground. On boot the Start-with-Windows Run key can fire alongside a Windows
@@ -2627,7 +2519,20 @@ namespace StarMaster {
             // calls Shutdown() and used to leave its capture process running. Found one still alive 2 hours
             // and two updates later, surviving every later KillProc; new ones won't accumulate.
             try { FpsMon.Stop(); } catch { }
+            MainWindow.CloseCpuSensors();
             GC.KeepAlive(mtx);
+        }
+        // LibreHardwareMonitorLib + its System.* dependencies live in <exe dir>\lib (v93). Their versions don't
+        // match what LHM was built against exactly and we have no app.config for binding redirects, so resolve by
+        // simple name from that folder. Hooked before anything can touch an LHM type.
+        static void HookLibResolve() {
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lib");
+            AppDomain.CurrentDomain.AssemblyResolve += delegate (object s, ResolveEventArgs e) {
+                try {
+                    string p = Path.Combine(dir, new System.Reflection.AssemblyName(e.Name).Name + ".dll");
+                    return File.Exists(p) ? System.Reflection.Assembly.LoadFrom(p) : null;
+                } catch { return null; }
+            };
         }
     }
 }

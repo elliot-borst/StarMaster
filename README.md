@@ -6,6 +6,7 @@ A personal **Star Citizen helper app** for Windows — dependency-free (needs on
 - **Keep-Alive** — anti-idle: sends a harmless, configurable keystroke (default *Wipe Visor* = **Left Alt + X**) on a timer, **only while Star Citizen is the active window**, so you don't get idle-logged-out.
 - **Backup / Restore** — copies the config a patch or channel-switch wipes (`user\` settings + key bindings, the StarStrings `data\Localization`, and `user.cfg`) between channels (LIVE / HOTFIX) or from a saved snapshot. Overwrites only (never deletes), touches only those 3 paths, asks first, and warns if Star Citizen has files locked.
 - **StarStrings** — keeps [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) community localization mod current: shows your installed build vs. the latest available, and installs/updates it in one click (downloads the release and copies it into your Star Citizen folder, safely merging `user.cfg`). **Name overrides** let you layer your own renames on top (e.g. shorter ship names that don't wrap in the ASOP fleet manager): *+ Add override* → pick a group (Ships) → search the full list → rename. Each override shows its original name, and they're re-applied automatically after every StarStrings update.
+- **System Monitor** — an over-the-game overlay (a topmost window, no game injection) with FPS, CPU / GPU load, temperatures, RAM / VRAM and watts. Everything is built in: CPU temperature comes from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) and FPS from [Intel PresentMon](https://github.com/GameTechDev/PresentMon) — no HWiNFO or other tools to install. Both need admin rights, so the card offers a **one-time setup** (one Windows prompt) that installs the signed [PawnIO](https://pawnio.eu) sensor driver and lets StarMaster start with admin rights from then on without asking again.
 - **Shader Cache + VFX tweaks** — one-click shader-cache clear (fixes graphical glitches; the game rebuilds it on next launch), plus the VFX texture-streaming `user.cfg` settings (`r_texturesStreamingVFXDesiredMips`, `e_ParticleTexturePreLoading`) set per channel from the app — existing `user.cfg` lines are updated in place and everything else is kept.
 
 ## Download & install
@@ -20,14 +21,16 @@ Grab **`StarMaster-Setup.exe`** from the **[Releases page](https://github.com/el
 ## Build from source
 Only needs the C# compiler that ships with Windows — no Node / NuGet / internet:
 ```
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /reference:System.Core.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll StarMaster.cs BackupForm.cs WholeVersion.cs CVars.cs
+& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /win32icon:StarMaster.ico /win32manifest:app.manifest /out:StarMaster.exe /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationFramework.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\PresentationCore.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" /reference:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" /reference:System.Core.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:lib\LibreHardwareMonitorLib.dll StarMaster.cs BackupForm.cs WholeVersion.cs CVars.cs LocOverrides.cs Elevate.cs Sensors.cs
 ```
+`lib\` holds the vendored LibreHardwareMonitorLib + its four System.* dependencies (the app loads them from `lib\` next to the exe). `.\build-installer.ps1` does the compile, tests and installer in one go.
 The installer is built by compiling `installer.iss` with [Inno Setup](https://jrsoftware.org/isdl.php). See `CLAUDE.md` for full details.
 
 ## Files
 | File | Purpose |
 |------|---------|
-| `StarMaster.cs`, `BackupForm.cs`, `WholeVersion.cs`, `CVars.cs` | App source (code-only WPF) |
+| `StarMaster.cs`, `BackupForm.cs`, `WholeVersion.cs`, `CVars.cs`, `LocOverrides.cs`, `Elevate.cs`, `Sensors.cs` | App source (code-only WPF) |
+| `lib\` | Vendored LibreHardwareMonitorLib 0.9.6 + dependencies (see `lib\THIRD-PARTY.txt`) |
 | `app.manifest` | DPI-awareness manifest (embedded at build for crisp high-DPI rendering) |
 | `StarMaster.ps1`, `StarMaster-Startup.vbs` | Older PowerShell version + hidden launcher |
 | `Make-Icon.ps1` | Regenerates `StarMaster.ico` (GDI+, offline) |
@@ -40,4 +43,4 @@ Runtime config (`config.txt`) stays out of git. Backups are saved to `Documents\
 ## License
 [MIT](LICENSE) © Elliot Borst.
 
-StarMaster bundles no third-party code. Two optional integrations are downloaded at runtime, on request, and remain the property of their authors under their own licences: [Intel PresentMon](https://github.com/GameTechDev/PresentMon) (frame rate) and [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) (localization). [HWiNFO](https://www.hwinfo.com/) is never installed by StarMaster — the app only reads its shared memory if you have chosen to run it.
+StarMaster ships [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0, unmodified) and its MIT-licensed System.* dependencies in `lib\` — see [`lib\THIRD-PARTY.txt`](lib/THIRD-PARTY.txt). Other integrations are downloaded at runtime, on request, and remain the property of their authors under their own licences: [Intel PresentMon](https://github.com/GameTechDev/PresentMon) (frame rate) and [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) (localization), plus the [PawnIO](https://pawnio.eu) sensor driver (GPL-2.0), which only the one-time sensor setup installs.

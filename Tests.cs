@@ -125,6 +125,32 @@ namespace StarMaster {
             LocOverride legacy = LocOverrides.Decode("Ships\tk\tOrig\tNew");
             Check(legacy != null && legacy.Applied == "New", "ovr: v77 4-field config line -> Applied = Name");
 
+            // v93: the admin start task + the hop file
+            string tx = Elevate.TaskXml("S-1-5-21-1-2-3-1001", @"C:\Users\A&B 'x'\AppData\Local\StarMaster\StarMaster.exe");
+            System.Xml.XmlDocument xd = new System.Xml.XmlDocument(); bool parsed = true;
+            try { xd.LoadXml(tx.Substring(tx.IndexOf("<Task"))); } catch { parsed = false; }
+            Check(parsed, "task: XML is well-formed even with & and quotes in the path");
+            System.Xml.XmlNamespaceManager ns = new System.Xml.XmlNamespaceManager(xd.NameTable); ns.AddNamespace("t", "http://schemas.microsoft.com/windows/2004/02/mit/task");
+            Func<string, string> X = delegate (string p) { System.Xml.XmlNode n = parsed ? xd.SelectSingleNode(p, ns) : null; return n == null ? null : n.InnerText; };
+            Check(X("//t:Exec/t:Command") == "\"C:\\Users\\A&B 'x'\\AppData\\Local\\StarMaster\\StarMaster.exe\"", "task: command is the quoted exe path");
+            Check(X("//t:Exec/t:Arguments") == Elevate.ViaTaskArg, "task: started with --via-task");
+            Check(X("//t:Exec/t:WorkingDirectory") == @"C:\Users\A&B 'x'\AppData\Local\StarMaster", "task: working dir = exe dir");
+            Check(X("//t:Principal/t:RunLevel") == "HighestAvailable" && X("//t:Principal/t:UserId") == "S-1-5-21-1-2-3-1001", "task: highest privileges, for this user");
+            Check(X("//t:Settings/t:ExecutionTimeLimit") == "PT0S", "task: never killed after 72 h");
+            Check(X("//t:Settings/t:Priority") == "4", "task: normal priority (scheduler default 7 is below normal)");
+            Check(X("//t:Settings/t:MultipleInstancesPolicy") == "Parallel", "task: a relaunch isn't swallowed while we run");
+            Check(parsed && xd.SelectSingleNode("//t:Triggers", ns) == null, "task: no trigger (on demand only)");
+            long now = DateTime.UtcNow.Ticks;
+            Check(Elevate.ParseHopAge(now - TimeSpan.FromSeconds(5).Ticks, now), "hop: fresh file trusted");
+            Check(!Elevate.ParseHopAge(now - TimeSpan.FromMinutes(5).Ticks, now), "hop: stale file ignored");
+            Check(!Elevate.ParseHopAge(now + TimeSpan.FromSeconds(5).Ticks, now), "hop: future timestamp ignored");
+            string hd = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sm-hoptest-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(hd);
+            Elevate.WriteHop(hd, "handover --minimized");
+            Check(Elevate.ReadHop(hd) == "handover --minimized", "hop: round-trips the arguments");
+            Check(Elevate.ReadHop(hd) == "", "hop: read once (file deleted)");
+            try { System.IO.Directory.Delete(hd, true); } catch { }
+
             Console.WriteLine(failed == 0 ? "OK  " + passed + " tests passed" : "" + failed + " FAILED, " + passed + " passed");
             return failed == 0 ? 0 : 1;
         }

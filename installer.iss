@@ -45,6 +45,9 @@ RestartApplications=no
 
 [Files]
 Source: "StarMaster.exe"; DestDir: "{app}"; Flags: ignoreversion
+; LibreHardwareMonitorLib (CPU temperature, v93) + its System.* dependencies; the app loads them from {app}\lib
+Source: "lib\*.dll"; DestDir: "{app}\lib"; Flags: ignoreversion
+Source: "lib\THIRD-PARTY.txt"; DestDir: "{app}\lib"; Flags: ignoreversion
 ; config.txt is intentionally NOT bundled - the app creates it on first run,
 ; so your settings survive a reinstall/upgrade.
 

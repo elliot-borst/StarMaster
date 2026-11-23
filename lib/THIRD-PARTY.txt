@@ -1,0 +1,19 @@
+Third-party components shipped with StarMaster (loaded from this lib\ folder)
+==========================================================================
+
+LibreHardwareMonitorLib.dll 0.9.6 (net472, win-x64)
+  CPU temperature and package power. Mozilla Public License 2.0.
+  Unmodified. Source: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+  Licence text: https://www.mozilla.org/en-US/MPL/2.0/
+  NuGet package: https://www.nuget.org/packages/LibreHardwareMonitorLib/0.9.6
+
+System.Memory.dll 4.6.3, System.Buffers.dll 4.6.1, System.Numerics.Vectors.dll 4.6.1,
+System.Runtime.CompilerServices.Unsafe.dll 6.1.2
+  LibreHardwareMonitorLib's .NET Framework dependencies. MIT, (c) .NET Foundation and Contributors.
+  Source: https://github.com/dotnet/maintenance-packages
+
+Not shipped, downloaded on demand (from the official releases, checksum-pinned):
+  PawnIO 2.2.0 (namazso) - the signed kernel driver LibreHardwareMonitor reads the CPU through.
+    GPL-2.0 with an IOCTL-interface exception. https://pawnio.eu  https://github.com/namazso/PawnIO
+    Installed once by StarMaster's one-time sensor setup (PawnIO_setup.exe -install -silent).
+  PresentMon 2.4.1 (Intel) - the FPS capture. MIT. https://github.com/GameTechDev/PresentMon

@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("93.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("93.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("94.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("94.0.0.0")]
 
 namespace StarMaster {
 
@@ -614,7 +614,7 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "93";
+        public const string Version = "94";
         public const string VersionDate = "2026-11-23";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
@@ -645,9 +645,9 @@ namespace StarMaster {
         bool monNameOvr = false; string monCpuName = "", monGpuName = "";   // optional custom CPU/GPU display names
         string monCpuNameCol = "e6ecfb", monGpuNameCol = "e6ecfb";   // override name colours (default white)
         TextBox monCpuNameBox, monGpuNameBox;
-        bool monFpsOn = true; TextBlock monFpsTxt, monFpsTip; Border monFpsBtn;
-        // CPU sensors box (v93: LibreHardwareMonitor, replaced HWiNFO) - status line + one-time admin setup button + tip
-        TextBlock monSenTxt, monSenTip; Border monSenBtn; bool sensorSetupBusy; int cpuTempNow = -1; int senTick = 99; bool pawnIoNow;
+        bool monFpsOn = true;
+        // CPU sensors (v93: LibreHardwareMonitor, replaced HWiNFO); since v94 their status lives in the stat tiles
+        bool sensorSetupBusy; int cpuTempNow = -1; int senTick = 99; bool pawnIoNow;
         // overlay show/hide global hotkey (RegisterHotKey - works while SC has focus; no injection, EAC-safe)
         bool monHotkeyOn = true; string monHotkey = "Right";
         Dropdown monHotkeyDrop; Action<bool> setOverlayToggleVisual;   // setter keeps the "Show Overlay" switch in sync when the hotkey flips it
@@ -1216,36 +1216,13 @@ namespace StarMaster {
             }
             body.Children.Add(coR);
 
-            body.Children.Add(StatGrid());
-            // CPU sensors (v93): LibreHardwareMonitor, built in - replaced the HWiNFO box. Status line + the one-time
-            // admin setup button (installs PawnIO + the admin start task; one UAC prompt, covers FPS too) + tip.
-            Border senBox = new Border { Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
-            StackPanel senIn = new StackPanel();
-            senIn.Children.Add(SourceHeader("CPU sensors · built in", new string[] { "CPU temperature" }, out senChips));
-            DockPanel senTop = new DockPanel { LastChildFill = false };
-            monSenBtn = Btn("Set up (one time)", Ui.Card2, Ui.Text, false, delegate { SetupSensors(); }); monSenBtn.Padding = new Thickness(12, 6, 12, 6); monSenBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monSenBtn, Dock.Right); senTop.Children.Add(monSenBtn);
-            monSenTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monSenTxt, Dock.Left); senTop.Children.Add(monSenTxt);
-            senIn.Children.Add(senTop);
-            monSenTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
-            senIn.Children.Add(monSenTip);
-            senBox.Child = senIn; body.Children.Add(senBox);
-            // PresentMon status (the FPS source). Same behaviour as the sensors box: state line + contextual action button + tip.
-            Border fpsBox = new Border { Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(10), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1) };
-            StackPanel fpsIn = new StackPanel();
-            fpsIn.Children.Add(SourceHeader("PresentMon · built in", new string[] { "FPS" }, out fpsChips));   // required for the FPS stat
-            DockPanel fpsTop = new DockPanel { LastChildFill = false };
-            monFpsBtn = Btn("Set up (one time)", Ui.Card2, Ui.Text, false, delegate { SetupSensors(); }); monFpsBtn.Padding = new Thickness(12, 6, 12, 6); monFpsBtn.Visibility = Visibility.Collapsed; DockPanel.SetDock(monFpsBtn, Dock.Right); fpsTop.Children.Add(monFpsBtn);
-            monFpsTxt = new TextBlock { Text = "Checking...", Foreground = Ui.Text, FontSize = 10.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(monFpsTxt, Dock.Left); fpsTop.Children.Add(monFpsTxt);
-            fpsIn.Children.Add(fpsTop);
-            monFpsTip = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
-            fpsIn.Children.Add(monFpsTip);
-            fpsBox.Child = fpsIn; body.Children.Add(fpsBox);
+            body.Children.Add(StatGrid());   // v94: the CPU sensors / PresentMon boxes are gone - their status is in these tiles
             return card;
         }
         // ---- v87: overlay stats grid - every stat the overlay shows, in overlay order, with its live value,
         // where it comes from, and a status colour (green = reading now, red = no reading, faint = turned off).
         // Status is decided from the live sample each tick, so "green" means it really is working.
-        public class StatTile { public Border Root; public TextBlock Val, Src; public Border Dot; }
+        public class StatTile { public Border Root; public TextBlock Val, Src; public Border Dot; public bool Setup; }
         static readonly string[] StatNames = { "FPS", "CPU %", "GPU %", "CPU temp", "GPU temp", "RAM", "VRAM", "CPU watts", "GPU watts" };
         FrameworkElement StatGrid() {
             StackPanel s = new StackPanel();
@@ -1265,10 +1242,14 @@ namespace StarMaster {
                 StackPanel src = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 0, 0) };
                 st.Dot = new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = Ui.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
                 src.Children.Add(st.Dot);
-                st.Src = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center };
+                st.Src = new TextBlock { Text = "", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
                 src.Children.Add(st.Src);
                 inner.Children.Add(src);
                 st.Root = new Border { Margin = new Thickness(3), Padding = new Thickness(10, 6, 10, 6), CornerRadius = new CornerRadius(9), Background = Ui.Inset, BorderBrush = Ui.Line, BorderThickness = new Thickness(1), Child = inner };
+                ToolTipService.SetShowDuration(st.Root, 30000);
+                // a tile whose source needs the one-time admin setup runs it on click (replaces the old boxes' Set up buttons)
+                StatTile cap = st;
+                st.Root.MouseLeftButtonUp += delegate { if (cap.Setup) SetupSensors(); };
                 Grid.SetRow(st.Root, i / 3); Grid.SetColumn(st.Root, i % 3); g.Children.Add(st.Root);
                 statTiles[i] = st;
             }
@@ -1276,29 +1257,64 @@ namespace StarMaster {
             return s;
         }
         // value + source + state: state 1 = working (green), 0 = no reading (red), -1 = turned off (faint), 2 = pending (yellow)
-        void SetStat(int i, string val, string src, int state) {
+        // sub = the subtitle (source name when healthy, the short reason otherwise); tip = the full explanation;
+        // setup = clicking the tile runs the one-time admin setup
+        void SetStat(int i, string val, string sub, int state) { SetStat(i, val, sub, state, null, false); }
+        void SetStat(int i, string val, string sub, int state, string tip, bool setup) {
             if (statTiles == null) return;
             StatTile st = statTiles[i];
             Brush c = state == 1 ? Ui.Good : state == 2 ? Ui.Warn : state == 0 ? Ui.Crit : Ui.Faint;
             st.Val.Text = val; st.Val.Foreground = state == 1 ? Ui.Text : c;
-            st.Src.Text = src; st.Src.Foreground = state == 1 ? Ui.Dim : c;
+            st.Src.Text = sub; st.Src.Foreground = state == 1 ? Ui.Dim : c;
             st.Dot.Background = c;
             st.Root.BorderBrush = state == 1 ? Ui.Line : c;
-            st.Root.ToolTip = state == 0 ? StatNames[i] + " isn't reading - see " + (src == SenSrc ? "CPU sensors below." : src == "PresentMon" ? "PresentMon below." : src + ".") : null;
+            if (tip == null && state == 0) tip = StatNames[i] + " isn't reading (" + sub + ").";
+            st.Root.ToolTip = string.IsNullOrEmpty(tip) ? null : tip + (setup ? "\n\nClick to set up." : "");
+            st.Setup = setup;
+            st.Root.Cursor = setup ? Cursors.Hand : null;
         }
         const string SenSrc = "LibreHardwareMonitor";
-        void UpdateStats(SysMon.Sample smp, int cpuWattsLhm) {
-            // FPS: PresentMon - mirror its box (off / setup / ready / connected)
-            if (!monFpsOn) SetStat(0, "off", "PresentMon", -1);
-            else {
-                Brush fb = monFpsTxt != null ? monFpsTxt.Foreground : Ui.Faint;
-                int st = fb == Ui.Good ? 1 : fb == Ui.Warn ? 2 : fb == Ui.Crit ? 0 : -1;
-                SetStat(0, FpsMon.GotFrames && FpsMon.Fps > 0 ? FpsMon.Fps.ToString() : "--", "PresentMon", st);
+        // ---- source status (v94: was the CPU sensors / PresentMon boxes) -> state, subtitle, tooltip, click-to-set-up
+        const string SetupTip = "One Windows prompt: installs the PawnIO sensor driver (signed, open source) and lets StarMaster start with admin rights from then on - no more prompts. Covers CPU temperature, CPU watts and FPS.";
+        void SensorStatus(out int state, out string sub, out string tip, out bool setup) {
+            setup = false; tip = null;
+            if (sensorSetupBusy) { state = 2; sub = "setting up..."; tip = "Approve the Windows prompt to finish the setup."; return; }
+            if (!Elevate.IsAdmin()) {
+                state = 0;
+                if (RunningFromInstallDir()) { sub = "needs setup - click"; tip = "Needs a one-time admin setup to read the CPU's sensors.\n" + SetupTip; setup = true; }
+                else { sub = "needs admin rights"; tip = "Reading the CPU's sensors needs admin rights. This isn't the installed copy - run it as administrator, or use the installed StarMaster."; }
+                return;
             }
+            if (!pawnIoNow) { state = 0; sub = "PawnIO missing - click"; tip = "The PawnIO sensor driver isn't installed. Setting up installs it (no further prompts - StarMaster already has admin rights)."; setup = true; return; }
+            if (SensorState.Failed) { state = 0; sub = "library failed"; tip = "The sensor library failed to start: " + SensorState.Error; return; }
+            if (!SensorState.Ready) { state = 2; sub = "starting..."; tip = "Starting the sensors..."; return; }
+            state = 1; sub = SenSrc;
+        }
+        void FpsStatus(out int state, out string sub, out string tip, out bool setup) {
+            setup = false; tip = null; sub = "PresentMon";
+            if (!monFpsOn) { state = -1; tip = "Off - turn on Show FPS above."; return; }
+            if (!FpsMon.Access()) {   // not elevated (and not in Performance Log Users) -> the ETW capture can't start
+                state = sensorSetupBusy ? 2 : 0;
+                if (sensorSetupBusy) { sub = "setting up..."; tip = "Approve the Windows prompt to finish the setup."; }
+                else if (RunningFromInstallDir()) { sub = "needs setup - click"; tip = "FPS capture needs the one-time admin setup.\n" + SetupTip; setup = true; }
+                else { sub = "needs admin rights"; tip = "FPS capture needs admin rights. This isn't the installed copy - run it as administrator, or use the installed StarMaster."; }
+                return;
+            }
+            if (FpsMon.Status.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0) { state = 0; sub = "failed to start"; tip = FpsMon.Status; return; }   // download / start error
+            if (FpsMon.GotFrames) { string tn = FpsMon.TargetName; state = 1; tip = string.IsNullOrEmpty(tn) || tn == "<unknown>" ? null : "FPS of " + tn; return; }
+            if (!ScRunning()) { state = 1; tip = "Ready - shows the FPS of the game in front."; return; }
+            state = 2; sub = "waiting for frames"; tip = "Game running - waiting for frames. Stuck? Close RTSS / Afterburner, then toggle Show FPS.";
+        }
+        void UpdateStats(SysMon.Sample smp, int cpuWattsLhm) {
+            int fs; string fsub, ftip; bool fset; FpsStatus(out fs, out fsub, out ftip, out fset);
+            SetStat(0, !monFpsOn ? "off" : FpsMon.GotFrames && FpsMon.Fps > 0 ? FpsMon.Fps.ToString() : "--", fsub, fs, ftip, fset);
+            int ss; string ssub, stip; bool sset; SensorStatus(out ss, out ssub, out stip, out sset);
             bool cpuOk = smp.CpuTotal >= 0;
             SetStat(1, cpuOk ? (int)(smp.CpuTotal + 0.5) + "%" : "--", "Windows", cpuOk ? 1 : 0);
             SetStat(2, smp.GpuOk ? smp.GpuPct + "%" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
-            SetStat(3, smp.CpuTempC >= 0 ? smp.CpuTempC + "°C" : "--", SenSrc, smp.CpuTempC >= 0 ? 1 : 0);
+            if (smp.CpuTempC >= 0) SetStat(3, smp.CpuTempC + "°C", SenSrc, 1);
+            else if (ss == 1) SetStat(3, "--", "no sensor found", 0, "LibreHardwareMonitor doesn't recognise this CPU's temperature sensor yet.", false);
+            else SetStat(3, "--", ssub, ss, stip, sset);
             bool gt = smp.GpuOk && smp.GpuTempC > 0;
             SetStat(4, gt ? smp.GpuTempC + "°C" : "n/a", "NVIDIA driver", gt ? 1 : 0);
             bool ram = smp.RamTotalGB > 0;
@@ -1306,7 +1322,9 @@ namespace StarMaster {
             SetStat(6, smp.GpuOk ? smp.VramUsedGB.ToString("0.0") + "/" + smp.VramTotalGB.ToString("0") + "GB" : "n/a", "NVIDIA driver", smp.GpuOk ? 1 : 0);
             // CPU watts: LibreHardwareMonitor's Package sensor when it reads (elevated), else Windows' RAPL counter
             if (cpuWattsLhm >= 0) SetStat(7, cpuWattsLhm + "W", SenSrc, 1);
-            else SetStat(7, smp.CpuPowerW >= 0 ? smp.CpuPowerW + "W" : "--", "Windows", smp.CpuPowerW >= 0 ? 1 : 0);
+            else if (smp.CpuPowerW >= 0) SetStat(7, smp.CpuPowerW + "W", "Windows", 1, "From Windows' Energy Meter counter (LibreHardwareMonitor isn't reading: " + (ss == 1 ? "no package sensor" : ssub) + ").", false);
+            else if (ss == 1) SetStat(7, "--", "no sensor found", 0, "Neither LibreHardwareMonitor nor Windows reports this CPU's package power.", false);
+            else SetStat(7, "--", ssub, ss, stip, sset);
             bool gw = smp.GpuOk && smp.GpuPowerW >= 0;
             SetStat(8, gw ? smp.GpuPowerW + "W" : "n/a", "NVIDIA driver", gw ? 1 : 0);
         }
@@ -1392,78 +1410,16 @@ namespace StarMaster {
         // turn FPS on/off (PresentMon, off the UI thread - download + UAC can block)
         void ToggleFps(bool on) {
             monFpsOn = on;
-            if (on) { if (monFpsTxt != null) monFpsTxt.Text = "starting..."; System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); }); }
+            if (on) { System.Threading.ThreadPool.QueueUserWorkItem(delegate { FpsMon.Start(); }); }
             else { FpsMon.Stop(); }
-            UpdateFpsUi();
-        }
-        // v86: every exit path of the status logic ends here so the "provides" chips always match the status colour
-        void UpdateFpsUi() { UpdateFpsUiCore(); if (monFpsTxt != null) SetChips(fpsChips, monFpsTxt.Foreground); }
-        void UpdateFpsUiCore() {
-            if (monFpsTxt == null) return;
-            SetFpsTip("");
-            if (!monFpsOn) { monFpsBtn.Visibility = Visibility.Collapsed; monFpsTxt.Foreground = Ui.Faint; monFpsTxt.Text = "Off - turn on Show FPS above."; return; }
-            if (!FpsMon.Access()) {   // not elevated (and not in Performance Log Users) -> the ETW capture can't start
-                bool canSetup = RunningFromInstallDir() && !sensorSetupBusy;
-                monFpsBtn.Visibility = canSetup ? Visibility.Visible : Visibility.Collapsed;
-                monFpsTxt.Foreground = sensorSetupBusy ? Ui.Warn : Ui.Crit;
-                monFpsTxt.Text = sensorSetupBusy ? "Setting up..." : "Not working - needs the one-time admin setup.";
-                SetFpsTip(canSetup ? "Same setup as CPU sensors above - one Windows prompt covers both." : sensorSetupBusy ? "" : "Run the installed StarMaster (or this copy as administrator) for FPS.");
-                return;
-            }
-            monFpsBtn.Visibility = Visibility.Collapsed;
-            if (FpsMon.Status.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0) {   // download / start error
-                monFpsTxt.Foreground = Ui.Crit; monFpsTxt.Text = FpsMon.Status; return;
-            }
-            if (FpsMon.GotFrames) { string tn = FpsMon.TargetName; monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Connected - " + FpsMon.Fps + " FPS" + (string.IsNullOrEmpty(tn) || tn == "<unknown>" ? "" : " (" + tn + ")"); return; }
-            bool scRunning = ScRunning();
-            if (!scRunning) { monFpsTxt.Foreground = Ui.Good; monFpsTxt.Text = "Ready - shows the FPS of the game in front."; }
-            else { monFpsTxt.Foreground = Ui.Warn; monFpsTxt.Text = "Game running - waiting for frames..."; SetFpsTip("Stuck? Close RTSS / Afterburner, then toggle Show FPS."); }
-        }
-        void SetFpsTip(string t) { if (monFpsTip == null) return; monFpsTip.Text = t; monFpsTip.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed; }
-        // v86: source box header - name + a chip per statistic this source provides, coloured like its status
-        // (green working/ready, yellow pending, red not working, faint off) so a blank overlay value is traceable
-        Border[] senChips, fpsChips;
-        StackPanel SourceHeader(string name, string[] provides, out Border[] chips) {
-            StackPanel h = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
-            h.Children.Add(new TextBlock { Text = name, Foreground = Ui.Text, FontSize = 10.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            h.Children.Add(new TextBlock { Text = "needed for", Foreground = Ui.Faint, FontSize = 9.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 6, 0) });
-            chips = new Border[provides.Length];
-            for (int i = 0; i < provides.Length; i++) {
-                chips[i] = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = Ui.Faint, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = provides[i], Foreground = Ui.Faint, FontSize = 9.5, FontWeight = FontWeights.SemiBold } };
-                h.Children.Add(chips[i]);
-            }
-            return h;
-        }
-        void SetChips(Border[] chips, Brush c) { if (chips == null) return; foreach (Border b in chips) { b.BorderBrush = c; ((TextBlock)b.Child).Foreground = c; } }
-
-        // ---- CPU sensors box (v93) ----
-        void UpdateSensorUi() { UpdateSensorUiCore(); if (monSenTxt != null) SetChips(senChips, monSenTxt.Foreground); }
-        void SetSen(Brush c, string text, string tip, bool button) {
-            monSenTxt.Foreground = c; monSenTxt.Text = text;
-            monSenTip.Text = tip; monSenTip.Visibility = tip.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            monSenBtn.Visibility = button ? Visibility.Visible : Visibility.Collapsed;
-        }
-        void UpdateSensorUiCore() {
-            if (monSenTxt == null) return;
-            if (sensorSetupBusy) { SetSen(Ui.Warn, "Setting up - approve the Windows prompt...", "", false); return; }
-            const string setupTip = "One Windows prompt: installs the PawnIO sensor driver (signed, open source) and lets StarMaster start with admin rights from then on - no more prompts. Also turns on FPS.";
-            if (!Elevate.IsAdmin()) {
-                if (RunningFromInstallDir()) SetSen(Ui.Crit, "Not working - needs a one-time admin setup.", setupTip, true);
-                else SetSen(Ui.Warn, "Needs admin rights for CPU temperature.", "This isn't the installed copy - run it as administrator, or use the installed StarMaster.", false);
-                return;
-            }
-            if (!pawnIoNow) { SetSen(Ui.Crit, "Not working - the PawnIO sensor driver isn't installed.", "Set up installs it (no further prompts - StarMaster already has admin rights).", true); return; }
-            if (SensorState.Failed) { SetSen(Ui.Crit, "Sensor library failed to start.", SensorState.Error, false); return; }
-            if (!SensorState.Ready) { SetSen(Ui.Faint, "Starting sensors...", "", false); return; }
-            if (cpuTempNow >= 0) { SetSen(Ui.Good, "Connected - CPU " + cpuTempNow + " °C", "", false); return; }
-            SetSen(Ui.Crit, "No CPU temperature sensor found.", "LibreHardwareMonitor doesn't recognise this CPU's temperature sensor yet.", false);
+            RefreshStats();
         }
         // One-time setup: download PawnIO (non-elevated, hash-checked), then ONE UAC prompt for the elevated
         // helper (StarMaster.exe --elevated-setup), which installs PawnIO silently + registers the admin task.
         // Then hand over to the elevated instance. Already elevated (e.g. PawnIO was removed) -> do it in-process.
         void SetupSensors() {
             if (sensorSetupBusy) return;
-            sensorSetupBusy = true; UpdateSensorUi(); UpdateFpsUi();
+            sensorSetupBusy = true; RefreshStats();
             string exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
             bool admin = Elevate.IsAdmin();
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
@@ -1480,7 +1436,7 @@ namespace StarMaster {
                     else if ((r & Elevate.ErrPawnIo) != 0) ShowAlert("Setup not completed", "The PawnIO sensor driver didn't install. Try Set up again; if it keeps failing, install PawnIO from pawnio.eu.");
                     else if ((r & Elevate.ErrTask) != 0) ShowAlert("Setup partly done", "PawnIO is installed, but StarMaster couldn't register its admin start task, so it can't read the sensors without running as administrator. Try Set up again.");
                     else if (!admin) { HandOverToElevated(); return; }
-                    UpdateSensorUi(); UpdateFpsUi();
+                    RefreshStats();
                 }));
             });
         }
@@ -1494,6 +1450,9 @@ namespace StarMaster {
             if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
             System.Windows.Application.Current.Shutdown();
         }
+        // re-run the tiles from the last sample right away (a status change between 1 s ticks)
+        SysMon.Sample lastSmp; int lastLhmW = -1;
+        void RefreshStats() { if (lastSmp != null) UpdateStats(lastSmp, lastLhmW); }
         void MonTick(object s, EventArgs e) {
             ApplyOverlay();   // keep the overlay's visibility in sync (active-only foreground tracking + the tray "only while the game runs" rule)
             bool overlay = monWin != null && monOverlayOn && monWin.Visibility == Visibility.Visible;
@@ -1516,8 +1475,7 @@ namespace StarMaster {
             if (++senTick >= 5) { senTick = 0; pawnIoNow = Elevate.PawnIoInstalled(); }   // registry read, ~5 s cadence (catches an install/uninstall mid-session)
             if (IsVisible) {
                 UpdateShaderCard();
-                UpdateSensorUi();
-                UpdateFpsUi();
+                lastSmp = smp; lastLhmW = w;
                 UpdateStats(smp, w);
             }
             if (overlay) monWin.Update(smp);

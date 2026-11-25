@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("94.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("94.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("95.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("95.0.0.0")]
 
 namespace StarMaster {
 
@@ -614,8 +614,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "94";
-        public const string VersionDate = "2026-11-23";   // bump alongside Version at release time
+        public const string Version = "95";
+        public const string VersionDate = "2026-11-25";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
@@ -763,6 +763,7 @@ namespace StarMaster {
         protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi) {
             base.OnDpiChanged(oldDpi, newDpi);
             MaxWidth = SystemParameters.WorkArea.Width; MaxHeight = SystemParameters.WorkArea.Height;
+            RefreshAppIcons();   // tray icon size follows the real DPI too
         }
 
         // ---------- the StarMaster mark (v90 "Star lock"): targeting brackets, a ring, and a concave four-point star ----------
@@ -786,6 +787,22 @@ namespace StarMaster {
         }
         [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
         [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
+        [StructLayout(LayoutKind.Sequential)] struct PT { public int X, Y; }
+        [DllImport("user32.dll")] static extern bool GetCursorPos(out PT p);
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(PT p, uint flags);
+        [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr mon, int type, out uint dx, out uint dy);
+        [DllImport("user32.dll")] static extern uint RegisterWindowMessage(string s);
+        [DllImport("user32.dll")] static extern bool ChangeWindowMessageFilter(uint msg, uint flag);
+        // The REAL scale of the monitor at a point (1.0 = 96 DPI). Not GetSystemMetrics / the screen DC: those report the
+        // system DPI cached at process start, which a logon-time launch samples as 96 on a 200% screen (see v72).
+        static double MonitorScale(bool atCursor) {
+            try {
+                PT p = new PT(); if (atCursor) GetCursorPos(out p);
+                uint dx, dy;
+                if (GetDpiForMonitor(MonitorFromPoint(p, atCursor ? 2u : 1u), 0, out dx, out dy) == 0 && dx > 0) return dx / 96.0;
+            } catch { }
+            return 1.0;
+        }
         IntPtr trayHicon = IntPtr.Zero;
         // Re-draw the taskbar (Window.Icon) and tray icons in the current theme. Rendering at runtime also means the
         // running app never shows a stale icon from Windows' icon cache.
@@ -793,7 +810,7 @@ namespace StarMaster {
             try { Icon = RenderMark(AppTile(), 256); } catch { }
             try {
                 if (trayIcon == null) return;
-                int px = Math.Max(16, GetSystemMetrics(49));   // SM_CXSMICON at this DPI (32 at 200%)
+                int px = Math.Max(16, (int)Math.Round(16 * MonitorScale(false)));   // small-icon size at the tray's real DPI (32 at 200%)
                 System.Windows.Media.Imaging.PngBitmapEncoder enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
                 enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(RenderMark(TrayMark(), px)));
                 using (MemoryStream ms = new MemoryStream()) {
@@ -2166,8 +2183,31 @@ namespace StarMaster {
             m.BackColor = System.Drawing.Color.FromArgb(23, 29, 51); m.ForeColor = System.Drawing.Color.FromArgb(230, 236, 251); m.ShowImageMargin = false;
             m.Items.Add("Open StarMaster", null, delegate { Restore(); });
             m.Items.Add("Exit StarMaster", null, delegate { exiting = true; Close(); });
+            m.Opening += delegate { ScaleTrayMenu(m); };
             trayIcon.ContextMenuStrip = m;
+            // We usually run elevated (v93), and UIPI then blocks Explorer's "TaskbarCreated" broadcast - so after an
+            // Explorer (re)start, NotifyIcon never re-adds itself. Let that one message through, process-wide.
+            try { ChangeWindowMessageFilter(RegisterWindowMessage("TaskbarCreated"), 1); } catch { }
+            // A logon-time launch can register the icon before the shell/DPI settle, leaving a blank slot.
+            // Re-assert it twice once the desktop is up (cheap: one NIM_MODIFY each).
+            int reasserts = 0;
+            DispatcherTimer t = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(15) };
+            t.Tick += delegate { RefreshAppIcons(); if (++reasserts >= 2) t.Stop(); else t.Interval = TimeSpan.FromSeconds(45); };
+            t.Start();
             trayIcon.MouseClick += delegate (object s, System.Windows.Forms.MouseEventArgs e) { if (e.Button == System.Windows.Forms.MouseButtons.Left) Restore(); };   // single left-click opens; right-click still shows the menu
+        }
+        // WinForms (no per-monitor DPI support on .NET Framework without app.config) sizes the menu from the cached
+        // system DPI - 96 for a logon-time launch - so it came out half-size on a 200% screen. Size it in PIXELS from
+        // the real DPI of the monitor it opens on.
+        double trayMenuScale = 0;
+        void ScaleTrayMenu(System.Windows.Forms.ContextMenuStrip m) {
+            double s = MonitorScale(true);
+            if (s == trayMenuScale) return;
+            trayMenuScale = s;
+            m.Font = new System.Drawing.Font("Segoe UI", (float)(14 * s), System.Drawing.GraphicsUnit.Pixel);
+            int h = (int)(10 * s), v = (int)(5 * s);
+            m.Padding = new System.Windows.Forms.Padding((int)(2 * s));
+            foreach (System.Windows.Forms.ToolStripItem it in m.Items) it.Padding = new System.Windows.Forms.Padding(h, v, h, v);
         }
         void Restore() { Dispatcher.BeginInvoke(new Action(delegate { ShowInTaskbar = true; Visibility = Visibility.Visible; Show(); if (WindowState == WindowState.Minimized) WindowState = shownState; Activate(); ApplyOverlay(); })); }   // surface in shownState (Maximised by default, or the size the user left it at); preserved across the tray Hide()/Show() cycle. ApplyOverlay() brings the on-desktop overlay back now that the window is up.
         void OnClosing(object s, System.ComponentModel.CancelEventArgs e) {

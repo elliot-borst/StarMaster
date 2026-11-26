@@ -7,8 +7,33 @@
 # INSTALLER ONLY - no portable exe is published (v74). The updater only ever updates a copy running
 # from the install dir, so a portable build could never update itself - shipping one just stranded people.
 # The setup asset MUST keep "Setup" in its filename - the in-app updater matches on it.
+#
+# Code signing (v96): StarMaster.exe, the setup and the uninstaller are signed with the Certum
+# "Open Source Developer Elliot Borst" certificate and timestamped. Its key lives in Certum's cloud,
+# so SimplySign Desktop must be running and logged in (phone code) - the build fails otherwise.
+# -Unsigned builds without signing (local testing only; never release an unsigned build).
+param([switch]$Unsigned)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot   # csc/ISCC args below are repo-relative
+
+# ---- signing setup ----
+$certSubject = 'CN=Open Source Developer Elliot Borst'
+$timestamp = 'http://time.certum.pl'
+$signtool = $null; $thumb = $null
+if (-not $Unsigned) {
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
+    if (-not $signtool) { throw 'signtool.exe not found (Windows 10/11 SDK) - or pass -Unsigned for a local test build' }
+    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert |
+        Where-Object { $_.Subject -like "$certSubject,*" -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) } |
+        Sort-Object NotAfter | Select-Object -Last 1
+    if (-not $cert) { throw "Signing certificate not available - start SimplySign Desktop and log in (or pass -Unsigned for a local test build)" }
+    $thumb = $cert.Thumbprint
+}
+function Sign-File($path) {
+    & $signtool sign /sha1 $thumb /fd sha256 /tr $timestamp /td sha256 /d StarMaster $path
+    if ($LASTEXITCODE -ne 0) { throw "signing failed: $path" }
+}
 
 # ---- version (single source of truth: StarMaster.cs) ----
 $src = Get-Content (Join-Path $PSScriptRoot 'StarMaster.cs') -Raw
@@ -35,6 +60,7 @@ $csc = "$fw\csc.exe"
     /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:lib\LibreHardwareMonitorLib.dll `
     StarMaster.cs BackupForm.cs WholeVersion.cs CVars.cs LocOverrides.cs Elevate.cs Sensors.cs
 if ($LASTEXITCODE -ne 0) { throw 'csc failed' }
+if (-not $Unsigned) { Sign-File (Join-Path $PSScriptRoot 'StarMaster.exe') }   # before ISCC embeds it
 
 # ---- tests (dependency-free runner; a failure stops the release build) ----
 New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot 'dist') | Out-Null
@@ -50,8 +76,18 @@ $iscc = @(
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup 6 (ISCC.exe) not found - install from https://jrsoftware.org/isdl.php' }
-& $iscc /Q "/DMyAppVersion=$version" (Join-Path $PSScriptRoot 'installer.iss')
+$isccArgs = @('/Q', "/DMyAppVersion=$version")
+if (-not $Unsigned) {
+    # Inno signs the setup AND the uninstaller with this command ($q = quote, $f = the file, quoted)
+    $isccArgs += '/DSign'
+    $isccArgs += ('/Ssm=$q' + $signtool + '$q sign /sha1 ' + $thumb + ' /fd sha256 /tr ' + $timestamp + ' /td sha256 /d StarMaster $f')
+}
+& $iscc @isccArgs (Join-Path $PSScriptRoot 'installer.iss')
 if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
+if (-not $Unsigned) {
+    & $signtool verify /pa (Join-Path $PSScriptRoot 'dist\StarMaster-Setup.exe') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'setup signature did not verify' }
+}
 
 # NOT copied to dist for release - the installer already embeds it (v74, installer-only).
 # It stays in the repo root for quick local iteration.

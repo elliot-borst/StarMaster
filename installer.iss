@@ -37,6 +37,11 @@ SolidCompression=yes
 UninstallDisplayIcon={app}\{#MyAppExe}
 UninstallDisplayName={#MyAppName}
 WizardStyle=modern
+#ifdef Sign
+; v96: build-installer.ps1 defines Sign and passes the 'sm' sign tool (/Ssm=...) - signs setup + uninstaller
+SignTool=sm
+SignedUninstaller=yes
+#endif
 SetupIconFile=StarMaster.ico
 ; The in-app updater runs this installer silently while StarMaster is open; force-close
 ; the running copy so files can be replaced (no forced reboot).

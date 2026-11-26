@@ -36,11 +36,11 @@ The installer is built by compiling `installer.iss` with [Inno Setup](https://jr
 | `Make-Icon.ps1` | Regenerates `StarMaster.ico` (GDI+, offline) |
 | `installer.iss` | Inno Setup script → `StarMaster-Setup.exe` |
 | `CLAUDE.md` | Project context / handoff doc |
-| `LICENSE` | MIT licence |
+| `LICENSE` | GPL-3.0 licence |
 
 Runtime config (`config.txt`) stays out of git. Backups are saved to `Documents\StarMaster\Backups\`.
 
 ## License
-[MIT](LICENSE) © Elliot Borst.
+Licence: [GPL-3.0](LICENSE) © Elliot Borst. (Versions released before 2026-11-26 were MIT.)
 
 StarMaster ships [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0, unmodified) and its MIT-licensed System.* dependencies in `lib\` — see [`lib\THIRD-PARTY.txt`](lib/THIRD-PARTY.txt). Other integrations are downloaded at runtime, on request, and remain the property of their authors under their own licences: [Intel PresentMon](https://github.com/GameTechDev/PresentMon) (frame rate) and [MrKraken's StarStrings](https://github.com/MrKraken/StarStrings) (localization), plus the [PawnIO](https://pawnio.eu) sensor driver (GPL-2.0), which only the one-time sensor setup installs.

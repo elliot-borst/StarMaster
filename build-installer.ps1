@@ -29,6 +29,11 @@ if (-not $Unsigned) {
         Sort-Object NotAfter | Select-Object -Last 1
     if (-not $cert) { throw "Signing certificate not available - start SimplySign Desktop and log in (or pass -Unsigned for a local test build)" }
     $thumb = $cert.Thumbprint
+    # renewal reminder: warn from 4 weeks before expiry (renew at shop.certum.eu, ~EUR29)
+    $daysLeft = [int]($cert.NotAfter - (Get-Date)).TotalDays
+    if ($daysLeft -le 28) {
+        Write-Warning "Code-signing certificate expires in $daysLeft day(s) ($($cert.NotAfter.ToString('yyyy-MM-dd'))) - renew it at https://shop.certum.eu/ (Open Source Code Signing in the cloud)"
+    }
 }
 function Sign-File($path) {
     & $signtool sign /sha1 $thumb /fd sha256 /tr $timestamp /td sha256 /d StarMaster $path

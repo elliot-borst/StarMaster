@@ -26,8 +26,8 @@ using Path = System.IO.Path;
 [assembly: System.Reflection.AssemblyDescription("Star Citizen Toolkit")]
 [assembly: System.Reflection.AssemblyCompany("Elliot Borst")]
 [assembly: System.Reflection.AssemblyCopyright("Elliot Borst")]
-[assembly: System.Reflection.AssemblyFileVersion("95.0.0.0")]
-[assembly: System.Reflection.AssemblyVersion("95.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("96.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("96.0.0.0")]
 
 namespace StarMaster {
 
@@ -614,8 +614,8 @@ namespace StarMaster {
 
     // small modal to add / edit a keystroke
     public partial class MainWindow : Window {
-        public const string Version = "95";
-        public const string VersionDate = "2026-11-25";   // bump alongside Version at release time
+        public const string Version = "96";
+        public const string VersionDate = "2026-11-26";   // bump alongside Version at release time
         const string DefaultScRoot = @"C:\Program Files\Roberts Space Industries\StarCitizen";
         string cfgPath; int[] CurrentVer;
 
